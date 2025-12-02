@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Still In Queue · SQ-LP Learning Platform</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ===== Reset ===== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-dark: #020617;
+      --bg-card: #020818;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --accent-yellow: #facc15;
+      --accent-yellow-soft: #fde047;
+      --accent-amber: #fbbf24;
+      --accent-lime: #a3e635;
+      --radius-lg: 1.25rem;
+      --radius-xl: 1.75rem;
+      --radius-pill: 999px;
+      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.75);
+      --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-serif: "Playfair Display", "Times New Roman", serif;
+      --transition-fast: 160ms ease-out;
+      --transition-med: 260ms ease;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      color: var(--text-main);
+      background:
+        radial-gradient(circle at 0 0, #0b1120 0, #020617 55%, #020617 100%);
+    }
+
+    /* ===== Header / Navbar ===== */
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 5vw;
+      backdrop-filter: blur(18px);
+      background: linear-gradient(
+        to bottom,
+        rgba(2, 6, 23, 0.96),
+        rgba(2, 6, 23, 0.8),
+        transparent
+      );
+      border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+    }
+
+    .logo-img {
+      height: 150px;
+      width: auto;
+      display: block;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 2.4rem;
+    }
+
+    .site-nav {
+      display: flex;
+      align-items: center;
+      gap: 1.8rem;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    .site-nav a {
+      text-decoration: none;
+      color: #e5e7eb;
+      padding: 0.35rem 0.9rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid transparent;
+      background: transparent;
+      transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast),
+        background var(--transition-fast),
+        box-shadow var(--transition-fast),
+        transform var(--transition-fast);
+    }
+
+    /* Hover only when NOT active */
+    .site-nav a:not(.active):hover {
+      color: #111827;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.7);
+      transform: translateY(-1px);
+      border-color: rgba(248, 250, 252, 0.9);
+      background: linear-gradient(135deg, #facc15, #fde047, #fbbf24);
+    }
+
+    /* Active pill */
+    .site-nav a.active {
+      color: #111827;
+      border-color: rgba(248, 250, 252, 0.9);
+      background: linear-gradient(135deg, #facc15, #fde047, #fbbf24);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+      transform: translateY(-1px);
+    }
+
+    .auth-buttons {
+      display: flex;
+      align-items: center;
+    }
+
+    .auth-primary {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      text-decoration: none;
+      padding: 0.45rem 1.5rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(248, 250, 252, 0.95);
+      background: linear-gradient(135deg, #3b82f6, #22c55e);
+      color: #f9fafb;
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        box-shadow var(--transition-fast),
+        transform var(--transition-fast);
+    }
+
+    .auth-primary:hover {
+      background: linear-gradient(135deg, #60a5fa, #4ade80);
+      border-color: #ffffff;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+      transform: translateY(-1px);
+    }
+
+    .nav-toggle {
+      display: none;
+      flex-direction: column;
+      gap: 0.2rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    .nav-toggle span {
+      width: 1.5rem;
+      height: 2px;
+      border-radius: 999px;
+      background: #e5e7eb;
+    }
+
+    /* ===== Hero ===== */
+    .hero {
+      position: relative;
+      min-height: 88vh;
+      padding: 5.5rem 5vw 4.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .hero-bg {
+      position: absolute;
+      inset: -30%;
+      background:
+        radial-gradient(circle at 0 0, rgba(250, 204, 21, 0.65), transparent 60%),
+        radial-gradient(circle at 100% 10%, rgba(248, 250, 109, 0.6), transparent 60%),
+        radial-gradient(circle at 50% 120%, rgba(163, 230, 53, 0.35), transparent 60%);
+      opacity: 0.95;
+      mix-blend-mode: screen;
+      animation: floatGradient 20s ease-in-out infinite alternate;
+      z-index: -2;
+    }
+
+    .hero-shell {
+      position: absolute;
+      inset: 7%;
+      border-radius: 3rem;
+      border: 1px solid rgba(251, 191, 36, 0.4);
+      background: radial-gradient(
+        circle at top,
+        rgba(15, 23, 42, 0.96),
+        rgba(15, 23, 42, 0.8),
+        rgba(15, 23, 42, 0.45)
+      );
+      backdrop-filter: blur(26px);
+      z-index: -1;
+    }
+
+    @keyframes floatGradient {
+      0%   { transform: translate3d(0, 0, 0) scale(1); }
+      50%  { transform: translate3d(0, -4%, 0) scale(1.04); }
+      100% { transform: translate3d(0, 3%, 0) scale(1.02); }
+    }
+
+    .hero-inner {
+      max-width: 780px;
+      text-align: center;
+    }
+
+    .hero-kicker {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: #facc15;
+      margin-bottom: 0.9rem;
+    }
+
+    .hero-title {
+      font-family: var(--font-serif);
+      font-size: clamp(2.6rem, 4vw, 3.6rem);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.25rem 0.9rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(250, 204, 21, 0.7);
+      background: rgba(15, 23, 42, 0.9);
+      font-size: 0.74rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #fef9c3;
+      margin-bottom: 1.1rem;
+    }
+
+    .hero-subline {
+      color: var(--text-muted);
+      font-size: 0.98rem;
+      line-height: 1.8;
+      margin-bottom: 0.6rem;
+    }
+
+    .hero-subline strong {
+      color: #fefce8;
+    }
+
+    .hero-bullets {
+      margin-top: 0.75rem;
+      font-size: 0.84rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #facc15;
+    }
+
+    .hero-cta {
+      margin-top: 2rem;
+      display: flex;
+      justify-content: center;
+      gap: 0.9rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      padding: 0.9rem 1.8rem;
+      border-radius: var(--radius-pill);
+      background: linear-gradient(135deg, #facc15, #fde047, #fbbf24);
+      color: #1f2933;
+      font-weight: 600;
+      border: none;
+      text-decoration: none;
+      box-shadow: var(--shadow-soft);
+      cursor: pointer;
+      transition:
+        transform var(--transition-med),
+        box-shadow var(--transition-med),
+        filter var(--transition-med);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px) scale(1.01);
+      filter: brightness(1.05);
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.95);
+    }
+
+    .btn-ghost {
+      padding: 0.85rem 1.6rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(250, 250, 210, 0.7);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text-main);
+      text-decoration: none;
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
+    }
+
+    .btn-ghost:hover {
+      background: rgba(202, 138, 4, 0.95);
+      border-color: rgba(248, 250, 252, 0.9);
+      transform: translateY(-1px);
+    }
+
+    .scroll-indicator {
+      position: absolute;
+      bottom: 1.9rem;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #eab308;
+      font-size: 0.78rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      opacity: 0.75;
+      animation: scrollPulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes scrollPulse {
+      0%, 100% {
+        transform: translate(-50%, 0);
+        opacity: 0.4;
+      }
+      50% {
+        transform: translate(-50%, -4px);
+        opacity: 1;
+      }
+    }
+
+    /* ===== Layout Sections ===== */
+    .section {
+      padding: 3.5rem 5vw 0;
+      max-width: 1180px;
+      margin: 0 auto;
+      scroll-margin-top: 9rem; /* offset for sticky header */
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      margin-bottom: 1.6rem;
+    }
+
+    .section-kicker {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: #facc15;
+      margin-bottom: 0.4rem;
+    }
+
+    .section-title {
+      font-family: var(--font-serif);
+      font-size: 1.4rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .section-desc {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      max-width: 440px;
+      line-height: 1.7;
+    }
+
+    /* small centered header chip (COURSES / SPORTS / ARTS & CLUBS / ABOUT) */
+    .section-chip {
+      text-align: center;
+      margin-bottom: 1.6rem;
+    }
+
+    .section-chip span {
+      display: inline-block;
+      padding: 0.3rem 1.4rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(254, 249, 195, 0.95);
+      background: linear-gradient(135deg, #facc15, #fde047, #fbbf24);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: #111827;
+    }
+
+    /* ===== Courses Grid ===== */
+    .courses-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1.4rem;
+    }
+
+    .course-card {
+      border-radius: var(--radius-lg);
+      background: radial-gradient(circle at top left, #020617, #020617 45%, #020819 100%);
+      border: 1px solid rgba(250, 204, 21, 0.35);
+      padding: 1.35rem 1.25rem 1.4rem;
+      box-shadow: 0 16px 36px rgba(15, 23, 42, 0.9);
+      position: relative;
+      overflow: hidden;
+      transition:
+        transform var(--transition-med),
+        box-shadow var(--transition-med),
+        border-color var(--transition-med),
+        background var(--transition-med);
+    }
+
+    .course-card::before {
+      content: "";
+      position: absolute;
+      inset: -30%;
+      opacity: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 0 0, rgba(250, 204, 21, 0.35), transparent 55%);
+      mix-blend-mode: screen;
+      transition: opacity var(--transition-med);
+    }
+
+    .course-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 28px 70px rgba(15, 23, 42, 0.9);
+      border-color: rgba(251, 191, 36, 0.9);
+      background: radial-gradient(circle at top right, #020617, #020617 40%, #02091c 100%);
+    }
+
+    .course-card:hover::before {
+      opacity: 1;
+    }
+
+    .course-tag {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: #facc15;
+      margin-bottom: 0.65rem;
+    }
+
+    .course-title {
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+
+    .course-text {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 0.75rem;
+    }
+
+    .course-meta {
+      font-size: 0.8rem;
+      color: #fef9c3;
+      opacity: 0.9;
+    }
+
+    /* ===== Two-column Sections ===== */
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+      gap: 1.8rem;
+      margin-top: 0.8rem;
+    }
+
+    .card-soft {
+      border-radius: var(--radius-xl);
+      background: radial-gradient(circle at top left, #020617, #020617 60%, #02091b 100%);
+      border: 1px solid rgba(250, 204, 21, 0.35);
+      padding: 1.8rem 1.6rem;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.9);
+    }
+
+    .card-soft h3 {
+      font-size: 1rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .card-soft p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+      margin-bottom: 0.7rem;
+    }
+
+    .list-clean {
+      list-style: none;
+      margin-top: 0.6rem;
+      display: grid;
+      gap: 0.4rem;
+      font-size: 0.9rem;
+    }
+
+    .list-clean li {
+      position: relative;
+      padding-left: 1.2rem;
+      color: var(--text-muted);
+    }
+
+    .list-clean li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: #facc15;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.6rem;
+    }
+
+    .badge-pill {
+      border-radius: 999px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.78rem;
+      border: 1px solid rgba(250, 204, 21, 0.55);
+      color: #fef9c3;
+      background: rgba(15, 23, 42, 0.85);
+    }
+
+    /* ===== About Section ===== */
+    .about-card {
+      border-radius: 1.9rem;
+      padding: 2.1rem 2rem;
+      border: 1px solid rgba(250, 204, 21, 0.45);
+      background: radial-gradient(circle at top left, #020617, #020617 55%, #020819 100%);
+      box-shadow: 0 22px 55px rgba(15, 23, 42, 0.95);
+      margin-top: 0.4rem;
+    }
+
+    .about-note {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      padding: 0.85rem 1rem;
+      border-radius: 1rem;
+      border: 1px dashed rgba(250, 204, 21, 0.8);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ===== Reveal Animation ===== */
+    .reveal {
+      opacity: 0;
+      transform: translateY(14px);
+      transition: opacity 400ms ease-out, transform 400ms ease-out;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ===== Footer ===== */
+    .site-footer {
+      border-top: 1px solid rgba(148, 163, 184, 0.25);
+      padding: 1.7rem 5vw 2.1rem;
+      margin-top: 3.2rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .site-footer a {
+      color: var(--text-main);
+      text-decoration: none;
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 1040px) {
+      .courses-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 900px) {
+      .two-col {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .site-header {
+        padding-inline: 1.25rem;
+      }
+
+      .header-right {
+        gap: 1.2rem;
+      }
+
+      .nav-toggle {
+        display: inline-flex;
+      }
+
+      .site-nav {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        flex-direction: column;
+        align-items: flex-start;
+        width: min(260px, 80vw);
+        padding: 0.75rem 1rem 1rem;
+        background: rgba(15, 23, 42, 0.98);
+        border-radius: 0 0 1.5rem 1.5rem;
+        border-left: 1px solid rgba(148, 163, 184, 0.3);
+        border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+        transform-origin: top right;
+        transform: scaleY(0.8);
+        opacity: 0;
+        visibility: hidden;
+        transition:
+          opacity var(--transition-fast),
+          transform var(--transition-fast),
+          visibility var(--transition-fast);
+      }
+
+      .site-nav.nav-open {
+        opacity: 1;
+        visibility: visible;
+        transform: scaleY(1);
+      }
+
+      .site-nav a {
+        width: 100%;
+        padding: 0.5rem 0.4rem;
+      }
+
+      .auth-buttons {
+        display: none;
+      }
+
+      .hero {
+        padding-inline: 1.5rem;
+      }
+
+      .section {
+        padding-inline: 1.5rem;
+      }
+
+      .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .courses-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <!-- Logo: go back to main landing page -->
+    <a href="index.html" class="logo">
+      <img src="SQ-EL-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
+    </a>
+
+    <button class="nav-toggle" aria-label="Toggle navigation">
+      <span></span><span></span>
+    </button>
+
+    <div class="header-right">
+      <nav class="site-nav">
+        <!-- Home: scroll to top of this page -->
+        <a href="#top" class="nav-home active">Home</a>
+        <a href="#courses" class="nav-courses">Courses</a>
+        <a href="#sports" class="nav-sports">Sports</a>
+        <a href="#arts" class="nav-arts">Arts &amp; Clubs</a>
+        <a href="#about" class="nav-about">About</a>
+      </nav>
+
+      <div class="auth-buttons">
+        <a href="#auth" class="auth-primary">Login / Sign Up</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <main id="top" class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-shell"></div>
+
+    <div class="hero-inner">
+      <div class="hero-kicker">SQ-LP · Learning Platform</div>
+      <h1 class="hero-title">Learning That Follows Your Life</h1>
+      <div class="hero-pill">Phase 1 · Concept Campus</div>
+
+      <p class="hero-subline">
+        SQ-LP is a learning platform that combines structured
+        courses, sports academies, arts, and language training into one place — 
+        supported by <strong>AI mentors</strong> that guide, coach, and keep
+        you on track.
+      </p>
+      <p class="hero-subline">
+        From online lessons to real-world clubs and academies, the goal is to
+        make it easy to discover, plan, and stay consistent with the skills you
+        actually care about.
+      </p>
+      <div class="hero-bullets">
+        COURSES · SPORTS · ARTS · CLUBS
+      </div>
+
+      <div class="hero-cta">
+        <a href="#courses" class="btn-primary">Explore Learning Areas</a>
+        <a href="#about" class="btn-ghost">About SQ-LP</a>
+      </div>
+    </div>
+
+    <div class="scroll-indicator">Scroll</div>
+  </main>
+
+  <!-- Courses Section -->
+  <section id="courses" class="section reveal">
+    <div class="section-chip"><span>Courses</span></div>
+
+    <div class="section-header">
+      <div>
+        <div class="section-kicker">E-Learning</div>
+        <h2 class="section-title">Courses for Every Stage</h2>
+      </div>
+      <p class="section-desc">
+        In later phases, this becomes an interactive library of courses with AI
+        tutors and personalised paths. For now, it maps the core idea of what
+        SQ-LP will cover.
+      </p>
+    </div>
+
+    <div class="courses-grid">
+      <article class="course-card">
+        <div class="course-tag">Foundations</div>
+        <h3 class="course-title">School &amp; University Support</h3>
+        <p class="course-text">
+          Structured content for school and college students, with AI helping
+          to explain concepts, create practice questions, and track progress.
+        </p>
+        <div class="course-meta">
+          Focus: Maths · Science · Languages · Exams
+        </div>
+      </article>
+
+      <article class="course-card">
+        <div class="course-tag">Careers</div>
+        <h3 class="course-title">Career &amp; Tech Skills</h3>
+        <p class="course-text">
+          Data, programming, design, business, and communication skills to
+          support modern careers — with project-style learning and portfolio
+          guidance.
+        </p>
+        <div class="course-meta">
+          Focus: Data · Dev · Design · Business
+        </div>
+      </article>
+
+      <article class="course-card">
+        <div class="course-tag">Lifelong</div>
+        <h3 class="course-title">Everyday Learning</h3>
+        <p class="course-text">
+          Personal finance, productivity, mindset, and hobby-based micro
+          courses, designed for short sessions that fit into a busy week.
+        </p>
+        <div class="course-meta">
+          Focus: Money · Habits · Hobbies
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- Sports Section -->
+  <section id="sports" class="section reveal">
+    <div class="section-chip"><span>Sports</span></div>
+
+    <div class="section-header">
+      <div>
+        <div class="section-kicker">Sport Map</div>
+        <h2 class="section-title">Find Places to Train &amp; Play</h2>
+      </div>
+      <p class="section-desc">
+        SQ-LP also looks outward: it becomes a directory of academies, clubs,
+        and tournaments so sports enthusiasts can find places to actually
+        practice — not just watch.
+      </p>
+    </div>
+
+    <div class="two-col">
+      <div class="card-soft">
+        <h3>Nearby Academies &amp; Training Centers</h3>
+        <p>
+          The sports view is meant to show academies and coaching centers
+          around you, with filters for age, level, and budget. Later, AI can
+          recommend options based on your interests and schedule.
+        </p>
+        <ul class="list-clean">
+          <li>Team sports: football, cricket, basketball, volleyball, etc.</li>
+          <li>Individual sports: tennis, badminton, athletics, swimming.</li>
+          <li>Specialized programs: strength &amp; conditioning, kids camps.</li>
+        </ul>
+        <div class="badge-row">
+          <span class="badge-pill">Maps &amp; distances</span>
+          <span class="badge-pill">Timings</span>
+          <span class="badge-pill">Difficulty level</span>
+        </div>
+      </div>
+
+      <div class="card-soft">
+        <h3>Tournaments, Leagues &amp; Events</h3>
+        <p>
+          A calendar-style view will highlight local leagues, tournaments, and
+          community events, so players and parents can plan participation in
+          advance.
+        </p>
+        <ul class="list-clean">
+          <li>Monthly and seasonal tournaments.</li>
+          <li>Beginner-friendly events to start competing.</li>
+          <li>Links to registration pages and schedules.</li>
+        </ul>
+        <div class="badge-row">
+          <span class="badge-pill">Calendar</span>
+          <span class="badge-pill">Notifications</span>
+          <span class="badge-pill">Team invites</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Arts & Clubs Section -->
+  <section id="arts" class="section reveal">
+    <div class="section-chip"><span>Arts &amp; Clubs</span></div>
+
+    <div class="section-header">
+      <div>
+        <div class="section-kicker">Arts &amp; Creative Clubs</div>
+        <h2 class="section-title">Learning Beyond the Classroom</h2>
+      </div>
+      <p class="section-desc">
+        Dance, music, painting, pottery, photography, acting, cooking, fashion — 
+        SQ-LP treats them as serious skills, not just hobbies.
+      </p>
+    </div>
+
+    <div class="two-col">
+      <div class="card-soft">
+        <h3>Studios, Schools &amp; Workshops</h3>
+        <p>
+          Discover places to learn creative arts offline, with photos, timing,
+          and areas of focus. In the future, hybrid programs will combine
+          online modules with in-person practice.
+        </p>
+        <ul class="list-clean">
+          <li>Dance studios, music schools, and theatre groups.</li>
+          <li>Art, pottery, and craft workshops.</li>
+          <li>Cooking, baking, and culinary schools.</li>
+        </ul>
+      </div>
+
+      <div class="card-soft">
+        <h3>Clubs, Communities &amp; Events</h3>
+        <p>
+          A club directory will help people find photography walks, book clubs,
+          jam sessions, open mics, and more — so learning naturally connects to
+          community.
+        </p>
+        <ul class="list-clean">
+          <li>Community clubs and informal meetups.</li>
+          <li>Showcases, recitals, and exhibitions.</li>
+          <li>AI-assisted discovery based on your profile.</li>
+        </ul>
+        <div class="badge-row">
+          <span class="badge-pill">Events</span>
+          <span class="badge-pill">Groups</span>
+          <span class="badge-pill">AI suggestions</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- About SQ-LP -->
+  <section id="about" class="section reveal">
+    <div class="section-chip"><span>About</span></div>
+
+    <div class="about-card">
+      <div class="section-kicker">About · SQ-LP</div>
+      <h2 class="section-title" style="margin-bottom:0.7rem;">The Idea Behind the Learning Platform</h2>
+      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;">
+        SQ-LP is the second fold of Still In Queue — a space where structured
+        courses, sports, and arts share the same ecosystem. The long-term goal
+        is to combine <strong>high-quality content</strong> with
+        <strong>AI guidance</strong> and real-world places to learn.
+      </p>
+      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;margin-top:0.6rem;">
+        This page is the concept layout. In future phases it will connect to a
+        Python backend, video library, recommendation engine, and a map of
+        academies and studios — turning SQ-LP into a real learning companion
+        for different ages and goals.
+      </p>
+
+      <div class="about-note">
+        Rough roadmap:
+        <br><br>
+        <strong>Phase 1:</strong> Front-end layout and content structure.<br>
+        <strong>Phase 2:</strong> Course catalog with AI-powered overviews and
+        progress tracking.<br>
+        <strong>Phase 3:</strong> Integration with sports &amp; arts locations,
+        maps, and events.<br>
+        <strong>Phase 4:</strong> Personalized learning paths and community features.
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <p>© 2025 Still in Queue · SQ-LP. All rights reserved.</p>
+    <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
+  </footer>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const toggle = document.querySelector(".nav-toggle");
+      const nav = document.querySelector(".site-nav");
+      const navLinks = document.querySelectorAll(".site-nav a");
+
+      // Mobile navigation toggle
+      if (toggle && nav) {
+        toggle.addEventListener("click", () => {
+          nav.classList.toggle("nav-open");
+        });
+      }
+
+      // Active pill + smooth scroll for in-page links
+      navLinks.forEach((link) => {
+        const href = link.getAttribute("href") || "";
+
+        // Only intercept internal anchors (starting with #)
+        if (href.startsWith("#")) {
+          link.addEventListener("click", (e) => {
+            e.preventDefault();
+
+            const target = document.querySelector(href);
+            if (target) {
+              target.scrollIntoView({ behavior: "smooth" });
+            }
+
+            // Update active pill
+            navLinks.forEach((l) => l.classList.remove("active"));
+            link.classList.add("active");
+
+            // Close mobile nav
+            if (nav) nav.classList.remove("nav-open");
+          });
+        } else {
+          // External link: just close mobile nav on click
+          link.addEventListener("click", () => {
+            if (nav) nav.classList.remove("nav-open");
+          });
+        }
+      });
+
+      // Simple scroll reveal
+      const revealElements = document.querySelectorAll(".reveal");
+      const onScroll = () => {
+        const triggerBottom = window.innerHeight * 0.85;
+        revealElements.forEach((el) => {
+          const boxTop = el.getBoundingClientRect().top;
+          if (boxTop < triggerBottom) {
+            el.classList.add("visible");
+          }
+        });
+      };
+
+      window.addEventListener("scroll", onScroll);
+      onScroll();
+    });
+  </script>
+</body>
+</html>

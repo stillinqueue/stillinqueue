@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Still In Queue · SQ-CC Coffee &amp; Cream</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ===== Reset ===== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-dark: #020617;
+      --bg-card: #020818;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --accent-orange: #f97316;
+      --accent-orange-soft: #fb923c;
+      --accent-amber: #fdba74;
+      --accent-rose: #fb7185;
+      --radius-lg: 1.25rem;
+      --radius-xl: 1.75rem;
+      --radius-pill: 999px;
+      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.75);
+      --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-serif: "Playfair Display", "Times New Roman", serif;
+      --transition-fast: 160ms ease-out;
+      --transition-med: 260ms ease;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      color: var(--text-main);
+      background:
+        radial-gradient(circle at 0 0, #0b1120 0, #020617 55%, #020617 100%);
+    }
+
+    /* ===== Header / Navbar ===== */
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 5vw;
+      backdrop-filter: blur(18px);
+      background: linear-gradient(
+        to bottom,
+        rgba(2, 6, 23, 0.96),
+        rgba(2, 6, 23, 0.8),
+        transparent
+      );
+      border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+    }
+
+    .logo-img {
+      height: 150px;
+      width: auto;
+      display: block;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 2.4rem;
+    }
+
+    .site-nav {
+      display: flex;
+      align-items: center;
+      gap: 1.8rem;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    .site-nav a {
+      text-decoration: none;
+      color: #e5e7eb;
+      padding: 0.35rem 0.9rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid transparent;
+      background: transparent;
+      transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast),
+        background var(--transition-fast),
+        box-shadow var(--transition-fast),
+        transform var(--transition-fast);
+    }
+
+    /* Hover only when NOT active */
+    .site-nav a:not(.active):hover {
+      color: #111827;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.7);
+      transform: translateY(-1px);
+      border-color: rgba(255, 247, 237, 0.95);
+      background: linear-gradient(135deg, #f97316, #fb923c, #fdba74);
+    }
+
+    /* Active pill */
+    .site-nav a.active {
+      color: #111827;
+      border-color: rgba(255, 247, 237, 0.95);
+      background: linear-gradient(135deg, #f97316, #fb923c, #fdba74);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+      transform: translateY(-1px);
+    }
+
+    .auth-buttons {
+      display: flex;
+      align-items: center;
+    }
+
+    .auth-primary {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      text-decoration: none;
+      padding: 0.45rem 1.5rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(248, 250, 252, 0.95);
+      background: linear-gradient(135deg, #3b82f6, #22c55e);
+      color: #f9fafb;
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        box-shadow var(--transition-fast),
+        transform var(--transition-fast);
+    }
+
+    .auth-primary:hover {
+      background: linear-gradient(135deg, #60a5fa, #4ade80);
+      border-color: #ffffff;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+      transform: translateY(-1px);
+    }
+
+    .nav-toggle {
+      display: none;
+      flex-direction: column;
+      gap: 0.2rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    .nav-toggle span {
+      width: 1.5rem;
+      height: 2px;
+      border-radius: 999px;
+      background: #e5e7eb;
+    }
+
+    /* ===== Hero ===== */
+    .hero {
+      position: relative;
+      min-height: 88vh;
+      padding: 5.5rem 5vw 4.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .hero-bg {
+      position: absolute;
+      inset: -30%;
+      background:
+        radial-gradient(circle at 0 0, rgba(249, 115, 22, 0.7), transparent 60%),
+        radial-gradient(circle at 100% 10%, rgba(251, 146, 60, 0.6), transparent 60%),
+        radial-gradient(circle at 50% 120%, rgba(252, 211, 77, 0.45), transparent 60%);
+      opacity: 0.95;
+      mix-blend-mode: screen;
+      animation: floatGradient 20s ease-in-out infinite alternate;
+      z-index: -2;
+    }
+
+    .hero-shell {
+      position: absolute;
+      inset: 7%;
+      border-radius: 3rem;
+      border: 1px solid rgba(251, 146, 60, 0.5);
+      background: radial-gradient(
+        circle at top,
+        rgba(15, 23, 42, 0.96),
+        rgba(15, 23, 42, 0.8),
+        rgba(15, 23, 42, 0.45)
+      );
+      backdrop-filter: blur(26px);
+      z-index: -1;
+    }
+
+    @keyframes floatGradient {
+      0%   { transform: translate3d(0, 0, 0) scale(1); }
+      50%  { transform: translate3d(0, -4%, 0) scale(1.04); }
+      100% { transform: translate3d(0, 3%, 0) scale(1.02); }
+    }
+
+    .hero-inner {
+      max-width: 780px;
+      text-align: center;
+    }
+
+    .hero-kicker {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: #fed7aa;
+      margin-bottom: 0.9rem;
+    }
+
+    .hero-title {
+      font-family: var(--font-serif);
+      font-size: clamp(2.6rem, 4vw, 3.6rem);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.25rem 0.9rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(249, 115, 22, 0.9);
+      background: rgba(15, 23, 42, 0.9);
+      font-size: 0.74rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #ffedd5;
+      margin-bottom: 1.1rem;
+    }
+
+    .hero-subline {
+      color: var(--text-muted);
+      font-size: 0.98rem;
+      line-height: 1.8;
+      margin-bottom: 0.6rem;
+    }
+
+    .hero-subline strong {
+      color: #ffedd5;
+    }
+
+    .hero-bullets {
+      margin-top: 0.75rem;
+      font-size: 0.84rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #fed7aa;
+    }
+
+    .hero-cta {
+      margin-top: 2rem;
+      display: flex;
+      justify-content: center;
+      gap: 0.9rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      padding: 0.9rem 1.8rem;
+      border-radius: var(--radius-pill);
+      background: linear-gradient(135deg, #f97316, #fb923c, #fdba74);
+      color: #1f2933;
+      font-weight: 600;
+      border: none;
+      text-decoration: none;
+      box-shadow: var(--shadow-soft);
+      cursor: pointer;
+      transition:
+        transform var(--transition-med),
+        box-shadow var(--transition-med),
+        filter var(--transition-med);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px) scale(1.01);
+      filter: brightness(1.05);
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.95);
+    }
+
+    .btn-ghost {
+      padding: 0.85rem 1.6rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(254, 215, 170, 0.7);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text-main);
+      text-decoration: none;
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
+    }
+
+    .btn-ghost:hover {
+      background: rgba(249, 115, 22, 0.95);
+      border-color: rgba(248, 250, 252, 0.9);
+      transform: translateY(-1px);
+    }
+
+    .scroll-indicator {
+      position: absolute;
+      bottom: 1.9rem;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fed7aa;
+      font-size: 0.78rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      opacity: 0.75;
+      animation: scrollPulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes scrollPulse {
+      0%, 100% {
+        transform: translate(-50%, 0);
+        opacity: 0.4;
+      }
+      50% {
+        transform: translate(-50%, -4px);
+        opacity: 1;
+      }
+    }
+
+    /* ===== Layout Sections ===== */
+    .section {
+      padding: 3.5rem 5vw 0;
+      max-width: 1180px;
+      margin: 0 auto;
+      scroll-margin-top: 9rem; /* keep headings out from under sticky header */
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      margin-bottom: 1.6rem;
+    }
+
+    .section-kicker {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: #fed7aa;
+      margin-bottom: 0.4rem;
+    }
+
+    .section-title {
+      font-family: var(--font-serif);
+      font-size: 1.4rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .section-desc {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      max-width: 440px;
+      line-height: 1.7;
+    }
+
+    /* ===== Menu Grid ===== */
+    .menu-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1.4rem;
+    }
+
+    .menu-card {
+      border-radius: var(--radius-lg);
+      background: radial-gradient(circle at top left, #020617, #020617 45%, #020819 100%);
+      border: 1px solid rgba(249, 115, 22, 0.35);
+      padding: 1.35rem 1.25rem 1.4rem;
+      box-shadow: 0 16px 36px rgba(15, 23, 42, 0.9);
+      position: relative;
+      overflow: hidden;
+      transition:
+        transform var(--transition-med),
+        box-shadow var(--transition-med),
+        border-color var(--transition-med),
+        background var(--transition-med);
+    }
+
+    .menu-card::before {
+      content: "";
+      position: absolute;
+      inset: -30%;
+      opacity: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 0 0, rgba(248, 113, 113, 0.4), transparent 55%);
+      mix-blend-mode: screen;
+      transition: opacity var(--transition-med);
+    }
+
+    .menu-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 28px 70px rgba(15, 23, 42, 0.9);
+      border-color: rgba(251, 146, 60, 0.9);
+      background: radial-gradient(circle at top right, #020617, #020617 40%, #02091c 100%);
+    }
+
+    .menu-card:hover::before {
+      opacity: 1;
+    }
+
+    .menu-tag {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: #fed7aa;
+      margin-bottom: 0.65rem;
+    }
+
+    .menu-title {
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+
+    .menu-text {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 0.75rem;
+    }
+
+    .menu-meta {
+      font-size: 0.8rem;
+      color: #fed7aa;
+      opacity: 0.9;
+    }
+
+    /* ===== Two-column Sections ===== */
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: 1.8rem;
+      margin-top: 0.8rem;
+    }
+
+    .card-soft {
+      border-radius: var(--radius-xl);
+      background: radial-gradient(circle at top left, #020617, #020617 60%, #02091b 100%);
+      border: 1px solid rgba(249, 115, 22, 0.35);
+      padding: 1.8rem 1.6rem;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.9);
+    }
+
+    .card-soft h3 {
+      font-size: 1rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .card-soft p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+      margin-bottom: 0.7rem;
+    }
+
+    .list-clean {
+      list-style: none;
+      margin-top: 0.6rem;
+      display: grid;
+      gap: 0.4rem;
+      font-size: 0.9rem;
+    }
+
+    .list-clean li {
+      position: relative;
+      padding-left: 1.2rem;
+      color: var(--text-muted);
+    }
+
+    .list-clean li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: #fb923c;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.6rem;
+    }
+
+    .badge-pill {
+      border-radius: 999px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.78rem;
+      border: 1px solid rgba(249, 115, 22, 0.55);
+      color: #fed7aa;
+      background: rgba(15, 23, 42, 0.85);
+    }
+
+    /* ===== About Section ===== */
+    .about-card {
+      border-radius: 1.9rem;
+      padding: 2.1rem 2rem;
+      border: 1px solid rgba(249, 115, 22, 0.45);
+      background: radial-gradient(circle at top left, #020617, #020617 55%, #020819 100%);
+      box-shadow: 0 22px 55px rgba(15, 23, 42, 0.95);
+      margin-top: 0.4rem;
+    }
+
+    .about-note {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      padding: 0.85rem 1rem;
+      border-radius: 1rem;
+      border: 1px dashed rgba(249, 115, 22, 0.8);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ===== Reveal Animation ===== */
+    .reveal {
+      opacity: 0;
+      transform: translateY(14px);
+      transition: opacity 400ms ease-out, transform 400ms ease-out;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ===== Footer ===== */
+    .site-footer {
+      border-top: 1px solid rgba(148, 163, 184, 0.25);
+      padding: 1.7rem 5vw 2.1rem;
+      margin-top: 3.2rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .site-footer a {
+      color: var(--text-main);
+      text-decoration: none;
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 1040px) {
+      .menu-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 900px) {
+      .two-col {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .site-header {
+        padding-inline: 1.25rem;
+      }
+
+      .header-right {
+        gap: 1.2rem;
+      }
+
+      .nav-toggle {
+        display: inline-flex;
+      }
+
+      .site-nav {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        flex-direction: column;
+        align-items: flex-start;
+        width: min(260px, 80vw);
+        padding: 0.75rem 1rem 1rem;
+        background: rgba(15, 23, 42, 0.98);
+        border-radius: 0 0 1.5rem 1.5rem;
+        border-left: 1px solid rgba(148, 163, 184, 0.3);
+        border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+        transform-origin: top right;
+        transform: scaleY(0.8);
+        opacity: 0;
+        visibility: hidden;
+        transition:
+          opacity var(--transition-fast),
+          transform var(--transition-fast),
+          visibility var(--transition-fast);
+      }
+
+      .site-nav.nav-open {
+        opacity: 1;
+        visibility: visible;
+        transform: scaleY(1);
+      }
+
+      .site-nav a {
+        width: 100%;
+        padding: 0.5rem 0.4rem;
+      }
+
+      .auth-buttons {
+        display: none;
+      }
+
+      .hero {
+        padding-inline: 1.5rem;
+      }
+
+      .section {
+        padding-inline: 1.5rem;
+      }
+
+      .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .menu-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <!-- Logo: go back to main landing page -->
+    <a href="index.html" class="logo">
+      <img src="SQ-IC-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
+    </a>
+
+    <button class="nav-toggle" aria-label="Toggle navigation">
+      <span></span><span></span>
+    </button>
+
+    <div class="header-right">
+      <nav class="site-nav">
+        <!-- Home: scroll to top of this page -->
+        <a href="#top" class="nav-home active">Home</a>
+        <a href="#menu" class="nav-menu">Menu</a>
+        <a href="#experience" class="nav-experience">Experience</a>
+        <a href="#diy" class="nav-diy">DIY Bar</a>
+        <a href="#about" class="nav-about">About</a>
+      </nav>
+
+      <div class="auth-buttons">
+        <a href="#auth" class="auth-primary">Login / Sign Up</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <main id="top" class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-shell"></div>
+
+    <div class="hero-inner">
+      <div class="hero-kicker">SQ-CC · Coffee &amp; Cream</div>
+      <h1 class="hero-title">Spaghetti eis, Coffee &amp; Calm</h1>
+      <div class="hero-pill">Phase 1 · Concept Storefront</div>
+
+      <p class="hero-subline">
+        SQ-CC is an Ice cream and coffee concept that introduces
+        <strong>Spaghettieis</strong> to Hyderabad — alongside bowls, sundaes,
+        cakes, and specialty coffee made with organic, hand-selected
+        ingredients.
+      </p>
+      <p class="hero-subline">
+        Think Insta-worthy, health-focused, and appointment-only: 90 minutes
+        per guest, with space for work, conversation, and small celebrations.
+      </p>
+      <div class="hero-bullets">
+        SPAGHETTIEIS · BOWLS · COFFEE · VIBES
+      </div>
+
+      <div class="hero-cta">
+        <a href="#menu" class="btn-primary">Explore the Concept Menu</a>
+        <a href="#experience" class="btn-ghost">See the Experience</a>
+      </div>
+    </div>
+
+    <div class="scroll-indicator">Scroll</div>
+  </main>
+
+  <!-- Menu Section -->
+  <section id="menu" class="section reveal">
+    <div class="section-header">
+      <div>
+        <div class="section-kicker">Menu Concept</div>
+        <h2 class="section-title">Coffee, Cream &amp; Spaghettieis</h2>
+      </div>
+      <p class="section-desc">
+        This is the first sketch of the menu. Later, this page can become an
+        interactive menu with photos, nutrition details, and online ordering or
+        pre-selection for your appointment.
+      </p>
+    </div>
+
+    <div class="menu-grid">
+      <article class="menu-card">
+        <div class="menu-tag">Signature</div>
+        <h3 class="menu-title">Spaghetti Eis Collection</h3>
+        <p class="menu-text">
+          Classic vanilla “pasta”, rich sauces, crunchy toppings, and playful
+          combinations designed for photos and flavour — from strawberry fields
+          to chocolate night.
+        </p>
+        <div class="menu-meta">
+          Base: organic dairy · low-refined sugar options
+        </div>
+      </article>
+
+      <article class="menu-card">
+        <div class="menu-tag">Bowls &amp; Sundaes</div>
+        <h3 class="menu-title">Balanced Bowls &amp; Sundaes</h3>
+        <p class="menu-text">
+          Fruit-forward bowls, protein-friendly sundaes, and customisable
+          combinations that focus on freshness without losing the fun of a
+          proper dessert.
+        </p>
+        <div class="menu-meta">
+          Options: plant-based · high-protein · classic
+        </div>
+      </article>
+
+      <article class="menu-card">
+        <div class="menu-tag">Cakes &amp; Coffee</div>
+        <h3 class="menu-title">Cakes, Bakes &amp; Specialty Coffee</h3>
+        <p class="menu-text">
+          Small-batch cakes and bakes, paired with espresso drinks, cold brew,
+          and slow coffee options tailored for people who like to sit, talk, or
+          work for a while.
+        </p>
+        <div class="menu-meta">
+          Roast: curated beans · seasonal specials
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- Experience Section -->
+  <section id="experience" class="section reveal">
+    <div class="section-header">
+      <div>
+        <div class="section-kicker">Space &amp; Experience</div>
+        <h2 class="section-title">A 90-Minute Tiny Escape</h2>
+      </div>
+      <p class="section-desc">
+        SQ-CC is planned as a limited-capacity, appointment-only space —
+        designed for young and working professionals, but welcoming for all
+        ages and celebrations.
+      </p>
+    </div>
+
+    <div class="two-col">
+      <div class="card-soft">
+        <h3>Ambience &amp; Seating</h3>
+        <p>
+          Warm lighting, wood and soft textures, and a layout that works for
+          solo visits, pairs, or small groups. Every corner is designed to be
+          camera-friendly without feeling fake.
+        </p>
+        <ul class="list-clean">
+          <li>90-minute slots per guest or group.</li>
+          <li>Quiet-friendly tables for laptops and reading.</li>
+          <li>Photo spots for those “this place” moments.</li>
+        </ul>
+        <div class="badge-row">
+          <span class="badge-pill">Insta-worthy</span>
+          <span class="badge-pill">Cozy seating</span>
+          <span class="badge-pill">Work-friendly</span>
+        </div>
+      </div>
+
+      <div class="card-soft">
+        <h3>Reservations &amp; Specials</h3>
+        <p>
+          Access is by appointment only, so the store never feels crowded.
+          Over time, the website can handle slot booking, pre-ordered desserts,
+          and special celebration add-ons.
+        </p>
+        <ul class="list-clean">
+          <li>Student discount concept: 10% with valid ID.</li>
+          <li>Birthday &amp; celebration packages (future phase).</li>
+          <li>Private or semi-private bookings for small events.</li>
+        </ul>
+        <div class="badge-row">
+          <span class="badge-pill">Slots</span>
+          <span class="badge-pill">Student 10%</span>
+          <span class="badge-pill">Celebrations</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DIY Bar Section -->
+  <section id="diy" class="section reveal">
+    <div class="section-header">
+      <div>
+        <div class="section-kicker">DIY Terminal</div>
+        <h2 class="section-title">Build Your Own Bowl</h2>
+      </div>
+      <p class="section-desc">
+        A big part of SQ-CC is choice. The DIY terminal lets guests design
+        their own bowls, sundaes, and Spaghettieis before they reach the
+        counter.
+      </p>
+    </div>
+
+    <div class="two-col">
+      <div class="card-soft">
+        <h3>Digital DIY Flow (Concept)</h3>
+        <p>
+          On this page, the DIY experience can later become an interactive
+          builder: pick a base, sauce, toppings, and extras, see nutrition
+          hints, and save favourites to your profile.
+        </p>
+        <ul class="list-clean">
+          <li>Step 1: Choose base (ice cream, yoghurt, vegan, etc.).</li>
+          <li>Step 2: Pick sauces, fruits, nuts, crunch.</li>
+          <li>Step 3: Add extras like shots of espresso or protein.</li>
+        </ul>
+        <div class="badge-row">
+          <span class="badge-pill">Custom combos</span>
+          <span class="badge-pill">Profiles</span>
+          <span class="badge-pill">Recommendations</span>
+        </div>
+      </div>
+
+      <div class="card-soft">
+        <h3>Health-Aware, Not “Diet”</h3>
+        <p>
+          The idea is not to remove joy, but to give transparency: clear
+          ingredients, optional lighter choices, and portions that feel good.
+        </p>
+        <ul class="list-clean">
+          <li>Organic or carefully sourced key ingredients.</li>
+          <li>Labels for plant-based, protein-rich, or low-sugar options.</li>
+          <li>Room for seasonal menus with local produce.</li>
+        </ul>
+        <div class="badge-row">
+          <span class="badge-pill">Ingredient focus</span>
+          <span class="badge-pill">Balanced options</span>
+          <span class="badge-pill">Seasonal menus</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- About SQ-CC -->
+  <section id="about" class="section reveal">
+    <div class="about-card">
+      <div class="section-kicker">About · SQ-CC</div>
+      <h2 class="section-title" style="margin-bottom:0.7rem;">Why Coffee &amp; Cream is a Fold</h2>
+      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;">
+        SQ-CC is the lifestyle fold of Still In Queue — a physical space that
+        balances the more technical folds of AI, learning, and green energy.
+        It reflects the same mindset: thoughtful design, long-term quality, and
+        experiences that feel considered rather than random.
+      </p>
+      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;margin-top:0.6rem;">
+        This page is a concept layout for the store and its digital
+        experience. In the future, it can evolve into a full booking system,
+        loyalty or membership features, and a live menu directly connected to
+        SQ’s backend stack.
+      </p>
+
+      <div class="about-note">
+        Future ideas:
+        <br><br>
+        <strong>Phase 1:</strong> Concept site &amp; brand story.<br>
+        <strong>Phase 2:</strong> Slot booking, digital menu, DIY builder UI.<br>
+        <strong>Phase 3:</strong> Loyalty accounts connected to the main Sique login.<br>
+        <strong>Phase 4:</strong> Multiple locations or pop-ups under the SQ-CC brand.
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <p>© 2025 Still in Queue · SQ-CC. All rights reserved.</p>
+    <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
+  </footer>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const toggle = document.querySelector(".nav-toggle");
+      const nav = document.querySelector(".site-nav");
+      const navLinks = document.querySelectorAll(".site-nav a");
+
+      // Mobile navigation toggle
+      if (toggle && nav) {
+        toggle.addEventListener("click", () => {
+          nav.classList.toggle("nav-open");
+        });
+      }
+
+      // Active pill + smooth scroll for in-page links
+      navLinks.forEach((link) => {
+        const href = link.getAttribute("href") || "";
+
+        if (href.startsWith("#")) {
+          // Internal anchors
+          link.addEventListener("click", (e) => {
+            e.preventDefault();
+
+            const target = document.querySelector(href);
+            if (target) {
+              target.scrollIntoView({ behavior: "smooth" });
+            }
+
+            // Update active state
+            navLinks.forEach((l) => l.classList.remove("active"));
+            link.classList.add("active");
+
+            if (nav) nav.classList.remove("nav-open");
+          });
+        } else {
+          // External link (if you add any later)
+          link.addEventListener("click", () => {
+            if (nav) nav.classList.remove("nav-open");
+          });
+        }
+      });
+
+      // Simple scroll reveal
+      const revealElements = document.querySelectorAll(".reveal");
+      const onScroll = () => {
+        const triggerBottom = window.innerHeight * 0.85;
+        revealElements.forEach((el) => {
+          const boxTop = el.getBoundingClientRect().top;
+          if (boxTop < triggerBottom) {
+            el.classList.add("visible");
+          }
+        });
+      };
+
+      window.addEventListener("scroll", onScroll);
+      onScroll();
+    });
+  </script>
+</body>
+</html>
