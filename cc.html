@@ -43,6 +43,18 @@
       background: radial-gradient(circle at 0 0, #0b1120 0, #020617 55%, #020617 100%);
     }
 
+    /* ===== Sparkle canvas (invisible until there’s content) ===== */
+    #sparkle-canvas{
+      position: fixed; inset: 0;
+      width: 100vw; height: 100vh;
+      z-index: 50;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      will-change: transform, opacity;
+      opacity: 0;                    /* start hidden to avoid flicker */
+      transition: opacity .18s ease; /* quick fade in/out */
+    }
+
     /* ===== Header / Navbar ===== */
     .site-header {
       position: sticky; top: 0; z-index: 20;
@@ -228,11 +240,8 @@
   </style>
 </head>
 <body>
-  <!-- Sparkle canvas (ORANGE bubbles + SILVER stars) -->
-  <canvas id="sparkle-canvas"
-    class="pointer-events-none"
-    style="position:fixed;inset:0;z-index:50;mix-blend-mode:screen;will-change:transform;width:100vw;height:100vh"
-    aria-hidden="true"></canvas>
+  <!-- Sparkle canvas -->
+  <canvas id="sparkle-canvas" aria-hidden="true"></canvas>
 
   <header class="site-header">
     <!-- Logo: go back to main landing page -->
@@ -491,12 +500,15 @@
     <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
   </footer>
 
-  <!-- Sparkles (ORANGE bubbles + SILVER stars), full-viewport, DPR-aware -->
+  <!-- Sparkles (ORANGE bubbles + SILVER stars), full-viewport, DPR-aware, invisible until active -->
   <script>
   (() => {
     const canvas = document.getElementById('sparkle-canvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: true });
+
+    const showCanvas = () => { if (canvas.style.opacity !== '1') canvas.style.opacity = '1'; };
+    const hideCanvas = () => { if (canvas.style.opacity !== '0') canvas.style.opacity = '0'; };
 
     const vw = () => Math.max(document.documentElement.clientWidth,  window.innerWidth  || 0);
     const vh = () => Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
@@ -526,8 +538,8 @@
     const ORANGE = '#f97316'; // bubbles
     const SILVER = '#e5e7eb'; // stars
 
-    const STEP        = 4;     // sample pixels along cursor path
-    const PER_STEP    = 4;     // bubbles per sample
+    const STEP        = 4;
+    const PER_STEP    = 4;
     const POS_JIT     = 12;
     const POS_JIT_PCT = 0.40;
 
@@ -552,12 +564,11 @@
     const P = new Array(MAX).fill(null);
     let head = 0;
 
-    function addParticle(x, y, vx, vy, color, type='dot', extra={}) {
+    function addParticle(x, y, vx, vy, color, type='dot') {
       const life = LIFE_MIN + Math.random()*LIFE_VAR;
       const base = (type === 'dot') ? (1.2 + Math.random()*2.6) : (1.0 + Math.random()*1.5);
-      const rot  = Math.random() * Math.PI * 2;
       const starScale = (type === 'star') ? STAR_SCALES[(Math.random()*STAR_SCALES.length)|0] : 1;
-      P[head] = { x, y, vx, vy, life, ttl: life, base, color, type, rot, starScale, ...extra };
+      P[head] = { x, y, vx, vy, life, ttl: life, base, color, type, starScale };
       head = (head + 1) % MAX;
     }
 
@@ -637,15 +648,19 @@
     let last = null, down = false;
     let lastMoveAt = performance.now();
     let idleAcc = 0;
+    let lastNonEmptyAt = performance.now();
+
+    const wake = () => showCanvas();
 
     addEventListener('pointerdown', e => {
       down = true; last = { x: e.clientX, y: e.clientY }; lastMoveAt = performance.now();
-      spawnAt(e.clientX, e.clientY, STEP, true);
+      wake(); spawnAt(e.clientX, e.clientY, STEP, true);
     }, { passive: true });
 
     addEventListener('pointerup', () => { down = false; last = null; }, { passive: true });
 
     addEventListener('pointermove', e => {
+      wake();
       const list = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
       if (list && list.length) {
         for (const ev of list) {
@@ -696,9 +711,12 @@
       ctx.clearRect(0, 0, state.w, state.h);
       idleEmit(dt);
 
+      let any = false;
       for (let i=0; i<MAX; i++) {
         const p = P[i];
         if (!p || p.ttl <= 0) continue;
+
+        any = true;
 
         p.vx += (Math.random()-0.5) * NOISE;
         p.vy += (Math.random()-0.5) * NOISE;
@@ -717,6 +735,13 @@
         } else {
           drawStar5(p.x, p.y, r * p.starScale, Math.min(1, alpha*0.9));
         }
+      }
+
+      if (any) {
+        lastNonEmptyAt = now;
+        showCanvas();
+      } else {
+        if (now - lastNonEmptyAt > 220) hideCanvas();
       }
 
       requestAnimationFrame(tick);
