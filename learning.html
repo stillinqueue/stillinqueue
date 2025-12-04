@@ -43,6 +43,18 @@
       background: radial-gradient(circle at 0 0, #0b1120 0, #020617 55%, #020617 100%);
     }
 
+    /* ===== Sparkle Canvas (hidden until activity) ===== */
+    #sparkle-canvas{
+      position: fixed; inset: 0;
+      width: 100vw; height: 100vh;
+      z-index: 50;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      will-change: transform, opacity;
+      opacity: 0;                     /* hidden by default */
+      transition: opacity .18s ease;  /* fade in/out */
+    }
+
     /* ===== Header / Navbar ===== */
     .site-header {
       position: sticky; top: 0; z-index: 20;
@@ -228,10 +240,7 @@
 </head>
 <body>
   <!-- Sparkle canvas (YELLOW bubbles + SILVER stars) -->
-  <canvas id="sparkle-canvas"
-    class="pointer-events-none"
-    style="position:fixed;inset:0;z-index:50;mix-blend-mode:screen;will-change:transform;width:100vw;height:100vh"
-    aria-hidden="true"></canvas>
+  <canvas id="sparkle-canvas" aria-hidden="true"></canvas>
 
   <header class="site-header">
     <a href="index.html" class="logo">
@@ -269,7 +278,7 @@
 
       <p class="hero-subline">
         SQ-LP is a learning platform that combines structured
-        courses, sports academies, arts, and language training into one place —
+        courses, sports academies, arts, and language training into one place — 
         supported by <strong>AI mentors</strong> that guide, coach, and keep
         you on track.
       </p>
@@ -479,7 +488,7 @@
     <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
   </footer>
 
-  <!-- Sparkles (YELLOW bubbles + SILVER stars), full-viewport, DPR-aware -->
+  <!-- Sparkles (YELLOW bubbles + SILVER stars), full-viewport, DPR-aware, with safe fade in/out -->
   <script>
   (() => {
     const canvas = document.getElementById('sparkle-canvas');
@@ -539,6 +548,12 @@
 
     const P = new Array(MAX).fill(null);
     let head = 0;
+
+    // Visibility control to prevent yellow wash on load
+    let visible = false;
+    let lastNonEmptyAt = performance.now();
+    function showCanvas(){ if (!visible){ canvas.style.opacity = '1'; visible = true; } }
+    function hideCanvas(){ if (visible){ canvas.style.opacity = '0'; visible = false; } }
 
     function addParticle(x, y, vx, vy, color, type='dot', extra={}) {
       const life = LIFE_MIN + Math.random()*LIFE_VAR;
@@ -626,14 +641,17 @@
     let lastMoveAt = performance.now();
     let idleAcc = 0;
 
+    function wake(){ showCanvas(); }
+
     addEventListener('pointerdown', e => {
       down = true; last = { x: e.clientX, y: e.clientY }; lastMoveAt = performance.now();
-      spawnAt(e.clientX, e.clientY, STEP, true);
+      wake(); spawnAt(e.clientX, e.clientY, STEP, true);
     }, { passive: true });
 
     addEventListener('pointerup', () => { down = false; last = null; }, { passive: true });
 
     addEventListener('pointermove', e => {
+      wake();
       const list = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
       if (list && list.length) {
         for (const ev of list) {
@@ -684,9 +702,12 @@
       ctx.clearRect(0, 0, state.w, state.h);
       idleEmit(dt);
 
+      let any = false;
       for (let i=0; i<MAX; i++) {
         const p = P[i];
         if (!p || p.ttl <= 0) continue;
+
+        any = true;
 
         p.vx += (Math.random()-0.5) * NOISE;
         p.vy += (Math.random()-0.5) * NOISE;
@@ -705,6 +726,13 @@
         } else {
           drawStar5(p.x, p.y, r * p.starScale, Math.min(1, alpha*0.9));
         }
+      }
+
+      if (any) {
+        lastNonEmptyAt = now;
+        showCanvas();
+      } else {
+        if (now - lastNonEmptyAt > 220) hideCanvas();
       }
 
       requestAnimationFrame(tick);
