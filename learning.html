@@ -742,48 +742,56 @@
   })();
   </script>
 
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const toggle = document.querySelector(".nav-toggle");
-      const nav = document.querySelector(".site-nav");
-      const navLinks = document.querySelectorAll(".site-nav a");
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const toggle = document.querySelector(".nav-toggle");
+    const nav = document.querySelector(".site-nav");
+    const navLinks = document.querySelectorAll(".site-nav a");
 
-      // Mobile navigation toggle
-      if (toggle && nav) {
-        toggle.addEventListener("click", () => {
-          nav.classList.toggle("nav-open");
-        });
-      }
+    // Mobile navigation toggle
+    if (toggle && nav) {
+      toggle.addEventListener("click", () => {
+        nav.classList.toggle("nav-open");
+      });
+    }
 
-      // Active pill + smooth scroll for in-page links
-      navLinks.forEach((link) => {
-        const href = link.getAttribute("href") || "";
-        if (href.startsWith("#")) {
-          link.addEventListener("click", (e) => {
-            e.preventDefault();
-            const target = document.querySelector(href);
-            if (target) target.scrollIntoView({ behavior: "smooth" });
+    // Let the browser handle #hash scrolling; we only manage active state + close nav
+    navLinks.forEach((link) => {
+      const href = link.getAttribute("href") || "";
+
+      if (href.startsWith("#")) {
+        link.addEventListener("click", () => {
+          // allow native scrolling (no preventDefault)
+          // update active pill after hash change
+          setTimeout(() => {
             navLinks.forEach((l) => l.classList.remove("active"));
             link.classList.add("active");
-            if (nav) nav.classList.remove("nav-open");
-          });
-        } else {
-          link.addEventListener("click", () => { if (nav) nav.classList.remove("nav-open"); });
-        }
-      });
+          }, 0);
 
-      // Simple scroll reveal
-      const revealElements = document.querySelectorAll(".reveal");
-      const onScroll = () => {
-        const triggerBottom = window.innerHeight * 0.85;
-        revealElements.forEach((el) => {
-          const boxTop = el.getBoundingClientRect().top;
-          if (boxTop < triggerBottom) el.classList.add("visible");
+          if (nav) nav.classList.remove("nav-open");
         });
-      };
-      window.addEventListener("scroll", onScroll);
-      onScroll();
+      } else {
+        // external links (like index.html), just close the mobile menu
+        link.addEventListener("click", () => {
+          if (nav) nav.classList.remove("nav-open");
+        });
+      }
     });
-  </script>
+
+    // Simple scroll reveal
+    const revealElements = document.querySelectorAll(".reveal");
+    const onScroll = () => {
+      const triggerBottom = window.innerHeight * 0.85;
+      revealElements.forEach((el) => {
+        const boxTop = el.getBoundingClientRect().top;
+        if (boxTop < triggerBottom) el.classList.add("visible");
+      });
+    };
+    window.addEventListener("scroll", onScroll);
+    onScroll();
+  });
+</script>
+
 </body>
 </html>
+
