@@ -629,7 +629,11 @@
     });
   </script>
 
-  <!-- Sparkle trail (blue bubbles + silver stars) -->
+
+<!-- Sparkle canvas (BLUE bubbles + SILVER stars) -->
+<canvas id="sparkle-canvas"
+  style="position:fixed;inset:0;z-index:50;mix-blend-mode:screen;will-change:transform;width:100vw;height:100vh;pointer-events:none"
+  aria-hidden="true"></canvas>
 <script>
 (() => {
   const canvas = document.getElementById('sparkle-canvas');
@@ -880,3 +884,4 @@
 
 </body>
 </html>
+
