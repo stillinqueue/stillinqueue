@@ -43,7 +43,7 @@
       background: radial-gradient(circle at 0 0, #0b1120 0, #020617 55%, #020617 100%);
     }
 
-    /* ===== Sparkle canvas (invisible until there’s content) ===== */
+    /* ===== Sparkle Canvas (invisible until activity) ===== */
     #sparkle-canvas{
       position: fixed; inset: 0;
       width: 100vw; height: 100vh;
@@ -51,8 +51,8 @@
       pointer-events: none;
       mix-blend-mode: screen;
       will-change: transform, opacity;
-      opacity: 0;                    /* start hidden to avoid flicker */
-      transition: opacity .18s ease; /* quick fade in/out */
+      opacity: 0;                          /* hidden at load */
+      transition: opacity .18s ease;       /* fade in/out */
     }
 
     /* ===== Header / Navbar ===== */
@@ -240,7 +240,7 @@
   </style>
 </head>
 <body>
-  <!-- Sparkle canvas -->
+  <!-- Sparkle canvas (ORANGE bubbles + SILVER stars) -->
   <canvas id="sparkle-canvas" aria-hidden="true"></canvas>
 
   <header class="site-header">
@@ -500,15 +500,12 @@
     <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
   </footer>
 
-  <!-- Sparkles (ORANGE bubbles + SILVER stars), full-viewport, DPR-aware, invisible until active -->
+  <!-- Sparkles (ORANGE bubbles + SILVER stars), full-viewport, DPR-aware, with safe fade in/out -->
   <script>
   (() => {
     const canvas = document.getElementById('sparkle-canvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: true });
-
-    const showCanvas = () => { if (canvas.style.opacity !== '1') canvas.style.opacity = '1'; };
-    const hideCanvas = () => { if (canvas.style.opacity !== '0') canvas.style.opacity = '0'; };
 
     const vw = () => Math.max(document.documentElement.clientWidth,  window.innerWidth  || 0);
     const vh = () => Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
@@ -564,11 +561,18 @@
     const P = new Array(MAX).fill(null);
     let head = 0;
 
-    function addParticle(x, y, vx, vy, color, type='dot') {
+    // Visibility control to avoid initial orange flicker
+    let visible = false;
+    let lastNonEmptyAt = performance.now();
+    function showCanvas(){ if (!visible){ canvas.style.opacity = '1'; visible = true; } }
+    function hideCanvas(){ if (visible){ canvas.style.opacity = '0'; visible = false; } }
+
+    function addParticle(x, y, vx, vy, color, type='dot', extra={}) {
       const life = LIFE_MIN + Math.random()*LIFE_VAR;
       const base = (type === 'dot') ? (1.2 + Math.random()*2.6) : (1.0 + Math.random()*1.5);
+      const rot  = Math.random() * Math.PI * 2;
       const starScale = (type === 'star') ? STAR_SCALES[(Math.random()*STAR_SCALES.length)|0] : 1;
-      P[head] = { x, y, vx, vy, life, ttl: life, base, color, type, starScale };
+      P[head] = { x, y, vx, vy, life, ttl: life, base, color, type, rot, starScale, ...extra };
       head = (head + 1) % MAX;
     }
 
@@ -648,9 +652,8 @@
     let last = null, down = false;
     let lastMoveAt = performance.now();
     let idleAcc = 0;
-    let lastNonEmptyAt = performance.now();
 
-    const wake = () => showCanvas();
+    function wake(){ showCanvas(); }
 
     addEventListener('pointerdown', e => {
       down = true; last = { x: e.clientX, y: e.clientY }; lastMoveAt = performance.now();
@@ -747,6 +750,7 @@
       requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
+
     document.addEventListener('visibilitychange', () => { lastFrame = performance.now(); });
   })();
   </script>
