@@ -13,11 +13,7 @@
 
   <style>
     /* ===== Reset ===== */
-    *, *::before, *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
       --bg-dark: #020617;
@@ -47,22 +43,24 @@
       background: radial-gradient(circle at 0 0, #0b1120 0, #020617 55%, #020617 100%);
     }
 
+    /* ===== Sparkle Canvas (invisible until activity) ===== */
+    #sparkle-canvas{
+      position: fixed; inset: 0;
+      width: 100vw; height: 100vh;
+      z-index: 50;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      will-change: transform, opacity;
+      opacity: 0;                     /* hidden at load */
+      transition: opacity .18s ease;  /* fade in/out */
+    }
+
     /* ===== Header / Navbar ===== */
     .site-header {
-      position: sticky;
-      top: 0;
-      z-index: 20;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.6rem 5vw;
-      backdrop-filter: blur(18px);
-      background: linear-gradient(
-        to bottom,
-        rgba(2, 6, 23, 0.96),
-        rgba(2, 6, 23, 0.8),
-        transparent
-      );
+      position: sticky; top: 0; z-index: 20;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.6rem 5vw; backdrop-filter: blur(18px);
+      background: linear-gradient(to bottom, rgba(2, 6, 23, 0.96), rgba(2, 6, 23, 0.8), transparent);
       border-bottom: 1px solid rgba(148, 163, 184, 0.22);
     }
 
@@ -122,14 +120,10 @@
 
     /* ===== Hero ===== */
     .hero {
-      position: relative;
-      min-height: 88vh;
+      position: relative; min-height: 88vh;
       padding: 5.5rem 5vw 4.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      isolation: isolate;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; isolation: isolate;
     }
 
     .hero-bg {
@@ -305,11 +299,8 @@
   </style>
 </head>
 <body>
-  <!-- Sparkle canvas (green bubbles + silver stars) -->
-  <canvas id="sparkle-canvas"
-    class="pointer-events-none"
-    style="position:fixed;inset:0;z-index:50;mix-blend-mode:screen;will-change:transform;width:100vw;height:100vh"
-    aria-hidden="true"></canvas>
+  <!-- Sparkle canvas (GREEN bubbles + SILVER stars) -->
+  <canvas id="sparkle-canvas" aria-hidden="true"></canvas>
 
   <header class="site-header">
     <!-- Logo: go back to main landing page -->
@@ -576,7 +567,7 @@
     <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
   </footer>
 
-  <!-- Sparkles (GREEN bubbles + SILVER stars), full-viewport, DPR-aware -->
+  <!-- Sparkles (GREEN bubbles + SILVER stars), full-viewport, DPR-aware, with safe fade in/out -->
   <script>
   (() => {
     const canvas = document.getElementById('sparkle-canvas');
@@ -636,6 +627,12 @@
 
     const P = new Array(MAX).fill(null);
     let head = 0;
+
+    // Visibility control to avoid initial green wash
+    let visible = false;
+    let lastNonEmptyAt = performance.now();
+    function showCanvas(){ if (!visible){ canvas.style.opacity = '1'; visible = true; } }
+    function hideCanvas(){ if (visible){ canvas.style.opacity = '0'; visible = false; } }
 
     function addParticle(x, y, vx, vy, color, type='dot', extra={}) {
       const life = LIFE_MIN + Math.random()*LIFE_VAR;
@@ -723,14 +720,17 @@
     let lastMoveAt = performance.now();
     let idleAcc = 0;
 
+    function wake(){ showCanvas(); }
+
     addEventListener('pointerdown', e => {
       down = true; last = { x: e.clientX, y: e.clientY }; lastMoveAt = performance.now();
-      spawnAt(e.clientX, e.clientY, STEP, true);
+      wake(); spawnAt(e.clientX, e.clientY, STEP, true);
     }, { passive: true });
 
     addEventListener('pointerup', () => { down = false; last = null; }, { passive: true });
 
     addEventListener('pointermove', e => {
+      wake();
       const list = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
       if (list && list.length) {
         for (const ev of list) {
@@ -781,9 +781,12 @@
       ctx.clearRect(0, 0, state.w, state.h);
       idleEmit(dt);
 
+      let any = false;
       for (let i=0; i<MAX; i++) {
         const p = P[i];
         if (!p || p.ttl <= 0) continue;
+
+        any = true;
 
         p.vx += (Math.random()-0.5) * NOISE;
         p.vy += (Math.random()-0.5) * NOISE;
@@ -802,6 +805,13 @@
         } else {
           drawStar5(p.x, p.y, r * p.starScale, Math.min(1, alpha*0.9));
         }
+      }
+
+      if (any) {
+        lastNonEmptyAt = now;
+        showCanvas();
+      } else {
+        if (now - lastNonEmptyAt > 220) hideCanvas();
       }
 
       requestAnimationFrame(tick);
