@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <title>Still In Queue · Learning</title>
-  <link rel="icon" type="image/png" href="Fav-Photoroom.png">
+  <title>Still In Queue · Lernen</title>
+  <link rel="icon" type="image/png" href="../Fav-Photoroom.png">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Fonts -->
@@ -51,8 +51,8 @@
       pointer-events: none;
       mix-blend-mode: screen;
       will-change: transform, opacity;
-      opacity: 0;                     /* hidden by default */
-      transition: opacity .18s ease;  /* fade in/out */
+      opacity: 0;
+      transition: opacity .18s ease;
     }
 
     /* ===== Header / Navbar ===== */
@@ -82,6 +82,40 @@
       background: linear-gradient(135deg, #facc15, #fde047, #fbbf24);
       box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9); transform: translateY(-1px);
     }
+
+    /* ===== Language Switch ===== */
+    .lang-switch {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    .lang-switch span.separator {
+      opacity: 0.6;
+      color: #e5e7eb;
+    }
+    .lang-link {
+      text-decoration: none;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: #e5e7eb;
+      transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+    }
+    .lang-link:hover {
+      border-color: rgba(248, 250, 252, 0.85);
+      background: rgba(15, 23, 42, 0.9);
+      transform: translateY(-1px);
+    }
+    .lang-link.active-lang {
+      background: linear-gradient(135deg, #facc15, #fde047, #fbbf24);
+      color: #111827;
+      border-color: rgba(248, 250, 252, 0.95);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.85);
+    }
+
     .auth-buttons { display: flex; align-items: center; }
     .auth-primary {
       font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.18em; text-decoration: none;
@@ -235,6 +269,7 @@
       .section { padding-inline: 1.5rem; }
       .section-header { flex-direction: column; align-items: flex-start; }
       .courses-grid { grid-template-columns: minmax(0, 1fr); }
+      .lang-switch { font-size: 0.7rem; }
     }
   </style>
 </head>
@@ -243,25 +278,31 @@
   <canvas id="sparkle-canvas" aria-hidden="true"></canvas>
 
   <header class="site-header">
-    <a href="index.html" class="logo">
-      <img src="SQ-EL-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
+    <a href="../index.html" class="logo">
+      <img src="../SQ-EL-Photoroom.png" alt="Still In Queue Gruppe" class="logo-img" />
     </a>
 
-    <button class="nav-toggle" aria-label="Toggle navigation">
+    <button class="nav-toggle" aria-label="Navigation umschalten">
       <span></span><span></span>
     </button>
 
     <div class="header-right">
       <nav class="site-nav">
-        <a href="#top" class="nav-home active">Home</a>
-        <a href="#courses" class="nav-courses">Courses</a>
-        <a href="#sports" class="nav-sports">Sports</a>
-        <a href="#arts" class="nav-arts">Arts &amp; Clubs</a>
-        <a href="#about" class="nav-about">About</a>
+        <a href="#top" class="nav-home active">Start</a>
+        <a href="#courses" class="nav-courses">Kurse</a>
+        <a href="#sports" class="nav-sports">Sport</a>
+        <a href="#arts" class="nav-arts">Kunst &amp; Clubs</a>
+        <a href="#about" class="nav-about">Über</a>
       </nav>
 
+      <div class="lang-switch">
+        <a href="../learning.html" class="lang-link">EN</a>
+        <span class="separator">/</span>
+        <a href="learning.html" class="lang-link active-lang">DE</a>
+      </div>
+
       <div class="auth-buttons">
-        <a href="#auth" class="auth-primary">Login / Sign Up</a>
+        <a href="#auth" class="auth-primary">Login / Registrieren</a>
       </div>
     </div>
   </header>
@@ -272,26 +313,26 @@
     <div class="hero-shell"></div>
 
     <div class="hero-inner">
-      <div class="hero-kicker">SQ-LP · Learning Platform</div>
-      <h1 class="hero-title">Learning That Follows Your Life</h1>
-      <div class="hero-pill">Phase 1 · Concept Campus</div>
+      <div class="hero-kicker">SQ-LP · Lernplattform</div>
+      <h1 class="hero-title">Lernen, das sich deinem Leben anpasst</h1>
+      <div class="hero-pill">Phase 1 · Konzept Campus</div>
 
       <p class="hero-subline">
-        SQ-LP is a learning platform that combines structured
-        courses, sports academies, arts, and language training into one place — 
-        supported by <strong>AI mentors</strong> that guide, coach, and keep
-        you on track.
+        SQ-LP ist eine Lernplattform, die strukturierte Kurse, Sportakademien,
+        Kunst- und Sprachtraining an einem Ort bündelt – unterstützt von
+        <strong>KI-Mentoren</strong>, die erklären, begleiten und dich
+        dranbleiben lassen.
       </p>
       <p class="hero-subline">
-        From online lessons to real-world clubs and academies, the goal is to
-        make it easy to discover, plan, and stay consistent with the skills you
-        actually care about.
+        Von Online-Lektionen bis hin zu echten Vereinen und Akademien: Ziel ist,
+        es dir leicht zu machen, die Fähigkeiten zu finden, zu planen und
+        durchzuziehen, die dir wirklich wichtig sind.
       </p>
-      <div class="hero-bullets">COURSES · SPORTS · ARTS · CLUBS</div>
+      <div class="hero-bullets">KURSE · SPORT · KUNST · CLUBS</div>
 
       <div class="hero-cta">
-        <a href="#courses" class="btn-primary">Explore Learning Areas</a>
-        <a href="#about" class="btn-ghost">About SQ-LP</a>
+        <a href="#courses" class="btn-primary">Lernbereiche entdecken</a>
+        <a href="#about" class="btn-ghost">Über SQ-LP</a>
       </div>
     </div>
 
@@ -300,104 +341,103 @@
 
   <!-- Courses Section -->
   <section id="courses" class="section reveal">
-    <div class="section-chip"><span>Courses</span></div>
+    <div class="section-chip"><span>Kurse</span></div>
     <div class="section-header">
       <div>
         <div class="section-kicker">E-Learning</div>
-        <h2 class="section-title">Courses for Every Stage</h2>
+        <h2 class="section-title">Kurse für jede Phase</h2>
       </div>
       <p class="section-desc">
-        In later phases, this becomes an interactive library of courses with AI
-        tutors and personalised paths. For now, it maps the core idea of what
-        SQ-LP will cover.
+        In späteren Phasen wird dies zu einer interaktiven Kursbibliothek mit
+        KI-Tutoren und personalisierten Pfaden. Jetzt zeigt es den Kern dessen,
+        was SQ-LP abdecken soll.
       </p>
     </div>
 
     <div class="courses-grid">
       <article class="course-card">
-        <div class="course-tag">Foundations</div>
-        <h3 class="course-title">School &amp; University Support</h3>
+        <div class="course-tag">Grundlagen</div>
+        <h3 class="course-title">Schule &amp; Studium</h3>
         <p class="course-text">
-          Structured content for school and college students, with AI helping
-          to explain concepts, create practice questions, and track progress.
+          Strukturierte Inhalte für Schüler*innen und Studierende – mit KI,
+          die Konzepte erklärt, Übungsaufgaben erstellt und den Fortschritt
+          im Blick behält.
         </p>
-        <div class="course-meta">Focus: Maths · Science · Languages · Exams</div>
+        <div class="course-meta">Fokus: Mathe · Naturwissenschaften · Sprachen · Prüfungen</div>
       </article>
 
       <article class="course-card">
-        <div class="course-tag">Careers</div>
-        <h3 class="course-title">Career &amp; Tech Skills</h3>
+        <div class="course-tag">Karriere</div>
+        <h3 class="course-title">Berufs- &amp; Tech-Skills</h3>
         <p class="course-text">
-          Data, programming, design, business, and communication skills to
-          support modern careers — with project-style learning and portfolio
-          guidance.
+          Daten, Programmierung, Design, Business und Kommunikation für moderne
+          Berufe – mit projektbasiertem Lernen und Portfolio-Leitfäden.
         </p>
-        <div class="course-meta">Focus: Data · Dev · Design · Business</div>
+        <div class="course-meta">Fokus: Data · Dev · Design · Business</div>
       </article>
 
       <article class="course-card">
-        <div class="course-tag">Lifelong</div>
-        <h3 class="course-title">Everyday Learning</h3>
+        <div class="course-tag">Lebenslang</div>
+        <h3 class="course-title">Alltagswissen &amp; Routinen</h3>
         <p class="course-text">
-          Personal finance, productivity, mindset, and hobby-based micro
-          courses, designed for short sessions that fit into a busy week.
+          Finanzbildung, Produktivität, Mindset und Hobby-Microkurse, die in
+          kurze Lerneinheiten passen – ideal für volle Wochen.
         </p>
-        <div class="course-meta">Focus: Money · Habits · Hobbies</div>
+        <div class="course-meta">Fokus: Geld · Gewohnheiten · Hobbys</div>
       </article>
     </div>
   </section>
 
   <!-- Sports Section -->
   <section id="sports" class="section reveal">
-    <div class="section-chip"><span>Sports</span></div>
+    <div class="section-chip"><span>Sport</span></div>
     <div class="section-header">
       <div>
-        <div class="section-kicker">Sport Map</div>
-        <h2 class="section-title">Find Places to Train &amp; Play</h2>
+        <div class="section-kicker">Sportkarte</div>
+        <h2 class="section-title">Orte zum Trainieren &amp; Spielen finden</h2>
       </div>
       <p class="section-desc">
-        SQ-LP also looks outward: it becomes a directory of academies, clubs,
-        and tournaments so sports enthusiasts can find places to actually
-        practice — not just watch.
+        SQ-LP schaut auch nach draußen: Es wird zu einem Verzeichnis von
+        Akademien, Vereinen und Turnieren, damit Sportbegeisterte echte
+        Trainingsmöglichkeiten finden – nicht nur Streams.
       </p>
     </div>
 
     <div class="two-col">
       <div class="card-soft">
-        <h3>Nearby Academies &amp; Training Centers</h3>
+        <h3>Akademien &amp; Trainingszentren in der Nähe</h3>
         <p>
-          The sports view is meant to show academies and coaching centers
-          around you, with filters for age, level, and budget. Later, AI can
-          recommend options based on your interests and schedule.
+          Die Sportansicht soll Akademien und Trainingszentren in deiner Nähe
+          zeigen – mit Filtern nach Alter, Niveau und Budget. Später kann KI
+          passende Optionen nach Interesse und Zeitplan vorschlagen.
         </p>
         <ul class="list-clean">
-          <li>Team sports: football, cricket, basketball, volleyball, etc.</li>
-          <li>Individual sports: tennis, badminton, athletics, swimming.</li>
-          <li>Specialized programs: strength &amp; conditioning, kids camps.</li>
+          <li>Teamsport: Fußball, Cricket, Basketball, Volleyball usw.</li>
+          <li>Einzelsport: Tennis, Badminton, Leichtathletik, Schwimmen.</li>
+          <li>Spezialprogramme: Athletiktraining, Kids-Camps, Fitness.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Maps &amp; distances</span>
-          <span class="badge-pill">Timings</span>
-          <span class="badge-pill">Difficulty level</span>
+          <span class="badge-pill">Karte &amp; Entfernungen</span>
+          <span class="badge-pill">Trainingszeiten</span>
+          <span class="badge-pill">Schwierigkeitsgrad</span>
         </div>
       </div>
 
       <div class="card-soft">
-        <h3>Tournaments, Leagues &amp; Events</h3>
+        <h3>Turniere, Ligen &amp; Events</h3>
         <p>
-          A calendar-style view will highlight local leagues, tournaments, and
-          community events, so players and parents can plan participation in
-          advance.
+          Eine Kalenderansicht soll lokale Ligen, Turniere und Community-Events
+          hervorheben, damit Spieler*innen und Eltern frühzeitig planen können.
         </p>
         <ul class="list-clean">
-          <li>Monthly and seasonal tournaments.</li>
-          <li>Beginner-friendly events to start competing.</li>
-          <li>Links to registration pages and schedules.</li>
+          <li>Monatliche und saisonale Turniere.</li>
+          <li>Einsteigerfreundliche Wettbewerbe.</li>
+          <li>Links zu Anmeldung, Spielplänen und Ergebnissen.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Calendar</span>
-          <span class="badge-pill">Notifications</span>
-          <span class="badge-pill">Team invites</span>
+          <span class="badge-pill">Kalender</span>
+          <span class="badge-pill">Benachrichtigungen</span>
+          <span class="badge-pill">Team-Einladungen</span>
         </div>
       </div>
     </div>
@@ -405,49 +445,49 @@
 
   <!-- Arts & Clubs Section -->
   <section id="arts" class="section reveal">
-    <div class="section-chip"><span>Arts &amp; Clubs</span></div>
+    <div class="section-chip"><span>Kunst &amp; Clubs</span></div>
     <div class="section-header">
       <div>
-        <div class="section-kicker">Arts &amp; Creative Clubs</div>
-        <h2 class="section-title">Learning Beyond the Classroom</h2>
+        <div class="section-kicker">Kunst &amp; Kreativclubs</div>
+        <h2 class="section-title">Lernen über das Klassenzimmer hinaus</h2>
       </div>
       <p class="section-desc">
-        Dance, music, painting, pottery, photography, acting, cooking, fashion —
-        SQ-LP treats them as serious skills, not just hobbies.
+        Tanz, Musik, Malerei, Töpfern, Fotografie, Schauspiel, Kochen, Mode –
+        SQ-LP behandelt sie als ernsthafte Skills, nicht nur als Zeitvertreib.
       </p>
     </div>
 
     <div class="two-col">
       <div class="card-soft">
-        <h3>Studios, Schools &amp; Workshops</h3>
+        <h3>Studios, Schulen &amp; Workshops</h3>
         <p>
-          Discover places to learn creative arts offline, with photos, timing,
-          and areas of focus. In the future, hybrid programs will combine
-          online modules with in-person practice.
+          Finde Orte, an denen du kreative Künste offline lernen kannst – mit
+          Bildern, Zeiten und Schwerpunkten. Später entstehen Hybridprogramme,
+          die Online-Module mit Präsenztraining verbinden.
         </p>
         <ul class="list-clean">
-          <li>Dance studios, music schools, and theatre groups.</li>
-          <li>Art, pottery, and craft workshops.</li>
-          <li>Cooking, baking, and culinary schools.</li>
+          <li>Tanzschulen, Musikschulen und Theatergruppen.</li>
+          <li>Mal-, Töpfer- und Kreativ-Workshops.</li>
+          <li>Koch-, Back- und Culinary-Schools.</li>
         </ul>
       </div>
 
       <div class="card-soft">
         <h3>Clubs, Communities &amp; Events</h3>
         <p>
-          A club directory will help people find photography walks, book clubs,
-          jam sessions, open mics, and more — so learning naturally connects to
-          community.
+          Ein Club-Verzeichnis hilft, Fotowalks, Lesekreise, Jam-Sessions,
+          Open-Mics und mehr zu entdecken – damit Lernen automatisch mit
+          Community verbunden ist.
         </p>
         <ul class="list-clean">
-          <li>Community clubs and informal meetups.</li>
-          <li>Showcases, recitals, and exhibitions.</li>
-          <li>AI-assisted discovery based on your profile.</li>
+          <li>Community-Clubs und lockere Treffen.</li>
+          <li>Auftritte, Konzerte und Ausstellungen.</li>
+          <li>KI-gestützte Vorschläge passend zu deinem Profil.</li>
         </ul>
         <div class="badge-row">
           <span class="badge-pill">Events</span>
-          <span class="badge-pill">Groups</span>
-          <span class="badge-pill">AI suggestions</span>
+          <span class="badge-pill">Gruppen</span>
+          <span class="badge-pill">KI-Vorschläge</span>
         </div>
       </div>
     </div>
@@ -455,37 +495,37 @@
 
   <!-- About SQ-LP -->
   <section id="about" class="section reveal">
-    <div class="section-chip"><span>About</span></div>
+    <div class="section-chip"><span>Über</span></div>
     <div class="about-card">
-      <div class="section-kicker">About · SQ-LP</div>
-      <h2 class="section-title" style="margin-bottom:0.7rem;">The Idea Behind the Learning Platform</h2>
+      <div class="section-kicker">Über · SQ-LP</div>
+      <h2 class="section-title" style="margin-bottom:0.7rem;">Die Idee hinter der Lernplattform</h2>
       <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;">
-        SQ-LP is the second fold of Still In Queue — a space where structured
-        courses, sports, and arts share the same ecosystem. The long-term goal
-        is to combine <strong>high-quality content</strong> with
-        <strong>AI guidance</strong> and real-world places to learn.
+        SQ-LP ist der zweite Bereich von Still In Queue – ein Raum, in dem
+        strukturierte Kurse, Sport und Kunst im selben Ökosystem leben. Das
+        langfristige Ziel: <strong>hochwertige Inhalte</strong> mit
+        <strong>KI-Begleitung</strong> und echten Lernorten verbinden.
       </p>
       <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;margin-top:0.6rem;">
-        This page is the concept layout. In future phases it will connect to a
-        Python backend, video library, recommendation engine, and a map of
-        academies and studios — turning SQ-LP into a real learning companion
-        for different ages and goals.
+        Diese Seite ist das Konzept-Layout. In späteren Phasen wird sie mit
+        einem Python-Backend, einer Videobibliothek, einer Empfehlungsschnittstelle
+        und einer Karte für Akademien und Studios verbunden – damit SQ-LP zu
+        einem echten Lernbegleiter für verschiedene Altersgruppen und Ziele wird.
       </p>
 
       <div class="about-note">
-        Rough roadmap:
+        Grobe Roadmap:
         <br><br>
-        <strong>Phase 1:</strong> Front-end layout and content structure.<br>
-        <strong>Phase 2:</strong> Course catalog with AI-powered overviews and progress tracking.<br>
-        <strong>Phase 3:</strong> Integration with sports &amp; arts locations, maps, and events.<br>
-        <strong>Phase 4:</strong> Personalized learning paths and community features.
+        <strong>Phase 1:</strong> Frontend-Layout und Inhaltsstruktur.<br>
+        <strong>Phase 2:</strong> Kurskatalog mit KI-Überblicken und Fortschritts-Tracking.<br>
+        <strong>Phase 3:</strong> Integration von Sport- &amp; Kunst-Orten, Karten und Events.<br>
+        <strong>Phase 4:</strong> Personalisierte Lernpfade und Community-Features.
       </div>
     </div>
   </section>
 
   <footer class="site-footer">
-    <p>© 2025 Still in Queue · SQ-LP. All rights reserved.</p>
-    <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
+    <p>© 2025 Still in Queue · SQ-LP. Alle Rechte vorbehalten.</p>
+    <p>Kontakt : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
   </footer>
 
   <!-- Sparkles (YELLOW bubbles + SILVER stars), full-viewport, DPR-aware, with safe fade in/out -->
@@ -523,12 +563,12 @@
     const YELLOW = '#facc15'; // bubbles
     const SILVER = '#e5e7eb'; // stars
 
-    const STEP        = 4;    // sample spacing along pointer path
-    const PER_STEP    = 4;    // bubbles per sample
+    const STEP        = 4;
+    const PER_STEP    = 4;
     const POS_JIT     = 12;
     const POS_JIT_PCT = 0.40;
 
-    const LIFE_MIN    = 900;  // ms
+    const LIFE_MIN    = 900;
     const LIFE_VAR    = 600;
     const FRICTION    = 0.992;
     const GRAVITY     = 0.007;
@@ -544,12 +584,11 @@
     const IDLE_SPREAD   = 18;
     const IDLE_SPEED    = 0.5;
 
-    const MAX = 620; // ring buffer size
+    const MAX = 620;
 
     const P = new Array(MAX).fill(null);
     let head = 0;
 
-    // Visibility control to prevent yellow wash on load
     let visible = false;
     let lastNonEmptyAt = performance.now();
     function showCanvas(){ if (!visible){ canvas.style.opacity = '1'; visible = true; } }
@@ -748,21 +787,17 @@
     const nav = document.querySelector(".site-nav");
     const navLinks = document.querySelectorAll(".site-nav a");
 
-    // Mobile navigation toggle
     if (toggle && nav) {
       toggle.addEventListener("click", () => {
         nav.classList.toggle("nav-open");
       });
     }
 
-    // Let the browser handle #hash scrolling; we only manage active state + close nav
     navLinks.forEach((link) => {
       const href = link.getAttribute("href") || "";
 
       if (href.startsWith("#")) {
         link.addEventListener("click", () => {
-          // allow native scrolling (no preventDefault)
-          // update active pill after hash change
           setTimeout(() => {
             navLinks.forEach((l) => l.classList.remove("active"));
             link.classList.add("active");
@@ -771,14 +806,12 @@
           if (nav) nav.classList.remove("nav-open");
         });
       } else {
-        // external links (like index.html), just close the mobile menu
         link.addEventListener("click", () => {
           if (nav) nav.classList.remove("nav-open");
         });
       }
     });
 
-    // Simple scroll reveal
     const revealElements = document.querySelectorAll(".reveal");
     const onScroll = () => {
       const triggerBottom = window.innerHeight * 0.85;
