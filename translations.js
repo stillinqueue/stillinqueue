@@ -7,11 +7,59 @@ const TRANSLATIONS = {
    * ======================================================= */
   en: {
     /* ===== Common / Shared ===== */
+    "meta.title": "Still In Queue",
     "auth.cta": "Login / Sign Up",
     "footer.contactLabel": "contact :",
     "hero.scroll": "Scroll",
 
-    /* ===== CORE / INDEX (Main Landing) ===== */
+    /* ===== INDEX / LANDING (your current index.html) ===== */
+    "nav.ai": "Artificial Intelligence",
+    "nav.learning": "Learning Platform",
+    "nav.green": "Green Energy",
+    "nav.coffee": "Coffee-Cream",
+    "nav.about": "About",
+
+    "hero.title": "Still In Queue",
+    "hero.badge": "Phase 1 · Concept Platform",
+    "hero.line1":
+      "<strong>Sique</strong> is a four-fold startup ecosystem that brings together <strong>Artificial Intelligence</strong>, a modern <strong>Learning Platform</strong>, <strong>Green Energy</strong> solutions, and a curated <strong>Coffee &amp; Cream</strong> experience.",
+    "hero.line2":
+      "Built step by step, it connects software, education, sustainability, and lifestyle into one evolving brand.",
+    "hero.tagline": "AI · Learning · Energy · Coffee",
+    "hero.cta.primary": "Explore the Four Folds",
+    "hero.cta.secondary": "About Sique",
+
+    "pillars.title": "The Four Folds",
+    "pillars.ai.tag": "SQ-AI · Blue",
+    "pillars.ai.title": "Artificial Intelligence",
+    "pillars.ai.body":
+      "Visual automations and interactive AI agents that keep an eye on markets, travel, life goals, and routines — built around drag-and-drop workflows.",
+    "pillars.lp.tag": "SQ-LP · Yellow",
+    "pillars.lp.title": "Learning Platform",
+    "pillars.lp.body":
+      "A learning space for all ages: courses, sports academies, arts, and language training — supported by AI to guide, coach, and connect.",
+    "pillars.ge.tag": "SQ-GE · Green",
+    "pillars.ge.title": "Green Energy",
+    "pillars.ge.body":
+      "A platform to compare world-class solar solutions, plan installations, and understand costs and breakeven points for sustainable energy.",
+    "pillars.cc.tag": "SQ-CC · Orange",
+    "pillars.cc.title": "Coffee &amp; Cream",
+    "pillars.cc.body":
+      "A premium Spaghettieis and coffee concept in Hyderabad, with organic, health-focused menu options and a carefully designed, appointment-only ambience.",
+    "pillars.learnMore": "Learn more",
+
+    "about.label": "About · Still In Queue",
+    "about.title": "The Idea Behind Sique",
+    "about.p1":
+      "Still In Queue (Sique) is a long-term vision to use AI to transform how people experience technology, learning, sustainability, and coffee through smart, connected platforms.",
+    "about.p2":
+      "The plan is to grow carefully: begin with digital products and AI systems, then expand into green energy projects and physical spaces once the foundation is stable.",
+    "about.note":
+      "This website is Phase 1: a front-end that introduces the four folds. Future phases will add user accounts, backends in Python, data engineering pipelines, and fully functional platforms under the Still In Queue umbrella.",
+
+    "footer.copy": "© 2025 Still in Queue. All rights reserved.",
+
+    /* ===== CORE / INDEX (previous “core.” keys, kept for other pages if needed) ===== */
     "core.meta.title": "Still In Queue · Folds",
 
     "core.nav.home": "Home",
@@ -218,8 +266,10 @@ const TRANSLATIONS = {
     "cc.exp.card2.text":
       "Access is by appointment only, so the store never feels crowded. Over time, the website can handle slot booking, pre-ordered desserts, and special celebration add-ons.",
     "cc.exp.card2.li1": "Student discount concept: 10% with valid ID.",
-    "cc.exp.card2.li2": "Birthday &amp; celebration packages (future phase).",
-    "cc.exp.card2.li3": "Private or semi-private bookings for small events.",
+    "cc.exp.card2.li2":
+      "Birthday &amp; celebration packages (future phase).",
+    "cc.exp.card2.li3":
+      "Private or semi-private bookings for small events.",
     "cc.exp.card2.badge1": "Slots",
     "cc.exp.card2.badge2": "Student 10%",
     "cc.exp.card2.badge3": "Celebrations",
@@ -521,11 +571,60 @@ const TRANSLATIONS = {
    * ======================================================= */
   de: {
     /* ===== Common / Shared ===== */
+    "meta.title": "Still In Queue",
     "auth.cta": "Login / Registrieren",
     "footer.contactLabel": "kontakt :",
     "hero.scroll": "Scroll",
 
-    /* ===== CORE / INDEX (Main Landing) ===== */
+    /* ===== INDEX / LANDING (your current index.html) ===== */
+    "nav.ai": "Künstliche Intelligenz",
+    "nav.learning": "Lernplattform",
+    "nav.green": "Grüne Energie",
+    "nav.coffee": "Coffee-Cream",
+    "nav.about": "Über",
+
+    "hero.title": "Still In Queue",
+    "hero.badge": "Phase 1 · Konzeptplattform",
+    "hero.line1":
+      "<strong>Sique</strong> ist ein vierteiliges Startup-Ökosystem, das <strong>Künstliche Intelligenz</strong>, eine moderne <strong>Lernplattform</strong>, <strong>Green-Energy</strong>-Lösungen und ein kuratiertes <strong>Coffee &amp; Cream</strong>-Erlebnis zusammenbringt.",
+    "hero.line2":
+      "Schritt für Schritt verbindet es Software, Bildung, Nachhaltigkeit und Lifestyle zu einer wachsenden Marke.",
+    "hero.tagline": "AI · Lernen · Energie · Coffee",
+    "hero.cta.primary": "Die vier Folds erkunden",
+    "hero.cta.secondary": "Über Sique",
+
+    "pillars.title": "Die vier Folds",
+    "pillars.ai.tag": "SQ-AI · Blau",
+    "pillars.ai.title": "Künstliche Intelligenz",
+    "pillars.ai.body":
+      "Visuelle Automationen und interaktive KI-Agents, die Märkte, Reisen, Ziele und Routinen im Blick behalten – aufgebaut auf Drag-and-Drop-Workflows.",
+    "pillars.lp.tag": "SQ-LP · Gelb",
+    "pillars.lp.title": "Lernplattform",
+    "pillars.lp.body":
+      "Ein Lernraum für alle Altersgruppen: Kurse, Sportakademien, Arts und Sprachtraining – mit KI, die begleitet, coached und vernetzt.",
+    "pillars.ge.tag": "SQ-GE · Grün",
+    "pillars.ge.title": "Grüne Energie",
+    "pillars.ge.body":
+      "Eine Plattform, um Solar-Lösungen zu vergleichen, Installationen zu planen und Kosten sowie Breakeven-Punkte für nachhaltige Energie zu verstehen.",
+    "pillars.cc.tag": "SQ-CC · Orange",
+    "pillars.cc.title": "Coffee &amp; Cream",
+    "pillars.cc.body":
+      "Ein Spaghettieis- und Coffee-Konzept in Hyderabad mit Bio-orientierter, gesundheitsbewusster Karte und bewusst geplanter, terminbasierter Atmosphäre.",
+    "pillars.learnMore": "Mehr erfahren",
+
+    "about.label": "About · Still In Queue",
+    "about.title": "Die Idee hinter Sique",
+    "about.p1":
+      "Still In Queue (Sique) ist eine langfristige Vision, mit Hilfe von KI zu verändern, wie Menschen Technologie, Lernen, Nachhaltigkeit und Coffee erleben – über intelligente, vernetzte Plattformen.",
+    "about.p2":
+      "Der Plan ist vorsichtiges Wachstum: Zuerst digitale Produkte und KI-Systeme, dann Green-Energy-Projekte und physische Räume, sobald das Fundament stabil ist.",
+    "about.note":
+      "Diese Website ist Phase 1: ein Frontend, das die vier Folds vorstellt. Spätere Phasen bringen Accounts, Python-Backends, Data-Engineering-Pipelines und voll funktionsfähige Plattformen unter dem Still-In-Queue-Dach.",
+
+    "footer.copy":
+      "© 2025 Still in Queue. Alle Rechte vorbehalten.",
+
+    /* ===== CORE / INDEX (previous “core.” keys, kept for other pages if needed) ===== */
     "core.meta.title": "Still In Queue · Folds",
 
     "core.nav.home": "Home",
@@ -628,7 +727,8 @@ const TRANSLATIONS = {
 
     "agents.flows.chip": "Flows",
     "agents.flows.kicker": "Flows",
-    "agents.flows.title": "Von einzelnen Prompts zu wiederverwendbaren Flows",
+    "agents.flows.title":
+      "Von einzelnen Prompts zu wiederverwendbaren Flows",
     "agents.flows.desc":
       "SQ-AG geht nicht nur um einzelne Prompts – sondern darum, sie in wiederverwendbare Flows zu packen.",
 
@@ -654,7 +754,8 @@ const TRANSLATIONS = {
 
     "agents.vision.chip": "Vision",
     "agents.vision.kicker": "Vision",
-    "agents.vision.title": "Was SQ-AG langfristig werden soll",
+    "agents.vision.title":
+      "Was SQ-AG langfristig werden soll",
     "agents.vision.p1":
       "Statt einem generischen „AI Assistant“ fokussiert sich SQ-AG auf eine kleine Menge Agents, denen man für bestimmte Jobs vertrauen kann.",
     "agents.vision.p2":
@@ -662,7 +763,8 @@ const TRANSLATIONS = {
 
     "agents.about.chip": "About",
     "agents.about.kicker": "Über · SQ-AG",
-    "agents.about.title": "Warum Agents ein Fold von Still In Queue sind",
+    "agents.about.title":
+      "Warum Agents ein Fold von Still In Queue sind",
     "agents.about.p1":
       "Agents sind einer der frühesten Wege, wie SQ nützlich werden kann: Man braucht kein volles Produkt, um Wirkung zu spüren.",
     "agents.about.p2":
@@ -778,7 +880,8 @@ const TRANSLATIONS = {
     "cc.diy.card2.badge3": "Seasonal Menus",
 
     "cc.about.kicker": "About · SQ-CC",
-    "cc.about.title": "Warum Coffee &amp; Cream ein Fold ist",
+    "cc.about.title":
+      "Warum Coffee &amp; Cream ein Fold ist",
     "cc.about.p1":
       "SQ-CC ist der Lifestyle-Fold von Still In Queue – ein physischer Raum, der die eher technischen Folds (AI, Learning, Green Energy) ausbalanciert. Mit derselben Haltung: durchdachtes Design, langfristige Qualität und Experience statt Zufall.",
     "cc.about.p2":
@@ -843,7 +946,8 @@ const TRANSLATIONS = {
     "ge.planning.desc":
       "SQ-GE ist auch ein Planungs-Tool. Es zeigt nicht nur Hardware, sondern erklärt die Zahlen: Investition, Förderungen, Ersparnis und Payback.",
 
-    "ge.planning.card1.title": "Investment &amp; Breakeven-Konzept",
+    "ge.planning.card1.title":
+      "Investment &amp; Breakeven-Konzept",
     "ge.planning.card1.text":
       "Ein späterer Rechner schätzt Investitionskosten, monatliche Ersparnis und Payback – mit und ohne Förderung.",
     "ge.planning.card1.li1":
@@ -858,7 +962,8 @@ const TRANSLATIONS = {
     "ge.planning.card1.badge2": "Förder-Impact",
     "ge.planning.card1.badge3": "ROI Timeline",
 
-    "ge.planning.card2.title": "Subsidies &amp; Policy Awareness",
+    "ge.planning.card2.title":
+      "Subsidies &amp; Policy Awareness",
     "ge.planning.card2.text":
       "Mit der Zeit mappt SQ-GE zentrale & bundesstaatliche Förderprogramme – z.B. in Andhra Pradesh – und zeigt ihren Einfluss auf Payback.",
     "ge.planning.card2.li1":
@@ -875,9 +980,10 @@ const TRANSLATIONS = {
     "ge.projects.kicker": "Projects",
     "ge.projects.title": "Vom Dach zum Feld",
     "ge.projects.desc":
-      "Langfristig bleibt es nicht bei Beratung – SQ-GE soll reale Installationen und später größere Projekte begleiten.",
+      "Langfristig bleibt es nicht bei Beratung – SQ-GE soll reale Installationen und später größere Projekte begleiten.",",
 
-    "ge.projects.card1.title": "Residential &amp; Small Commercial",
+    "ge.projects.card1.title":
+      "Residential &amp; Small Commercial",
     "ge.projects.card1.text":
       "Start mit individuellen Kund:innen: Häuser, Wohnungen, Shops, Offices. Beratung, Designvorschläge und später Anbindung an Installationspartner.",
     "ge.projects.card1.li1":
@@ -890,7 +996,8 @@ const TRANSLATIONS = {
     "ge.projects.card1.badge2": "Shops & Offices",
     "ge.projects.card1.badge3": "Proposals",
 
-    "ge.projects.card2.title": "Large-Scale &amp; Government Projects",
+    "ge.projects.card2.title":
+      "Large-Scale &amp; Government Projects",
     "ge.projects.card2.text":
       "Eine spätere Phase zielt auf größere Installationen – z.B. Mass-Rooftop-Programme und Solar-Felder in Andhra Pradesh – abgestimmt auf Govt-Tenders und langfristige PPAs.",
     "ge.projects.card2.li1":
@@ -905,7 +1012,8 @@ const TRANSLATIONS = {
 
     "ge.about.chip": "About",
     "ge.about.kicker": "Über · SQ-GE",
-    "ge.about.title": "Warum Green Energy ein Fold von Sique ist",
+    "ge.about.title":
+      "Warum Green Energy ein Fold von Sique ist",
     "ge.about.p1":
       "SQ-GE ist der Renewable-Fold von Still In Queue – ein Versuch, mit Daten, Planung und Software-Denken Solaranlagen einfacher zu machen. Es akzeptiert hohe Anfangsinvestitionen, fokussiert sich aber auf die langfristigen Vorteile: Umwelt, Stabilität und wiederkehrende Einnahmen.",
     "ge.about.p2":
@@ -966,11 +1074,13 @@ const TRANSLATIONS = {
 
     "lp.sports.chip": "Sport",
     "lp.sports.kicker": "Sport Map",
-    "lp.sports.title": "Orte zum Trainieren &amp; Spielen finden",
+    "lp.sports.title":
+      "Orte zum Trainieren &amp; Spielen finden",
     "lp.sports.desc":
       "SQ-LP schaut auch nach außen: eine Übersicht über Akademien, Clubs und Turniere, damit Sportbegeisterte Orte zum Trainieren finden – nicht nur zum Zuschauen.",
 
-    "lp.sports.card1.title": "Akademien &amp; Trainingszentren in der Nähe",
+    "lp.sports.card1.title":
+      "Akademien &amp; Trainingszentren in der Nähe",
     "lp.sports.card1.text":
       "Die Sportansicht zeigt Akademien und Coaching-Center in deiner Umgebung – mit Filtern nach Alter, Level und Budget. Später können KI-Empfehlungen nach Interessen und Zeitplan dazukommen.",
     "lp.sports.card1.li1":
@@ -983,7 +1093,8 @@ const TRANSLATIONS = {
     "lp.sports.card1.badge2": "Zeiten",
     "lp.sports.card1.badge3": "Schwierigkeitsgrad",
 
-    "lp.sports.card2.title": "Turniere, Ligen &amp; Events",
+    "lp.sports.card2.title":
+      "Turniere, Ligen &amp; Events",
     "lp.sports.card2.text":
       "Eine Kalenderansicht hebt lokale Ligen, Turniere und Community-Events hervor, damit Spieler:innen und Eltern frühzeitig planen können.",
     "lp.sports.card2.li1":
@@ -998,11 +1109,13 @@ const TRANSLATIONS = {
 
     "lp.arts.chip": "Arts &amp; Clubs",
     "lp.arts.kicker": "Arts &amp; Creative Clubs",
-    "lp.arts.title": "Lernen über das Klassenzimmer hinaus",
+    "lp.arts.title":
+      "Lernen über das Klassenzimmer hinaus",
     "lp.arts.desc":
       "Tanz, Musik, Malerei, Töpferei, Fotografie, Schauspiel, Kochen, Fashion – SQ-LP behandelt sie als ernstzunehmende Skills, nicht nur als Hobbys.",
 
-    "lp.arts.card1.title": "Studios, Schulen &amp; Workshops",
+    "lp.arts.card1.title":
+      "Studios, Schulen &amp; Workshops",
     "lp.arts.card1.text":
       "Orte für kreatives Lernen offline entdecken – mit Fotos, Zeiten und Schwerpunkten. Später kombinieren Hybrid-Programme Online-Module mit Praxis vor Ort.",
     "lp.arts.card1.li1":
@@ -1012,7 +1125,8 @@ const TRANSLATIONS = {
     "lp.arts.card1.li3":
       "Koch-, Back- und Culinary-Schulen.",
 
-    "lp.arts.card2.title": "Clubs, Communities &amp; Events",
+    "lp.arts.card2.title":
+      "Clubs, Communities &amp; Events",
     "lp.arts.card2.text":
       "Ein Club-Verzeichnis hilft, Fotowalks, Lesekreise, Jam-Sessions, Open Mics und mehr zu finden – damit Lernen ganz natürlich in Gemeinschaft übergeht.",
     "lp.arts.card2.li1":
@@ -1027,7 +1141,8 @@ const TRANSLATIONS = {
 
     "lp.about.chip": "About",
     "lp.about.kicker": "Über · SQ-LP",
-    "lp.about.title": "Die Idee hinter der Lernplattform",
+    "lp.about.title":
+      "Die Idee hinter der Lernplattform",
     "lp.about.p1":
       "SQ-LP ist der zweite Bereich von Still In Queue – ein Raum, in dem strukturierte Kurse, Sport und Arts im selben Ökosystem stattfinden. Das langfristige Ziel: <strong>hochwertige Inhalte</strong> mit <strong>KI-Guidance</strong> und realen Lernorten verbinden.",
     "lp.about.p2":
