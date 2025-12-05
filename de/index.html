@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Still In Queue</title>
+  <link rel="icon" type="image/png" href="Fav-Photoroom.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ===== Global Reset ===== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-dark: #050815;
+      --text-main: #f5f7ff;
+      --text-muted: #a7afc9;
+      --accent-blue: #3b82f6;
+      --accent-yellow: #facc15;
+      --accent-green: #22c55e;
+      --accent-orange: #fb923c;
+      --accent-pink: #ec4899;
+      --radius-lg: 1.5rem;
+      --radius-pill: 999px;
+      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.75);
+      --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-serif: "Playfair Display", "Times New Roman", serif;
+      --transition-fast: 160ms ease-out;
+      --transition-med: 260ms ease;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-sans);
+      background: radial-gradient(circle at top, #111827 0, #020617 45%, #000 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+    }
+
+    /* ===== Header & Nav ===== */
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 5vw;
+      backdrop-filter: blur(16px);
+      background: linear-gradient(
+        to bottom,
+        rgba(2, 6, 23, 0.95),
+        rgba(2, 6, 23, 0.6),
+        transparent
+      );
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .logo { display: flex; align-items: center; }
+    .logo-img { height: 150px; width: auto; display: block; }
+
+    .header-right { display: flex; align-items: center; gap: 2.5rem; }
+
+    .site-nav {
+      display: flex; align-items: center; gap: 2.4rem;
+      margin-left: 3rem; /* gap between logo and first nav item */
+      font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.18em;
+    }
+
+    .site-nav a {
+      text-decoration: none;
+      color: var(--text-muted);
+      padding: 0.35rem 0.9rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid transparent;
+      background: transparent;
+      transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast),
+        background var(--transition-fast),
+        box-shadow var(--transition-fast),
+        transform var(--transition-fast);
+    }
+
+    /* Base hover for non-active links */
+    .site-nav a:not(.active):hover {
+      color: #020617;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.7);
+      transform: translateY(-1px);
+      border-color: rgba(248, 250, 252, 0.9);
+    }
+
+    /* Per-fold hover gradients (non-active only) */
+    .site-nav a.nav-ai:not(.active):hover { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+    .site-nav a.nav-learning:not(.active):hover { background: linear-gradient(90deg, #facc15, #fde047); }
+    .site-nav a.nav-green:not(.active):hover { background: linear-gradient(135deg, #22c55e, #16a34a); }
+    .site-nav a.nav-coffee:not(.active):hover { background: linear-gradient(135deg, #fb923c, #f97316); }
+    .site-nav a.nav-about:not(.active):hover { background: linear-gradient(135deg, #ec4899, #a855f7); }
+
+    /* Active pills (clicked item stays highlighted) */
+    .site-nav a.active {
+      color: #020617;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+      transform: translateY(-1px);
+      border-color: rgba(248, 250, 252, 0.95);
+    }
+    .site-nav a.nav-ai.active { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+    .site-nav a.nav-learning.active { background: linear-gradient(90deg, #facc15, #fde047); }
+    .site-nav a.nav-green.active { background: linear-gradient(135deg, #22c55e, #16a34a); }
+    .site-nav a.nav-coffee.active { background: linear-gradient(135deg, #fb923c, #f97316); }
+    .site-nav a.nav-about.active { background: linear-gradient(135deg, #ec4899, #a855f7); }
+
+    /* Login / Sign up pill */
+    .auth-buttons { display: flex; align-items: center; }
+    .auth-primary {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      text-decoration: none;
+      padding: 0.45rem 1.6rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(248, 250, 252, 0.9);
+      background: linear-gradient(135deg, #3b82f6, #22c55e);
+      color: #f9fafb;
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        box-shadow var(--transition-fast),
+        transform var(--transition-fast);
+    }
+
+    .auth-primary:hover {
+      background: linear-gradient(135deg, #60a5fa, #4ade80);
+      border-color: #ffffff;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+      transform: translateY(-1px);
+    }
+
+    .nav-toggle {
+      display: none;
+      flex-direction: column;
+      gap: 0.2rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .nav-toggle span { width: 1.5rem; height: 2px; border-radius: 999px; background: #e5e7eb; }
+
+    /* ===== Hero Section ===== */
+    .hero {
+      position: relative;
+      min-height: 90vh;
+      padding: 6rem 5vw 5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .hero-bg {
+      position: absolute;
+      inset: -30%;
+      background:
+        radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.55), transparent 60%),
+        radial-gradient(circle at 100% 0, rgba(234, 179, 8, 0.45), transparent 60%),
+        radial-gradient(circle at 50% 120%, rgba(34, 197, 94, 0.4), transparent 60%);
+      opacity: 0.7;
+      mix-blend-mode: screen;
+      animation: floatGradient 18s ease-in-out infinite alternate;
+      z-index: -2;
+    }
+
+    @keyframes floatGradient {
+      0%   { transform: translate3d(0, 0, 0) scale(1); }
+      50%  { transform: translate3d(0, -4%, 0) scale(1.05); }
+      100% { transform: translate3d(0, 3%, 0) scale(1.02); }
+    }
+
+    .hero-shell {
+      position: absolute;
+      inset: 8%;
+      border-radius: 3rem;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: radial-gradient(
+        circle at top,
+        rgba(15, 23, 42, 0.9),
+        rgba(15, 23, 42, 0.7),
+        transparent
+      );
+      backdrop-filter: blur(26px);
+      z-index: -1;
+    }
+
+    .hero-inner { max-width: 720px; text-align: center; }
+    .hero-title { font-family: var(--font-serif); font-size: clamp(2.8rem, 4vw, 3.8rem); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 1.1rem; }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; padding: 0.35rem 0.9rem;
+      border-radius: var(--radius-pill); border: 1px solid rgba(148, 163, 184, 0.6);
+      background: rgba(15, 23, 42, 0.85); font-size: 0.75rem; letter-spacing: 0.16em;
+      text-transform: uppercase; color: rgba(209, 213, 219, 0.85); margin-bottom: 1rem;
+    }
+
+    .hero-subline { color: var(--text-muted); font-size: 1rem; line-height: 1.7; margin-bottom: 0.5rem; }
+    .hero-subline strong { color: #e5e7eb; }
+    .hero-tagline { margin-top: 0.7rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.18em; color: rgba(209, 213, 219, 0.85); }
+
+    .hero-cta { margin-top: 2rem; display: flex; justify-content: center; gap: 0.9rem; flex-wrap: wrap; }
+    .btn-primary {
+      padding: 0.85rem 1.7rem; border-radius: var(--radius-pill);
+      background: linear-gradient(135deg, #3b82f6, #22c55e, #facc15);
+      color: #020617; font-weight: 600; border: none; text-decoration: none;
+      box-shadow: var(--shadow-soft); cursor: pointer;
+      transition: transform var(--transition-med), box-shadow var(--transition-med), filter var(--transition-med);
+    }
+    .btn-primary:hover { transform: translateY(-2px) scale(1.01); filter: brightness(1.05); box-shadow: 0 24px 60px rgba(15, 23, 42, 0.9); }
+
+    .btn-ghost {
+      padding: 0.8rem 1.5rem; border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.7); background: rgba(15, 23, 42, 0.8);
+      color: var(--text-main); text-decoration: none; font-size: 0.9rem;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+    }
+    .btn-ghost:hover { background: rgba(31, 41, 55, 0.95); border-color: rgba(248, 250, 252, 0.9); transform: translateY(-1px); }
+
+    .scroll-indicator {
+      position: absolute; bottom: 1.8rem; left: 50%; transform: translateX(-50%);
+      color: var(--text-muted); font-size: 0.8rem; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.7;
+      animation: scrollPulse 1.6s ease-in-out infinite;
+    }
+    @keyframes scrollPulse {
+      0%, 100% { transform: translate(-50%, 0); opacity: 0.4; }
+      50% { transform: translate(-50%, -4px); opacity: 1; }
+    }
+
+    /* ===== 2x2 Highlight Grid ===== */
+    .pillars-section { padding: 3.5rem 5vw 3rem; max-width: 1120px; margin: 0 auto; scroll-margin-top: 9rem; }
+    .pillars-title { font-family: var(--font-serif); font-size: 1.4rem; margin-bottom: 1.4rem; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(209, 213, 219, 0.9); }
+    .pillars-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.8rem; }
+
+    .pillar-card {
+      position: relative; padding: 1.8rem 1.6rem; border-radius: var(--radius-lg);
+      background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.82));
+      border: 1px solid rgba(148, 163, 184, 0.45); box-shadow: var(--shadow-soft);
+      overflow: hidden; min-height: 220px;
+      transition: transform var(--transition-med), box-shadow var(--transition-med), border-color var(--transition-med), background var(--transition-med);
+    }
+    .pillar-card::before {
+      content: ""; position: absolute; inset: -20%; opacity: 0; pointer-events: none; mix-blend-mode: screen;
+      transition: opacity var(--transition-med);
+    }
+    .pillar-card h2 { font-family: var(--font-serif); font-size: 1.2rem; margin-bottom: 0.4rem; }
+    .pillar-tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.16em; color: rgba(209, 213, 219, 0.8); margin-bottom: 0.8rem; }
+    .pillar-card p { color: var(--text-muted); font-size: 0.95rem; line-height: 1.6; margin-bottom: 1rem; }
+    .pillars-link {
+      font-size: 0.85rem; text-decoration: none; color: #e5e7eb; padding: 0.45rem 1rem;
+      border-radius: 999px; display: inline-flex; align-items: center;
+      border: 1px solid rgba(148, 163, 184, 0.6); background: rgba(15, 23, 42, 0.9);
+      transition: background var(--transition-fast), transform var(--transition-fast), border-color var(--transition-fast);
+    }
+    .pillars-link span { margin-left: 0.4rem; }
+    .pillar-card:hover { transform: translateY(-4px) translateZ(0); box-shadow: 0 28px 70px rgba(15, 23, 42, 0.95); border-color: rgba(148, 163, 184, 0.9); }
+    .pillar-card:hover::before { opacity: 1; }
+    .pillars-link:hover { background: rgba(30, 64, 175, 0.95); border-color: rgba(248, 250, 252, 0.9); transform: translateY(-1px); }
+
+    .pillar-ai::before { background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.7), transparent 55%); }
+    .pillar-learning::before { background: radial-gradient(circle at 100% 0, rgba(250, 204, 21, 0.7), transparent 55%); }
+    .pillar-green::before { background: radial-gradient(circle at 0 100%, rgba(34, 197, 94, 0.7), transparent 55%); }
+    .pillar-coffee::before { background: radial-gradient(circle at 100% 100%, rgba(248, 139, 60, 0.8), transparent 55%); }
+
+    /* ===== About Block ===== */
+    .section-block { padding: 3.5rem 5vw 0; max-width: 880px; margin: 0 auto; border-top: 1px solid rgba(31, 41, 55, 0.8); margin-top: 3rem; scroll-margin-top: 9rem; }
+    .section-block-inner {
+      border-radius: 1.8rem; padding: 2.2rem 2rem;
+      border: 1px solid rgba(148, 163, 184, 0.4); background: rgba(15, 23, 42, 0.88);
+      box-shadow: var(--shadow-soft);
+    }
+    .section-block h2 { font-family: var(--font-serif); font-size: 1.6rem; margin-bottom: 0.4rem; }
+    .section-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.16em; color: rgba(209, 213, 219, 0.85); margin-bottom: 0.9rem; }
+    .section-block p { color: var(--text-muted); line-height: 1.7; margin-bottom: 0.7rem; font-size: 0.96rem; }
+    .about-note {
+      margin-top: 1.2rem; font-size: 0.9rem; padding: 0.85rem 1rem;
+      border-radius: 1rem; border: 1px dashed rgba(148, 163, 184, 0.8); background: rgba(15, 23, 42, 0.85);
+    }
+
+    /* ===== Reveal Animation ===== */
+    .reveal { opacity: 0; transform: translateY(12px); transition: opacity 400ms ease-out, transform 400ms ease-out; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* ===== Footer ===== */
+    .site-footer {
+      border-top: 1px solid rgba(148, 163, 184, 0.25);
+      padding: 1.7rem 5vw 2.1rem;
+      margin-top: 3rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .site-footer a { color: var(--text-main); text-decoration: none; }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 900px) { .pillars-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 768px) {
+      .site-header { padding-inline: 1.25rem; }
+      .header-right { gap: 1.4rem; }
+      .nav-toggle { display: inline-flex; }
+      .site-nav {
+        position: absolute; top: 100%; right: 0; flex-direction: column; align-items: flex-start;
+        width: min(260px, 80vw); padding: 0.75rem 1rem 1rem; margin-left: 0;
+        background: rgba(15, 23, 42, 0.98);
+        border-radius: 0 0 1.5rem 1.5rem;
+        border-left: 1px solid rgba(148, 163, 184, 0.3);
+        border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+        transform-origin: top right; transform: scaleY(0.8);
+        opacity: 0; visibility: hidden;
+        transition: opacity var(--transition-fast), transform var(--transition-fast), visibility var(--transition-fast);
+      }
+      .site-nav.nav-open { opacity: 1; visibility: visible; transform: scaleY(1); }
+      .site-nav a { width: 100%; padding: 0.5rem 0.4rem; }
+      .auth-buttons { display: none; }
+      .hero { padding-inline: 1.5rem; }
+      .section-block-inner { padding-inline: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <!-- Logo: back to this index page -->
+    <a href="index.html" class="logo">
+      <img src="SQ-Group-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
+    </a>
+
+    <button class="nav-toggle" aria-label="Toggle navigation">
+      <span></span><span></span>
+    </button>
+
+    <div class="header-right">
+      <nav class="site-nav">
+        <!-- All main items jump to sections on this page -->
+        <a href="#pillars" class="nav-ai">Artificial Intelligence</a>
+        <a href="#pillars" class="nav-learning">Learning Platform</a>
+        <a href="#pillars" class="nav-green">Green Energy</a>
+        <a href="#pillars" class="nav-coffee">Coffee-Cream</a>
+        <a href="#about" class="nav-about">About</a>
+      </nav>
+
+      <div class="auth-buttons">
+        <a href="#auth" class="auth-primary">Login / Sign Up</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Sparkles overlay (fixed, full-screen) -->
+  <canvas id="sparkle-canvas" class="pointer-events-none fixed inset-0 z-50" aria-hidden="true"></canvas>
+
+  <!-- Hero / Home -->
+  <main id="home" class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-shell"></div>
+
+    <div class="hero-inner">
+      <h1 class="hero-title">Still In Queue</h1>
+      <div class="hero-badge">Phase 1 · Concept Platform</div>
+      <p class="hero-subline">
+        <strong>Sique</strong> is a four-fold startup ecosystem that brings together
+        <strong>Artificial Intelligence</strong>, a modern <strong>Learning Platform</strong>,
+        <strong>Green Energy</strong> solutions, and a curated <strong>Coffee &amp; Cream</strong> experience.
+      </p>
+      <p class="hero-subline">
+        Built step by step, it connects software, education, sustainability, and lifestyle into
+        one evolving brand.
+      </p>
+      <div class="hero-tagline">AI · Learning · Energy · Coffee</div>
+
+      <div class="hero-cta">
+        <a href="#pillars" class="btn-primary">Explore the Four Folds</a>
+        <a href="#about" class="btn-ghost">About Sique</a>
+      </div>
+    </div>
+
+    <div class="scroll-indicator">Scroll</div>
+  </main>
+
+  <!-- 2x2 Highlight Grid -->
+  <section id="pillars" class="pillars-section reveal">
+    <h2 class="pillars-title">The Four Folds</h2>
+    <div class="pillars-grid">
+      <article class="pillar-card pillar-ai">
+        <div class="pillar-tag">SQ-AI · Blue</div>
+        <h2>Artificial Intelligence</h2>
+        <p>
+          Visual automations and interactive AI agents that keep an eye on
+          markets, travel, life goals, and routines — built around drag-and-drop
+          workflows.
+        </p>
+        <a href="agents.html" class="pillars-link">
+          Learn more <span>→</span>
+        </a>
+      </article>
+
+      <article class="pillar-card pillar-learning">
+        <div class="pillar-tag">SQ-LP · Yellow</div>
+        <h2>Learning Platform</h2>
+        <p>
+          A learning space for all ages: courses, sports academies, arts, and
+          language training — supported by AI to guide, coach, and connect.
+        </p>
+        <a href="learning.html" class="pillars-link">
+          Learn more <span>→</span>
+        </a>
+      </article>
+
+      <article class="pillar-card pillar-green">
+        <div class="pillar-tag">SQ-GE · Green</div>
+        <h2>Green Energy</h2>
+        <p>
+          A platform to compare world-class solar solutions, plan installations,
+          and understand costs and breakeven points for sustainable energy.
+        </p>
+        <a href="green.html" class="pillars-link">
+          Learn more <span>→</span>
+        </a>
+      </article>
+
+      <article class="pillar-card pillar-coffee">
+        <div class="pillar-tag">SQ-CC · Orange</div>
+        <h2>Coffee &amp; Cream</h2>
+        <p>
+          A premium Spaghettieis and coffee concept in Hyderabad, with organic,
+          health-focused menu options and a carefully designed, appointment-only ambience.
+        </p>
+        <a href="cc.html" class="pillars-link">
+          Learn more <span>→</span>
+        </a>
+      </article>
+    </div>
+  </section>
+
+  <!-- About Only -->
+  <section id="about" class="section-block reveal">
+    <div class="section-block-inner">
+      <div class="section-label">About · Still In Queue</div>
+      <h2>The Idea Behind Sique</h2>
+      <p>
+        Still In Queue (Sique) is a long-term vision to use AI to transform how people experience technology, learning, sustainability, and coffee through smart, connected platforms.
+      </p>
+      <p>
+        The plan is to grow carefully: begin with digital products and AI
+        systems, then expand into green energy projects and physical spaces once
+        the foundation is stable.
+      </p>
+      <p class="about-note">
+        This website is Phase 1: a front-end that introduces the four folds.
+        Future phases will add user accounts, backends in Python, data
+        engineering pipelines, and fully functional platforms under the
+        Still In Queue umbrella.
+      </p>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <p>© 2025 Still in Queue. All rights reserved.</p>
+    <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
+  </footer>
+
+  <!-- Site JS -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const toggle = document.querySelector(".nav-toggle");
+      const nav = document.querySelector(".site-nav");
+      const navLinks = document.querySelectorAll(".site-nav a");
+
+      // Mobile navigation toggle
+      if (toggle && nav) {
+        toggle.addEventListener("click", () => {
+          nav.classList.toggle("nav-open");
+        });
+      }
+
+      // Smooth scroll + active pill switching
+      navLinks.forEach((link) => {
+        const href = link.getAttribute("href") || "";
+
+        if (href.startsWith("#")) {
+          link.addEventListener("click", (e) => {
+            e.preventDefault();
+            const target = document.querySelector(href);
+            if (target) target.scrollIntoView({ behavior: "smooth" });
+
+            navLinks.forEach((l) => l.classList.remove("active"));
+            link.classList.add("active");
+            if (nav) nav.classList.remove("nav-open");
+          });
+        } else {
+          link.addEventListener("click", () => {
+            if (nav) nav.classList.remove("nav-open");
+          });
+        }
+      });
+
+      // Simple scroll reveal
+      const revealElements = document.querySelectorAll(".reveal");
+      const onScroll = () => {
+        const triggerBottom = window.innerHeight * 0.85;
+        revealElements.forEach((el) => {
+          const boxTop = el.getBoundingClientRect().top;
+          if (boxTop < triggerBottom) el.classList.add("visible");
+        });
+      };
+      window.addEventListener("scroll", onScroll);
+      onScroll();
+    });
+  </script>
+
+  <!-- Sparkle trail: faster motion + idle twinkle -->
+  <script>
+  (() => {
+    const HONOR_REDUCED_MOTION = false;
+    if (document.documentElement.dataset.sparkles === 'off') return;
+    if (HONOR_REDUCED_MOTION && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const canvas = document.getElementById('sparkle-canvas');
+    const ctx = canvas.getContext('2d', { alpha: true });
+    Object.assign(canvas.style, {
+      mixBlendMode: 'screen',
+      willChange: 'transform',
+      pointerEvents: 'none',
+      position: 'fixed',
+      inset: '0',
+      zIndex: '50',
+      width: '100%',
+      height: '100%'
+    });
+
+    const state = { w: 0, h: 0, dpr: Math.min(2, Math.max(1, window.devicePixelRatio || 1)) };
+    function resize() {
+      state.w = canvas.clientWidth | 0;
+      state.h = canvas.clientHeight | 0;
+      canvas.width  = Math.max(1, state.w * state.dpr);
+      canvas.height = Math.max(1, state.h * state.dpr);
+      ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+    }
+    resize();
+    addEventListener('resize', resize);
+
+    // ===== CONFIG =====
+    const COLORS        = ['#3b82f6', '#22c55e', '#facc15', '#fb923c'];
+    const SILVER        = '#e5e7eb';
+
+    // Density & spread
+    const STEP          = 4;         // px between samples
+    const PER_STEP      = 4;         // particles per sample
+    const POS_JIT       = 12;        // px jitter ring around path
+    const POS_JIT_PCT   = 0.40;      // extra jitter from segment length
+
+    // Motion (amped up)
+    const LIFE_MIN      = 900;       // ms tail base
+    const LIFE_VAR      = 600;       // ms variation
+    const FRICTION      = 0.992;     // more glide
+    const GRAVITY       = 0.007;     // slight downward drift
+    const SPEED_JIT     = 1.0;       // stronger initial velocities
+    const NOISE         = 0.035;     // per-frame micro-impulse
+
+    // Stars
+    const STAR_CHANCE   = 0.08;
+    const STAR_SCALES   = [0.9, 1.15, 1.4, 1.8, 2.3];
+
+    // Idle emitter
+    const IDLE_DELAY_MS = 120;       // start idling after no movement for this long
+    const IDLE_EVERY_MS = 55;        // spawn cadence while idle
+    const IDLE_COUNT    = 2;         // particles per idle tick
+    const IDLE_SPREAD   = 18;        // px area around last point
+    const IDLE_SPEED    = 0.5;       // initial velocity scale for idle
+
+    const MAX           = 620;       // pool size
+
+    // ===== Pool =====
+    const P = new Array(MAX).fill(null);
+    let head = 0;
+    function addParticle(x, y, vx, vy, color, type='dot', extra={}) {
+      const life = LIFE_MIN + Math.random()*LIFE_VAR;
+      const base = (type === 'dot') ? (1.2 + Math.random()*2.6) : (1.0 + Math.random()*1.5);
+      const rot  = Math.random() * Math.PI * 2;
+      const starScale = (type === 'star') ? STAR_SCALES[(Math.random()*STAR_SCALES.length)|0] : 1;
+      P[head] = { x, y, vx, vy, life, ttl: life, base, color, type, rot, starScale, ...extra };
+      head = (head + 1) % MAX;
+    }
+
+    // ===== Helpers =====
+    const hexA = (hex, a) => {
+      const n = hex.replace('#','');
+      const v = parseInt(n.length===3 ? n.split('').map(c=>c+c).join('') : n, 16);
+      const r=(v>>16)&255,g=(v>>8)&255,b=v&255;
+      return `rgba(${r},${g},${b},${a})`;
+    };
+
+    function drawBubble(x, y, r, color, alpha) {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0.00, hexA(color, Math.min(1, alpha*0.85)));
+      g.addColorStop(0.50, hexA(color, Math.min(1, alpha*0.35)));
+      g.addColorStop(1.00, hexA(color, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    function drawStar5(x, y, outerR, alpha) {
+      const innerR = outerR * 0.5;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-Math.PI/2);
+      ctx.beginPath();
+      for (let i=0; i<5; i++) {
+        const a0 = (i * 2 * Math.PI) / 5;
+        const a1 = a0 + Math.PI / 5;
+        ctx.lineTo(Math.cos(a0)*outerR, Math.sin(a0)*outerR);
+        ctx.lineTo(Math.cos(a1)*innerR, Math.sin(a1)*innerR);
+      }
+      ctx.closePath();
+      ctx.fillStyle = hexA(SILVER, alpha);
+      ctx.shadowColor = SILVER;
+      ctx.shadowBlur = 14;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // ===== Spawning =====
+    function spawnAt(x, y, segLen, pressed) {
+      const now = performance.now();
+      const baseIndex = Math.floor(now/140) % COLORS.length; // faster hue cycling
+      const count = PER_STEP + (pressed ? 1 : 0);
+
+      const jitterR = POS_JIT + segLen * POS_JIT_PCT;
+
+      for (let i=0; i<count; i++) {
+        const angPos = Math.random()*Math.PI*2;
+        const jx = Math.cos(angPos) * (Math.random() * jitterR);
+        const jy = Math.sin(angPos) * (Math.random() * jitterR);
+
+        const angVel = Math.random()*Math.PI*2;
+        const pow = Math.random()*SPEED_JIT;
+        const vx = Math.cos(angVel)*pow;
+        const vy = Math.sin(angVel)*pow - 0.02;
+
+        const color = COLORS[(baseIndex + i) % COLORS.length];
+        addParticle(x + jx, y + jy, vx, vy, color, 'dot');
+      }
+
+      if (Math.random() < STAR_CHANCE) {
+        const angVel = Math.random()*Math.PI*2;
+        const vx = Math.cos(angVel) * 0.28;
+        const vy = Math.sin(angVel) * 0.28 - 0.05;
+        addParticle(x, y, vx, vy, SILVER, 'star');
+      }
+    }
+
+    function sampleSpawns(x0, y0, x1, y1, pressed) {
+      if (x0 == null || y0 == null) { spawnAt(x1, y1, STEP, pressed); return; }
+      const dx = x1 - x0, dy = y1 - y0;
+      const dist  = Math.hypot(dx, dy);
+      const steps = Math.max(1, Math.floor(dist / STEP));
+      const segLen = dist / steps;
+      for (let s=1; s<=steps; s++) {
+        const t = s / steps;
+        spawnAt(x0 + dx*t, y0 + dy*t, segLen, pressed);
+      }
+    }
+
+    // ===== Pointer & idle =====
+    let last = null, down = false;
+    let lastMoveAt = performance.now();
+    let idleAcc = 0;
+
+    addEventListener('pointerdown', e => {
+      down = true;
+      last = { x: e.clientX, y: e.clientY };
+      lastMoveAt = performance.now();
+      spawnAt(e.clientX, e.clientY, STEP, true);
+    }, { passive: true });
+
+    addEventListener('pointerup',   () => { down = false; last = null; }, { passive: true });
+
+    addEventListener('pointermove', e => {
+      const list = (typeof e.getCoalescedEvents === 'function') ? e.getCoalescedEvents() : null;
+      if (list && list.length) {
+        for (const ev of list) {
+          if (last) sampleSpawns(last.x, last.y, ev.clientX, ev.clientY, down);
+          else spawnAt(ev.clientX, ev.clientY, STEP, down);
+          last = { x: ev.clientX, y: ev.clientY };
+        }
+      } else {
+        const x = e.clientX, y = e.clientY;
+        if (last) sampleSpawns(last.x, last.y, x, y, down);
+        else spawnAt(x, y, STEP, down);
+        last = { x, y };
+      }
+      lastMoveAt = performance.now();
+    }, { passive: true });
+
+    // Idle emitter
+    function idleEmit(dt) {
+      if (!last) return;
+      const since = performance.now() - lastMoveAt;
+      if (since < IDLE_DELAY_MS) { idleAcc = 0; return; }
+      idleAcc += dt;
+      while (idleAcc >= IDLE_EVERY_MS) {
+        idleAcc -= IDLE_EVERY_MS;
+        for (let i=0; i<IDLE_COUNT; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const r   = Math.random() * IDLE_SPREAD;
+          const x = last.x + Math.cos(ang) * r;
+          const y = last.y + Math.sin(ang) * r;
+          const vang = Math.random() * Math.PI * 2;
+          const vpow = Math.random() * IDLE_SPEED;
+          const vx = Math.cos(vang) * vpow;
+          const vy = Math.sin(vang) * vpow - 0.02;
+          const color = COLORS[(Math.floor(performance.now()/180)) % COLORS.length];
+          addParticle(x, y, vx, vy, color, 'dot');
+        }
+        if (Math.random() < 0.12) {
+          const vx = (Math.random()-0.5) * 0.3;
+          const vy = (Math.random()-0.8) * 0.3;
+          addParticle(last.x, last.y, vx, vy, SILVER, 'star');
+        }
+      }
+    }
+
+    // ===== Draw loop =====
+    let lastFrame = performance.now();
+    function tick(now) {
+      const dt = now - lastFrame;
+      lastFrame = now;
+
+      ctx.clearRect(0, 0, state.w, state.h);
+
+      // Idle emission
+      idleEmit(dt);
+
+      for (let i=0; i<MAX; i++) {
+        const p = P[i];
+        if (!p || p.ttl <= 0) continue;
+
+        // Chaos
+        p.vx += (Math.random()-0.5) * NOISE;
+        p.vy += (Math.random()-0.5) * NOISE;
+
+        // Motion
+        p.vx *= FRICTION;
+        p.vy = p.vy * FRICTION + GRAVITY;
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // Fade/size
+        p.ttl -= dt;
+        const t = Math.max(0, p.ttl / p.life);
+        const alpha = t;                          // linear slow fade
+        const r = p.base * (0.7 + 1.8*(1 - t));  // grows as it fades
+
+        if (p.type === 'dot') {
+          drawBubble(p.x, p.y, r, p.color, alpha);
+        } else {
+          drawStar5(p.x, p.y, r * p.starScale, Math.min(1, alpha*0.9));
+        }
+      }
+
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    document.addEventListener('visibilitychange', () => { lastFrame = performance.now(); });
+  })();
+  </script>
+</body>
+</html>
