@@ -83,6 +83,40 @@
       background: linear-gradient(135deg, #f97316, #fb923c, #fdba74);
       box-shadow: 0 18px 40px rgba(15,23,42,.9); transform: translateY(-1px);
     }
+
+    /* ===== Language Switch ===== */
+    .lang-switch {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    .lang-switch span.separator {
+      opacity: 0.6;
+      color: #e5e7eb;
+    }
+    .lang-link {
+      text-decoration: none;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: #e5e7eb;
+      transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+    }
+    .lang-link:hover {
+      border-color: rgba(248, 250, 252, 0.85);
+      background: rgba(15, 23, 42, 0.9);
+      transform: translateY(-1px);
+    }
+    .lang-link.active-lang {
+      background: linear-gradient(135deg, #f97316, #fb923c, #fdba74);
+      color: #111827;
+      border-color: rgba(248, 250, 252, 0.95);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.85);
+    }
+
     .auth-buttons { display: flex; align-items: center; }
     .auth-primary {
       font-size: .78rem; text-transform: uppercase; letter-spacing: .18em; text-decoration: none;
@@ -236,6 +270,7 @@
       .section { padding-inline: 1.5rem; }
       .section-header { flex-direction: column; align-items: flex-start; }
       .menu-grid { grid-template-columns: minmax(0, 1fr); }
+      .lang-switch { font-size: 0.7rem; }
     }
   </style>
 </head>
@@ -261,6 +296,12 @@
         <a href="#diy" class="nav-diy">DIY Bar</a>
         <a href="#about" class="nav-about">About</a>
       </nav>
+
+      <div class="lang-switch">
+        <a href="cc.html" class="lang-link active-lang">EN</a>
+        <span class="separator">/</span>
+        <a href="de/cc.html" class="lang-link">DE</a>
+      </div>
 
       <div class="auth-buttons">
         <a href="#auth" class="auth-primary">Login / Sign Up</a>
@@ -768,20 +809,25 @@
         });
       }
 
-      // Active pill + smooth scroll for in-page links
+      // Let the browser handle #hash scrolling; we only manage active state + close nav
       navLinks.forEach((link) => {
         const href = link.getAttribute("href") || "";
+
         if (href.startsWith("#")) {
-          link.addEventListener("click", (e) => {
-            e.preventDefault();
-            const target = document.querySelector(href);
-            if (target) target.scrollIntoView({ behavior: "smooth" });
-            navLinks.forEach((l) => l.classList.remove("active"));
-            link.classList.add("active");
+          link.addEventListener("click", () => {
+            // allow native scrolling
+            setTimeout(() => {
+              navLinks.forEach((l) => l.classList.remove("active"));
+              link.classList.add("active");
+            }, 0);
+
             if (nav) nav.classList.remove("nav-open");
           });
         } else {
-          link.addEventListener("click", () => { if (nav) nav.classList.remove("nav-open"); });
+          // external links (like index.html), just close the mobile menu
+          link.addEventListener("click", () => {
+            if (nav) nav.classList.remove("nav-open");
+          });
         }
       });
 
