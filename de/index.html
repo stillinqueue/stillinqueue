@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <title>Still In Queue</title>
-  <link rel="icon" type="image/png" href="Fav-Photoroom.png">
+  <title>Still In Queue · Sique</title>
+  <link rel="icon" type="image/png" href="../Fav-Photoroom.png">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Fonts -->
@@ -72,7 +72,7 @@
 
     .site-nav {
       display: flex; align-items: center; gap: 2.4rem;
-      margin-left: 3rem; /* gap between logo and first nav item */
+      margin-left: 3rem;
       font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.18em;
     }
 
@@ -91,7 +91,6 @@
         transform var(--transition-fast);
     }
 
-    /* Base hover for non-active links */
     .site-nav a:not(.active):hover {
       color: #020617;
       box-shadow: 0 18px 40px rgba(15, 23, 42, 0.7);
@@ -99,14 +98,12 @@
       border-color: rgba(248, 250, 252, 0.9);
     }
 
-    /* Per-fold hover gradients (non-active only) */
     .site-nav a.nav-ai:not(.active):hover { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
     .site-nav a.nav-learning:not(.active):hover { background: linear-gradient(90deg, #facc15, #fde047); }
     .site-nav a.nav-green:not(.active):hover { background: linear-gradient(135deg, #22c55e, #16a34a); }
     .site-nav a.nav-coffee:not(.active):hover { background: linear-gradient(135deg, #fb923c, #f97316); }
     .site-nav a.nav-about:not(.active):hover { background: linear-gradient(135deg, #ec4899, #a855f7); }
 
-    /* Active pills (clicked item stays highlighted) */
     .site-nav a.active {
       color: #020617;
       box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
@@ -119,7 +116,6 @@
     .site-nav a.nav-coffee.active { background: linear-gradient(135deg, #fb923c, #f97316); }
     .site-nav a.nav-about.active { background: linear-gradient(135deg, #ec4899, #a855f7); }
 
-    /* Login / Sign up pill */
     .auth-buttons { display: flex; align-items: center; }
     .auth-primary {
       font-size: 0.8rem;
@@ -154,6 +150,44 @@
       cursor: pointer;
     }
     .nav-toggle span { width: 1.5rem; height: 2px; border-radius: 999px; background: #e5e7eb; }
+
+    /* ===== Language Switcher ===== */
+    .lang-switch {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-muted);
+    }
+
+    .lang-switch a {
+      text-decoration: none;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        color var(--transition-fast),
+        transform var(--transition-fast);
+    }
+
+    .lang-switch a:hover {
+      border-color: rgba(148, 163, 184, 0.9);
+      background: rgba(15, 23, 42, 0.95);
+      color: var(--text-main);
+      transform: translateY(-1px);
+    }
+
+    .lang-switch .lang-active {
+      border-color: rgba(248, 250, 252, 0.95);
+      background: rgba(248, 250, 252, 0.95);
+      color: #020617;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.8);
+    }
 
     /* ===== Hero Section ===== */
     .hero {
@@ -336,56 +370,62 @@
 </head>
 <body>
   <header class="site-header">
-    <!-- Logo: back to this index page -->
-    <a href="index.html" class="logo">
-      <img src="SQ-Group-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
+    <!-- Logo: zurück zur deutschen Startseite -->
+    <a href="/de/" class="logo">
+      <img src="../SQ-Group-Photoroom.png" alt="Still In Queue Gruppe" class="logo-img" />
     </a>
 
-    <button class="nav-toggle" aria-label="Toggle navigation">
+    <button class="nav-toggle" aria-label="Navigation umschalten">
       <span></span><span></span>
     </button>
 
     <div class="header-right">
       <nav class="site-nav">
-        <!-- All main items jump to sections on this page -->
-        <a href="#pillars" class="nav-ai">Artificial Intelligence</a>
-        <a href="#pillars" class="nav-learning">Learning Platform</a>
-        <a href="#pillars" class="nav-green">Green Energy</a>
-        <a href="#pillars" class="nav-coffee">Coffee-Cream</a>
-        <a href="#about" class="nav-about">About</a>
+        <a href="#pillars" class="nav-ai">Künstliche Intelligenz</a>
+        <a href="#pillars" class="nav-learning">Lernplattform</a>
+        <a href="#pillars" class="nav-green">Grüne Energie</a>
+        <a href="#pillars" class="nav-coffee">Coffee &amp; Cream</a>
+        <a href="#about" class="nav-about">Über</a>
       </nav>
 
+      <!-- Language switcher: DE active here -->
+      <div class="lang-switch">
+        <a href="/" data-lang="en">EN</a>
+        <a href="/de/" data-lang="de" class="lang-active">DE</a>
+      </div>
+
       <div class="auth-buttons">
-        <a href="#auth" class="auth-primary">Login / Sign Up</a>
+        <a href="#auth" class="auth-primary">Login / Registrieren</a>
       </div>
     </div>
   </header>
 
-  <!-- Sparkles overlay (fixed, full-screen) -->
+  <!-- Sparkles overlay -->
   <canvas id="sparkle-canvas" class="pointer-events-none fixed inset-0 z-50" aria-hidden="true"></canvas>
 
-  <!-- Hero / Home -->
+  <!-- Hero -->
   <main id="home" class="hero">
     <div class="hero-bg"></div>
     <div class="hero-shell"></div>
 
     <div class="hero-inner">
       <h1 class="hero-title">Still In Queue</h1>
-      <div class="hero-badge">Phase 1 · Concept Platform</div>
+      <div class="hero-badge">Phase 1 · Konzeptplattform</div>
       <p class="hero-subline">
-        <strong>Sique</strong> is a four-fold startup ecosystem that brings together
-        <strong>Artificial Intelligence</strong>, a modern <strong>Learning Platform</strong>,
-        <strong>Green Energy</strong> solutions, and a curated <strong>Coffee &amp; Cream</strong> experience.
+        <strong>Sique</strong> ist ein vierteiliges Startup-Ökosystem, das
+        <strong>Künstliche Intelligenz</strong>, eine moderne
+        <strong>Lernplattform</strong>, <strong>Grüne Energie</strong>-Lösungen
+        und ein kuratiertes <strong>Coffee &amp; Cream</strong>-Erlebnis verbindet.
       </p>
       <p class="hero-subline">
-        Built step by step, it connects software, education, sustainability, and lifestyle into
-        one evolving brand.
+        Schritt für Schritt aufgebaut, bringt es Software, Bildung,
+        Nachhaltigkeit und Lifestyle unter eine gemeinsame Marke.
       </p>
-      <div class="hero-tagline">AI · Learning · Energy · Coffee</div>
+      <div class="hero-tagline">AI · Lernen · Energie · Coffee</div>
 
       <div class="hero-cta">
-        <a href="#pillars" class="btn-primary">Explore the Four Folds</a>
-        <a href="#about" class="btn-ghost">About Sique</a>
+        <a href="#pillars" class="btn-primary">Die vier Folds entdecken</a>
+        <a href="#about" class="btn-ghost">Über Sique</a>
       </div>
     </div>
 
@@ -394,42 +434,43 @@
 
   <!-- 2x2 Highlight Grid -->
   <section id="pillars" class="pillars-section reveal">
-    <h2 class="pillars-title">The Four Folds</h2>
+    <h2 class="pillars-title">Die vier Folds</h2>
     <div class="pillars-grid">
       <article class="pillar-card pillar-ai">
-        <div class="pillar-tag">SQ-AI · Blue</div>
-        <h2>Artificial Intelligence</h2>
+        <div class="pillar-tag">SQ-AI · Blau</div>
+        <h2>Künstliche Intelligenz</h2>
         <p>
-          Visual automations and interactive AI agents that keep an eye on
-          markets, travel, life goals, and routines — built around drag-and-drop
-          workflows.
+          Visuelle Automationen und interaktive AI-Agents, die Märkte, Reisen,
+          Lebensziele und Routinen im Blick behalten – aufgebaut mit
+          Drag-and-drop-Workflows.
         </p>
-        <a href="agents.html" class="pillars-link">
-          Learn more <span>→</span>
+        <!-- Für später: eigene /de/agents.html, aktuell führt es zur englischen Seite -->
+        <a href="../agents.html" class="pillars-link">
+          Mehr erfahren <span>→</span>
         </a>
       </article>
 
       <article class="pillar-card pillar-learning">
-        <div class="pillar-tag">SQ-LP · Yellow</div>
-        <h2>Learning Platform</h2>
+        <div class="pillar-tag">SQ-LP · Gelb</div>
+        <h2>Lernplattform</h2>
         <p>
-          A learning space for all ages: courses, sports academies, arts, and
-          language training — supported by AI to guide, coach, and connect.
+          Ein Lernraum für alle Altersgruppen: Kurse, Sportakademien, Kunst und
+          Sprachtraining – unterstützt von KI, die begleitet, coacht und verbindet.
         </p>
-        <a href="learning.html" class="pillars-link">
-          Learn more <span>→</span>
+        <a href="../learning.html" class="pillars-link">
+          Mehr erfahren <span>→</span>
         </a>
       </article>
 
       <article class="pillar-card pillar-green">
-        <div class="pillar-tag">SQ-GE · Green</div>
-        <h2>Green Energy</h2>
+        <div class="pillar-tag">SQ-GE · Grün</div>
+        <h2>Grüne Energie</h2>
         <p>
-          A platform to compare world-class solar solutions, plan installations,
-          and understand costs and breakeven points for sustainable energy.
+          Eine Plattform, um Solarlösungen zu vergleichen, Anlagen zu planen
+          und Kosten sowie Break-even-Punkte für nachhaltige Energie zu verstehen.
         </p>
-        <a href="green.html" class="pillars-link">
-          Learn more <span>→</span>
+        <a href="../green.html" class="pillars-link">
+          Mehr erfahren <span>→</span>
         </a>
       </article>
 
@@ -437,41 +478,44 @@
         <div class="pillar-tag">SQ-CC · Orange</div>
         <h2>Coffee &amp; Cream</h2>
         <p>
-          A premium Spaghettieis and coffee concept in Hyderabad, with organic,
-          health-focused menu options and a carefully designed, appointment-only ambience.
+          Ein Premium-Spaghettieis- und Coffee-Konzept in Hyderabad mit
+          organischer, gesundheitsbewusster Karte und bewusst begrenzter,
+          terminbasierter Atmosphäre.
         </p>
-        <a href="cc.html" class="pillars-link">
-          Learn more <span>→</span>
+        <a href="../cc.html" class="pillars-link">
+          Mehr erfahren <span>→</span>
         </a>
       </article>
     </div>
   </section>
 
-  <!-- About Only -->
+  <!-- About -->
   <section id="about" class="section-block reveal">
     <div class="section-block-inner">
-      <div class="section-label">About · Still In Queue</div>
-      <h2>The Idea Behind Sique</h2>
+      <div class="section-label">Über · Still In Queue</div>
+      <h2>Die Idee hinter Sique</h2>
       <p>
-        Still In Queue (Sique) is a long-term vision to use AI to transform how people experience technology, learning, sustainability, and coffee through smart, connected platforms.
+        Still In Queue (Sique) ist eine langfristige Vision: KI nutzen, um zu
+        verändern, wie Menschen Technologie, Lernen, Nachhaltigkeit und Coffee
+        durch smarte, verbundene Plattformen erleben.
       </p>
       <p>
-        The plan is to grow carefully: begin with digital products and AI
-        systems, then expand into green energy projects and physical spaces once
-        the foundation is stable.
+        Der Plan ist, kontrolliert zu wachsen: zunächst mit digitalen Produkten
+        und AI-Systemen starten und dann, aufbauend auf diesem Fundament, in
+        Green-Energy-Projekte und physische Räume gehen.
       </p>
       <p class="about-note">
-        This website is Phase 1: a front-end that introduces the four folds.
-        Future phases will add user accounts, backends in Python, data
-        engineering pipelines, and fully functional platforms under the
-        Still In Queue umbrella.
+        Diese Website ist Phase 1: ein Frontend, das die vier Folds vorstellt.
+        In späteren Phasen kommen Benutzerkonten, ein Python-Backend,
+        Data-Engineering-Pipelines und voll funktionsfähige Plattformen unter
+        dem Dach von Still In Queue dazu.
       </p>
     </div>
   </section>
 
   <footer class="site-footer">
-    <p>© 2025 Still in Queue. All rights reserved.</p>
-    <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
+    <p>© 2025 Still in Queue. Alle Rechte vorbehalten.</p>
+    <p>Kontakt : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
   </footer>
 
   <!-- Site JS -->
@@ -523,7 +567,22 @@
     });
   </script>
 
-  <!-- Sparkle trail: faster motion + idle twinkle -->
+  <!-- Remember user's language choice when clicking EN/DE -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const langLinks = document.querySelectorAll(".lang-switch a[data-lang]");
+      langLinks.forEach((link) => {
+        link.addEventListener("click", () => {
+          const code = link.getAttribute("data-lang");
+          try {
+            localStorage.setItem("sq_lang_choice", code);
+          } catch (e) {}
+        });
+      });
+    });
+  </script>
+
+  <!-- Sparkle trail (same as EN version) -->
   <script>
   (() => {
     const HONOR_REDUCED_MOTION = false;
@@ -554,38 +613,27 @@
     resize();
     addEventListener('resize', resize);
 
-    // ===== CONFIG =====
     const COLORS        = ['#3b82f6', '#22c55e', '#facc15', '#fb923c'];
     const SILVER        = '#e5e7eb';
-
-    // Density & spread
-    const STEP          = 4;         // px between samples
-    const PER_STEP      = 4;         // particles per sample
-    const POS_JIT       = 12;        // px jitter ring around path
-    const POS_JIT_PCT   = 0.40;      // extra jitter from segment length
-
-    // Motion (amped up)
-    const LIFE_MIN      = 900;       // ms tail base
-    const LIFE_VAR      = 600;       // ms variation
-    const FRICTION      = 0.992;     // more glide
-    const GRAVITY       = 0.007;     // slight downward drift
-    const SPEED_JIT     = 1.0;       // stronger initial velocities
-    const NOISE         = 0.035;     // per-frame micro-impulse
-
-    // Stars
+    const STEP          = 4;
+    const PER_STEP      = 4;
+    const POS_JIT       = 12;
+    const POS_JIT_PCT   = 0.40;
+    const LIFE_MIN      = 900;
+    const LIFE_VAR      = 600;
+    const FRICTION      = 0.992;
+    const GRAVITY       = 0.007;
+    const SPEED_JIT     = 1.0;
+    const NOISE         = 0.035;
     const STAR_CHANCE   = 0.08;
     const STAR_SCALES   = [0.9, 1.15, 1.4, 1.8, 2.3];
+    const IDLE_DELAY_MS = 120;
+    const IDLE_EVERY_MS = 55;
+    const IDLE_COUNT    = 2;
+    const IDLE_SPREAD   = 18;
+    const IDLE_SPEED    = 0.5;
+    const MAX           = 620;
 
-    // Idle emitter
-    const IDLE_DELAY_MS = 120;       // start idling after no movement for this long
-    const IDLE_EVERY_MS = 55;        // spawn cadence while idle
-    const IDLE_COUNT    = 2;         // particles per idle tick
-    const IDLE_SPREAD   = 18;        // px area around last point
-    const IDLE_SPEED    = 0.5;       // initial velocity scale for idle
-
-    const MAX           = 620;       // pool size
-
-    // ===== Pool =====
     const P = new Array(MAX).fill(null);
     let head = 0;
     function addParticle(x, y, vx, vy, color, type='dot', extra={}) {
@@ -597,7 +645,6 @@
       head = (head + 1) % MAX;
     }
 
-    // ===== Helpers =====
     const hexA = (hex, a) => {
       const n = hex.replace('#','');
       const v = parseInt(n.length===3 ? n.split('').map(c=>c+c).join('') : n, 16);
@@ -636,12 +683,10 @@
       ctx.restore();
     }
 
-    // ===== Spawning =====
     function spawnAt(x, y, segLen, pressed) {
       const now = performance.now();
-      const baseIndex = Math.floor(now/140) % COLORS.length; // faster hue cycling
+      const baseIndex = Math.floor(now/140) % COLORS.length;
       const count = PER_STEP + (pressed ? 1 : 0);
-
       const jitterR = POS_JIT + segLen * POS_JIT_PCT;
 
       for (let i=0; i<count; i++) {
@@ -678,7 +723,6 @@
       }
     }
 
-    // ===== Pointer & idle =====
     let last = null, down = false;
     let lastMoveAt = performance.now();
     let idleAcc = 0;
@@ -709,7 +753,6 @@
       lastMoveAt = performance.now();
     }, { passive: true });
 
-    // Idle emitter
     function idleEmit(dt) {
       if (!last) return;
       const since = performance.now() - lastMoveAt;
@@ -737,7 +780,6 @@
       }
     }
 
-    // ===== Draw loop =====
     let lastFrame = performance.now();
     function tick(now) {
       const dt = now - lastFrame;
@@ -745,28 +787,24 @@
 
       ctx.clearRect(0, 0, state.w, state.h);
 
-      // Idle emission
       idleEmit(dt);
 
       for (let i=0; i<MAX; i++) {
         const p = P[i];
         if (!p || p.ttl <= 0) continue;
 
-        // Chaos
         p.vx += (Math.random()-0.5) * NOISE;
         p.vy += (Math.random()-0.5) * NOISE;
 
-        // Motion
         p.vx *= FRICTION;
         p.vy = p.vy * FRICTION + GRAVITY;
         p.x += p.vx;
         p.y += p.vy;
 
-        // Fade/size
         p.ttl -= dt;
         const t = Math.max(0, p.ttl / p.life);
-        const alpha = t;                          // linear slow fade
-        const r = p.base * (0.7 + 1.8*(1 - t));  // grows as it fades
+        const alpha = t;
+        const r = p.base * (0.7 + 1.8*(1 - t));
 
         if (p.type === 'dot') {
           drawBubble(p.x, p.y, r, p.color, alpha);
