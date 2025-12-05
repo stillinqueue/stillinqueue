@@ -60,7 +60,7 @@ window.SQ_TRANSLATIONS = {
     "footer.contactLabel": "contact :"
   },
 
-  de: {
+    de: {
     "meta.title": "Still In Queue",
 
     "nav.ai": "Künstliche Intelligenz",
@@ -74,12 +74,12 @@ window.SQ_TRANSLATIONS = {
     "hero.title": "Still In Queue",
     "hero.badge": "Phase 1 · Konzeptplattform",
     "hero.line1":
-      "<strong>Sique</strong> ist ein vierteiliges Startup-Ökosystem, das <strong>Künstliche Intelligenz</strong>, eine moderne <strong>Lernplattform</strong>, <strong>Grüne Energie</strong>-Lösungen und ein kuratiertes <strong>Coffee-&amp;-Cream</strong>-Erlebnis zusammenbringt.",
+      "<strong>Sique</strong> ist ein vierteiliges Startup-Ökosystem, das <strong>Künstliche Intelligenz</strong>, eine moderne <strong>Lernplattform</strong>, Lösungen im Bereich <strong>Grüne Energie</strong> und ein kuratiertes <strong>Coffee-&amp;-Cream</strong>-Erlebnis miteinander verbindet.",
     "hero.line2":
-      "Schritt für Schritt verbindet es Software, Bildung, Nachhaltigkeit und Lifestyle zu einer sich entwickelnden Marke.",
+      "Schritt für Schritt wachsen hier Software, Bildung, Nachhaltigkeit und Lifestyle zu einer Marke zusammen, die sich kontinuierlich weiterentwickelt.",
     "hero.tagline": "KI · Lernen · Energie · Coffee",
     "hero.cta.primary": "Die vier Bereiche entdecken",
-    "hero.cta.secondary": "Über Sique",
+    "hero.cta.secondary": "Mehr über Sique",
     "hero.scroll": "Scrollen",
 
     "pillars.title": "Die vier Bereiche",
@@ -87,35 +87,34 @@ window.SQ_TRANSLATIONS = {
     "pillars.ai.tag": "SQ-AI · Blau",
     "pillars.ai.title": "Künstliche Intelligenz",
     "pillars.ai.body":
-      "Visuelle Automatisierungen und interaktive KI-Agenten, die Märkte, Reisen, Lebensziele und Routinen im Blick behalten – aufgebaut auf Drag-and-Drop-Workflows.",
+      "Visuelle Automatisierungen und interaktive KI-Agenten, die Märkte, Reisen, Lebensziele und Routinen im Blick behalten – aufgebaut auf intuitiven Drag-and-Drop-Workflows.",
 
     "pillars.lp.tag": "SQ-LP · Gelb",
     "pillars.lp.title": "Lernplattform",
     "pillars.lp.body":
-      "Ein Lernraum für alle Altersgruppen: Kurse, Sportakademien, Kunst und Sprachtraining – unterstützt von KI, die begleitet, coacht und vernetzt.",
+      "Ein Lernraum für alle Altersgruppen: Online-Kurse, Sportakademien, kreative Angebote und Sprachtraining – unterstützt von KI, die begleitet, coacht und vernetzt.",
 
     "pillars.ge.tag": "SQ-GE · Grün",
     "pillars.ge.title": "Grüne Energie",
     "pillars.ge.body":
-      "Eine Plattform, um erstklassige Solarlösungen zu vergleichen, Installationen zu planen und Kosten sowie Amortisationszeiten für nachhaltige Energie zu verstehen.",
+      "Eine Plattform, um erstklassige Solarlösungen zu vergleichen, Installationen zu planen und Kosten sowie Amortisationszeiten für nachhaltige Energie transparent zu verstehen.",
 
     "pillars.cc.tag": "SQ-CC · Orange",
     "pillars.cc.title": "Coffee &amp; Cream",
     "pillars.cc.body":
-      "Ein Premium-Spaghettieis- und Coffee-Konzept in Hyderabad mit organischen, gesundheitsbewussten Optionen und einer bewusst gestalteten, terminbasierten Atmosphäre.",
+      "Ein Premium-Spaghettieis- und Coffee-Konzept in Hyderabad mit organischen, bewusst ausgewählten Zutaten, gesundheitsorientierten Optionen und einer bewusst begrenzten, terminbasierten Atmosphäre.",
 
     "pillars.learnMore": "Mehr erfahren <span>→</span>",
 
     "about.label": "Über · Still In Queue",
     "about.title": "Die Idee hinter Sique",
     "about.p1":
-      "Still In Queue (Sique) ist eine langfristige Vision, KI zu nutzen, um zu verändern, wie Menschen Technologie, Lernen, Nachhaltigkeit und Coffee erleben – über intelligente, verbundene Plattformen.",
+      "Still In Queue (Sique) ist eine langfristige Vision, KI einzusetzen, um zu verändern, wie Menschen Technologie, Lernen, Nachhaltigkeit und Coffee erleben – über intelligente, miteinander verbundene Plattformen.",
     "about.p2":
-      "Der Plan ist, behutsam zu wachsen: zuerst mit digitalen Produkten und KI-Systemen, danach mit Projekten im Bereich Grüne Energie und physischen Räumen, sobald das Fundament stabil ist.",
+      "Der Plan ist, sorgfältig zu wachsen: zuerst mit digitalen Produkten und KI-Systemen, später mit Projekten im Bereich Grüne Energie und physischen Orten, sobald das Fundament stabil ist.",
     "about.note":
-      "Diese Website ist Phase 1: ein Frontend, das die vier Bereiche vorstellt. Spätere Phasen bringen Nutzerkonten, Python-Backends, Data-Engineering-Pipelines und voll funktionsfähige Plattformen unter dem Dach von Still In Queue.",
+      "Diese Website ist Phase 1: ein Frontend, das die vier Bereiche vorstellt. In späteren Phasen kommen Nutzerkonten, Python-Backends, Data-Engineering-Pipelines und voll funktionsfähige Plattformen unter dem Dach von Still In Queue hinzu.",
 
     "footer.copy": "© 2025 Still in Queue. Alle Rechte vorbehalten.",
-    "footer.contactLabel": "Kontakt :"
+    "footer.contactLabel": "Kontakt:"
   }
-};
