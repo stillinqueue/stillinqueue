@@ -57,10 +57,91 @@ window.SQ_TRANSLATIONS = {
       "This website is Phase 1: a front-end that introduces the four folds. Future phases will add user accounts, backends in Python, data engineering pipelines, and fully functional platforms under the Still In Queue umbrella.",
 
     "footer.copy": "© 2025 Still in Queue. All rights reserved.",
-    "footer.contactLabel": "contact :"
+    "footer.contactLabel": "contact :",
+
+    /* ===== SQ-AI page ===== */
+    "ai.meta.title": "Still In Queue · SQ-AI Agents & Automations",
+
+    "ai.nav.home": "Home",
+    "ai.nav.agents": "Agents",
+    "ai.nav.flows": "Automations",
+    "ai.nav.about": "About",
+
+    "ai.hero.kicker": "SQ-AI · Agents & Workflows",
+    "ai.hero.title": "Agents That Watch What You Care About",
+    "ai.hero.pill": "Phase 1 · Concept Platform",
+    "ai.hero.p1":
+      "SQ-AI is a layer of <strong>visual workflows</strong> and <strong>AI agents</strong> built to track markets, trips, routines and goals — without needing to code or manage complex dashboards.",
+    "ai.hero.p2":
+      "The idea is simple: draw what should be monitored, decide when to be nudged, and let the system keep an eye on it in the background.",
+    "ai.hero.bullets": "AGENTS · ALERTS · ROUTINES · BLUEPRINTS",
+    "ai.hero.cta.primary": "Explore Agent Types",
+    "ai.hero.cta.secondary": "See Automation Concept",
+
+    "ai.agents.chip": "Agents",
+    "ai.agents.kicker": "Agent Types",
+    "ai.agents.title": "Different Agents for Different Queues",
+    "ai.agents.desc":
+      "Over time, SQ-AI becomes a library of agents you can switch on: finance, travel, habits, research, and more. Phase 1 is a concept of how they’re grouped and what they watch.",
+
+    "ai.cards.signals.tag": "Signals",
+    "ai.cards.signals.title": "Finance &amp; Market Agents",
+    "ai.cards.signals.text":
+      "Agents that keep track of stocks, ETFs, crypto, and macro indicators. Instead of charts all day, you set triggers and get nudged only when it matters.",
+    "ai.cards.signals.meta": "Inputs: Symbols · Ranges · Alerts",
+
+    "ai.cards.life.tag": "Life",
+    "ai.cards.life.title": "Life &amp; Routine Agents",
+    "ai.cards.life.text":
+      "Checklists and micro routines: health, workouts, reading, progress on projects. Agents act like small coaches that watch streaks, not just to-dos.",
+    "ai.cards.life.meta": "Focus: Habits · Journals · Check-ins",
+
+    "ai.cards.travel.tag": "Travel",
+    "ai.cards.travel.title": "Travel &amp; Exploration Agents",
+    "ai.cards.travel.text":
+      "Track flight prices, visa slots, and destinations you pin on a map. Agents surface windows of opportunity instead of random deals.",
+    "ai.cards.travel.meta": "Focus: Dates · Routes · Preferences",
+
+    "ai.flows.chip": "Automations",
+    "ai.flows.kicker": "Visual Workflows",
+    "ai.flows.title": "Draw the Flow Instead of Writing Code",
+    "ai.flows.desc":
+      "SQ-AI is meant to feel like a canvas: you drag nodes, connect them, and define how data moves — from APIs and files to summaries and notifications.",
+
+    "ai.flows.node.title": "Node-Based Flow Builder",
+    "ai.flows.node.text":
+      "A future version will provide a node editor where each block represents an action: fetch, transform, analyze, notify, or store. You connect them visually instead of writing glue code.",
+    "ai.flows.node.li1": "Input blocks: APIs, CSV, Google Sheets, databases.",
+    "ai.flows.node.li2": "AI blocks: summarise, extract, classify, generate ideas.",
+    "ai.flows.node.li3": "Output blocks: email, chat, dashboards, webhooks.",
+    "ai.flows.node.badge1": "No-code feel",
+    "ai.flows.node.badge2": "Python backend",
+    "ai.flows.node.badge3": "Composable flows",
+
+    "ai.flows.blueprints.title": "Blueprints &amp; Reusable Templates",
+    "ai.flows.blueprints.text":
+      "Instead of building everything from scratch, SQ-AI will ship with blueprints you can customise: monitoring templates, trackers, and life dashboards.",
+    "ai.flows.blueprints.li1": "Weekly review &amp; summary agents.",
+    "ai.flows.blueprints.li2": "“Watch this metric &amp; tell me when…” flows.",
+    "ai.flows.blueprints.li3": "Templates for finance, travel, and learning.",
+    "ai.flows.blueprints.badge1": "Blueprints",
+    "ai.flows.blueprints.badge2": "Personalised",
+    "ai.flows.blueprints.badge3": "Shareable flows",
+
+    "ai.about.chip": "About",
+    "ai.about.kicker": "About · SQ-AI",
+    "ai.about.title": "How SQ-AI Fits into Sique",
+    "ai.about.p1":
+      "SQ-AI is the first fold of Still In Queue — the software and automation layer that eventually connects to the learning platform, green energy dashboards, and even the physical coffee space.",
+    "ai.about.p2":
+      "This page is a concept layout. Future phases will wire it to a Python backend, a database of flows, and an interface for creating, saving, and sharing agents that run on real data.",
+    "ai.about.note":
+      "Rough path:<br><br><strong>Phase 1:</strong> Front-end concept &amp; agent categories.<br><strong>Phase 2:</strong> Visual flow builder with basic blocks.<br><strong>Phase 3:</strong> User accounts, storage, and scheduling.<br><strong>Phase 4:</strong> Deep integrations with the other folds of Sique.",
+
+    "ai.footer.copy": "© 2025 Still in Queue · SQ-AI. All rights reserved."
   },
 
-    de: {
+  de: {
     "meta.title": "Still In Queue",
 
     "nav.ai": "Künstliche Intelligenz",
@@ -116,5 +197,87 @@ window.SQ_TRANSLATIONS = {
       "Diese Website ist Phase 1: ein Frontend, das die vier Bereiche vorstellt. In späteren Phasen kommen Nutzerkonten, Python-Backends, Data-Engineering-Pipelines und voll funktionsfähige Plattformen unter dem Dach von Still In Queue hinzu.",
 
     "footer.copy": "© 2025 Still in Queue. Alle Rechte vorbehalten.",
-    "footer.contactLabel": "Kontakt:"
+    "footer.contactLabel": "Kontakt:",
+
+    /* ===== SQ-AI page ===== */
+    "ai.meta.title": "Still In Queue · SQ-AI Agents & Automatisierungen",
+
+    "ai.nav.home": "Home",
+    "ai.nav.agents": "Agents",
+    "ai.nav.flows": "Automatisierungen",
+    "ai.nav.about": "Über SQ-AI",
+
+    "ai.hero.kicker": "SQ-AI · Agents & Workflows",
+    "ai.hero.title": "Agents, die beobachten, was dir wichtig ist",
+    "ai.hero.pill": "Phase 1 · Konzeptplattform",
+    "ai.hero.p1":
+      "SQ-AI ist eine Schicht aus <strong>visuellen Workflows</strong> und <strong>KI-Agents</strong>, die Märkte, Reisen, Routinen und Ziele im Blick behalten – ohne dass du Code schreiben oder komplexe Dashboards pflegen musst.",
+    "ai.hero.p2":
+      "Die Idee ist einfach: Du zeichnest, was überwacht werden soll, legst fest, wann du angestupst wirst, und das System behält alles im Hintergrund im Auge.",
+    "ai.hero.bullets": "AGENTS · ALERTS · ROUTINEN · BLUEPRINTS",
+    "ai.hero.cta.primary": "Agent-Typen entdecken",
+    "ai.hero.cta.secondary": "Automationskonzept ansehen",
+
+    "ai.agents.chip": "Agents",
+    "ai.agents.kicker": "Agent-Typen",
+    "ai.agents.title": "Verschiedene Agents für verschiedene Queues",
+    "ai.agents.desc":
+      "Mit der Zeit wird SQ-AI zu einer Bibliothek von Agents, die du einfach aktivieren kannst: Finanzen, Reisen, Gewohnheiten, Recherche und mehr. Phase 1 skizziert, wie sie gruppiert sind und was sie beobachten.",
+
+    "ai.cards.signals.tag": "Signals",
+    "ai.cards.signals.title": "Finanz- &amp; Markt-Agents",
+    "ai.cards.signals.text":
+      "Agents, die Aktien, ETFs, Krypto und makroökonomische Indikatoren verfolgen. Statt den ganzen Tag Charts zu checken, definierst du Trigger und wirst nur dann angestupst, wenn es wirklich relevant ist.",
+    "ai.cards.signals.meta": "Inputs: Symbole · Bereiche · Alerts",
+
+    "ai.cards.life.tag": "Life",
+    "ai.cards.life.title": "Life- &amp; Routine-Agents",
+    "ai.cards.life.text":
+      "Checklisten und Mikro-Routinen: Gesundheit, Workouts, Lesen, Fortschritt in Projekten. Agents verhalten sich wie kleine Coaches, die deine Streaks im Auge behalten – nicht nur To-do-Listen.",
+    "ai.cards.life.meta": "Fokus: Gewohnheiten · Journals · Check-ins",
+
+    "ai.cards.travel.tag": "Travel",
+    "ai.cards.travel.title": "Travel- &amp; Exploration-Agents",
+    "ai.cards.travel.text":
+      "Sie verfolgen Flugpreise, Visa-Slots und Ziele, die du auf der Karte pinnst. Statt zufälliger Angebote zeigen sie dir Zeitfenster, in denen sich etwas wirklich lohnt.",
+    "ai.cards.travel.meta": "Fokus: Daten · Routen · Präferenzen",
+
+    "ai.flows.chip": "Automatisierungen",
+    "ai.flows.kicker": "Visuelle Workflows",
+    "ai.flows.title": "Flows zeichnen statt Code zu schreiben",
+    "ai.flows.desc":
+      "SQ-AI soll sich wie eine Leinwand anfühlen: Du ziehst Nodes, verbindest sie und definierst, wie Daten fließen – von APIs und Dateien bis hin zu Zusammenfassungen und Notifications.",
+
+    "ai.flows.node.title": "Node-basierter Flow-Builder",
+    "ai.flows.node.text":
+      "In einer späteren Version gibt es einen Editor, in dem jeder Block eine Aktion darstellt: holen, transformieren, analysieren, benachrichtigen oder speichern. Du verbindest alles visuell statt mit Glue-Code.",
+    "ai.flows.node.li1": "Input-Nodes: APIs, CSV, Google Sheets, Datenbanken.",
+    "ai.flows.node.li2": "KI-Nodes: zusammenfassen, extrahieren, klassifizieren, Ideen generieren.",
+    "ai.flows.node.li3": "Output-Nodes: E-Mail, Chat, Dashboards, Webhooks.",
+    "ai.flows.node.badge1": "No-Code-Feeling",
+    "ai.flows.node.badge2": "Python-Backend",
+    "ai.flows.node.badge3": "Composable Flows",
+
+    "ai.flows.blueprints.title": "Blueprints &amp; wiederverwendbare Templates",
+    "ai.flows.blueprints.text":
+      "Statt alles von vorne aufzubauen, liefert SQ-AI Blueprints, die du anpassen kannst: Monitoring-Templates, Tracker und Life-Dashboards.",
+    "ai.flows.blueprints.li1": "Wöchentliche Review- &amp; Summary-Agents.",
+    "ai.flows.blueprints.li2": "„Beobachte diese Kennzahl &amp; sag mir, wenn…“-Flows.",
+    "ai.flows.blueprints.li3": "Templates für Finanzen, Reisen und Lernen.",
+    "ai.flows.blueprints.badge1": "Blueprints",
+    "ai.flows.blueprints.badge2": "Personalisiert",
+    "ai.flows.blueprints.badge3": "Teilbare Flows",
+
+    "ai.about.chip": "About",
+    "ai.about.kicker": "About · SQ-AI",
+    "ai.about.title": "Wie SQ-AI in Sique hineinpasst",
+    "ai.about.p1":
+      "SQ-AI ist der erste Bereich von Still In Queue – die Software- und Automationsschicht, die später mit der Lernplattform, Green-Energy-Dashboards und sogar dem physischen Coffee-Space verbunden wird.",
+    "ai.about.p2":
+      "Diese Seite ist ein Konzeptlayout. In späteren Phasen wird sie mit einem Python-Backend, einer Flow-Datenbank und einem Interface verbunden, in dem du Agents mit echten Daten erstellen, speichern und teilen kannst.",
+    "ai.about.note":
+      "Grobe Roadmap:<br><br><strong>Phase 1:</strong> Frontend-Konzept &amp; Agent-Kategorien.<br><strong>Phase 2:</strong> Visueller Flow-Builder mit Basis-Nodes.<br><strong>Phase 3:</strong> Nutzerkonten, Speicherung und Scheduling.<br><strong>Phase 4:</strong> Tiefe Integration mit den anderen Sique-Bereichen.",
+
+    "ai.footer.copy": "© 2025 Still in Queue · SQ-AI. Alle Rechte vorbehalten."
   }
+};
