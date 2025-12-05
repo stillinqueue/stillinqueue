@@ -245,7 +245,122 @@ window.SQ_TRANSLATIONS = {
     "cc.about.note":
       "Future ideas:<br><br><strong>Phase 1:</strong> Concept site &amp; brand story.<br><strong>Phase 2:</strong> Slot booking, digital menu, DIY builder UI.<br><strong>Phase 3:</strong> Loyalty accounts connected to the main Sique login.<br><strong>Phase 4:</strong> Multiple locations or pop-ups under the SQ-CC brand.",
 
-    "cc.footer.copy": "© 2025 Still in Queue · SQ-CC. All rights reserved."
+    "cc.footer.copy": "© 2025 Still in Queue · SQ-CC. All rights reserved.",
+
+    /* ===== SQ-GE (Green Energy) page ===== */
+    "ge.meta.title": "Still In Queue · Green Energy",
+
+    "ge.nav.home": "Home",
+    "ge.nav.solutions": "Solutions",
+    "ge.nav.planning": "Calculator &amp; Planning",
+    "ge.nav.projects": "Projects",
+    "ge.nav.about": "About",
+
+    "ge.hero.kicker": "SQ-GE · Green Energy",
+    "ge.hero.title": "Solar, Explained &amp; Planned",
+    "ge.hero.pill": "Phase 1 · Concept Platform",
+    "ge.hero.line1":
+      "SQ-GE is a platform that helps you compare world-class solar panels and equipment, understand investment and subsidies, and plan installations — from a single rooftop to large-scale projects.",
+    "ge.hero.line2":
+      "The idea is to make <strong>renewable decisions clear</strong>: what to buy, how much it costs, when it breaks even, and how it fits into long-term, sustainable income.",
+    "ge.hero.bullets": "COMPARE · CALCULATE · PLAN · INSTALL",
+    "ge.hero.cta.primary": "Explore Green Solutions",
+    "ge.hero.cta.secondary": "See Planning Concept",
+
+    "ge.solutions.chip": "Solutions",
+    "ge.solutions.kicker": "Solutions",
+    "ge.solutions.title": "Compare Solar Options",
+    "ge.solutions.desc":
+      "In a later phase, this becomes an interactive comparison tool with real products and specs. For now, it outlines how SQ-GE will think about equipment and recommendations.",
+
+    "ge.solutions.card1.tag": "Panels",
+    "ge.solutions.card1.title": "Solar Panel Matching",
+    "ge.solutions.card1.text":
+      "Compare leading panels globally: efficiency, temperature behaviour, warranty, and cost per watt. Match products to roof size, climate, and budget.",
+    "ge.solutions.card1.meta":
+      "Inputs: roof area · location · budget",
+
+    "ge.solutions.card2.tag": "Inverters &amp; Storage",
+    "ge.solutions.card2.title": "Inverters &amp; Battery Planning",
+    "ge.solutions.card2.text":
+      "Choose the right inverter and optional battery based on load profiles, backup requirements, and grid conditions.",
+    "ge.solutions.card2.meta":
+      "Inputs: usage pattern · backup hours",
+
+    "ge.solutions.card3.tag": "Packages",
+    "ge.solutions.card3.title": "Home &amp; Business Bundles",
+    "ge.solutions.card3.text":
+      "Pre-defined system sizes and package ideas for homes, apartments, small businesses, and commercial rooftops, including estimated energy output.",
+    "ge.solutions.card3.meta":
+      "Outputs: kW size · annual kWh",
+
+    "ge.planning.chip": "Planning",
+    "ge.planning.kicker": "Calculator &amp; Planning",
+    "ge.planning.title": "Understand Costs &amp; Breakeven",
+    "ge.planning.desc":
+      "SQ-GE is also a planning tool. It doesn’t just show hardware — it explains the numbers: investment, subsidies, savings, and payback.",
+
+    "ge.planning.card1.title": "Investment &amp; Breakeven Concept",
+    "ge.planning.card1.text":
+      "A future calculator will estimate upfront cost, monthly savings, and how many years it takes to recover the investment, with and without subsidies.",
+    "ge.planning.card1.li1":
+      "System cost breakdown: panels, inverters, structure, wiring, labour.",
+    "ge.planning.card1.li2":
+      "Expected monthly generation based on location &amp; tilt.",
+    "ge.planning.card1.li3":
+      "Current electricity tariff vs. solar savings.",
+    "ge.planning.card1.li4":
+      "Simple &amp; discounted payback period.",
+    "ge.planning.card1.badge1": "Capex vs Opex",
+    "ge.planning.card1.badge2": "Subsidy impact",
+    "ge.planning.card1.badge3": "ROI timeline",
+
+    "ge.planning.card2.title": "Subsidies &amp; Policy Awareness",
+    "ge.planning.card2.text":
+      "Over time, SQ-GE will map central and state-level subsidy schemes, especially in regions like Andhra Pradesh, and show how they affect payback.",
+    "ge.planning.card2.li1": "Residential rooftop incentives.",
+    "ge.planning.card2.li2": "Commercial and industrial schemes.",
+    "ge.planning.card2.li3": "Net-metering rules and export tariffs.",
+    "ge.planning.card2.badge1": "Govt schemes",
+    "ge.planning.card2.badge2": "Eligibility",
+    "ge.planning.card2.badge3": "Updated policy view",
+
+    "ge.projects.chip": "Projects",
+    "ge.projects.kicker": "Projects",
+    "ge.projects.title": "From Rooftops to Fields",
+    "ge.projects.desc":
+      "The long-term plan is not just advisory — SQ-GE aims to support real installations and, later, larger projects.",
+
+    "ge.projects.card1.title": "Residential &amp; Small Commercial",
+    "ge.projects.card1.text":
+      "Start with individual customers: homes, apartments, shops, and offices. Provide consulting, design proposals, and connect to installation partners.",
+    "ge.projects.card1.li1": "Site assessment and basic layout concepts.",
+    "ge.projects.card1.li2": "Estimated production and savings report.",
+    "ge.projects.card1.li3": "Partner installer matching (future phase).",
+    "ge.projects.card1.badge1": "Rooftops",
+    "ge.projects.card1.badge2": "Shops &amp; offices",
+    "ge.projects.card1.badge3": "Proposals",
+
+    "ge.projects.card2.title": "Large-Scale &amp; Government Projects",
+    "ge.projects.card2.text":
+      "A later phase aims at larger installations such as mass rooftop programs and solar fields — for example in Andhra Pradesh — aligned with government tenders and long-term PPAs.",
+    "ge.projects.card2.li1": "High-level feasibility and sizing concepts.",
+    "ge.projects.card2.li2": "Dashboard-style overviews of project pipelines.",
+    "ge.projects.card2.li3": "Focus on steady, sustainable income after the initial years.",
+    "ge.projects.card2.badge1": "Andhra Pradesh focus",
+    "ge.projects.card2.badge2": "Govt tenders",
+    "ge.projects.card2.badge3": "Long-term revenue",
+
+    "ge.about.chip": "About",
+    "ge.about.kicker": "About · SQ-GE",
+    "ge.about.title": "Why Green Energy is a Fold of Sique",
+    "ge.about.p1":
+      "SQ-GE is the renewable fold of Still In Queue — a way to use data, planning, and software thinking to make solar adoption easier. It accepts that green projects are often high investment with delayed returns, but focuses on the long-term benefits: environment, stability, and recurring income.",
+    "ge.about.p2":
+      "This page is the concept design. Future versions will connect to real product feeds, pricing APIs, policy databases, and project tracking tools, built on a Python backend — so SQ-GE can move from explanation into execution.",
+    "ge.about.note":
+      "High-level path:<br><br><strong>Phase 1:</strong> Concept site &amp; explanation tools.<br><strong>Phase 2:</strong> Solar comparison + basic calculators.<br><strong>Phase 3:</strong> Lead management &amp; installer network.<br><strong>Phase 4:</strong> Participation in larger govt and utility-scale projects.",
+    "ge.footer.copy": "© 2025 Still in Queue · SQ-GE. All rights reserved."
   },
 
   de: {
@@ -491,7 +606,121 @@ window.SQ_TRANSLATIONS = {
       "Diese Seite ist ein Konzept-Layout für Store und digitales Erlebnis. Später kann daraus ein vollwertiges Buchungssystem mit Loyalty- oder Membership-Features und ein Live-Menü werden, das direkt an das SQ-Backend angebunden ist.",
     "cc.about.note":
       "Zukünftige Ideen:<br><br><strong>Phase 1:</strong> Konzept-Site &amp; Brand Story.<br><strong>Phase 2:</strong> Slot-Buchung, digitales Menü, DIY-Builder-UI.<br><strong>Phase 3:</strong> Loyalty-Accounts verbunden mit dem Haupt-Sique-Login.<br><strong>Phase 4:</strong> Mehrere Locations oder Pop-ups unter der Marke SQ-CC.",
+    "cc.footer.copy": "© 2025 Still in Queue · SQ-CC. Alle Rechte vorbehalten.",
 
-    "cc.footer.copy": "© 2025 Still in Queue · SQ-CC. Alle Rechte vorbehalten."
+    /* ===== SQ-GE (Green Energy) page ===== */
+    "ge.meta.title": "Still In Queue · Grüne Energie",
+
+    "ge.nav.home": "Home",
+    "ge.nav.solutions": "Lösungen",
+    "ge.nav.planning": "Rechner &amp; Planung",
+    "ge.nav.projects": "Projekte",
+    "ge.nav.about": "Über",
+
+    "ge.hero.kicker": "SQ-GE · Green Energy",
+    "ge.hero.title": "Solar, erklärt &amp; geplant",
+    "ge.hero.pill": "Phase 1 · Konzeptplattform",
+    "ge.hero.line1":
+      "SQ-GE ist eine Plattform, die dir hilft, erstklassige Solarmodule und Komponenten zu vergleichen, Investitionen und Förderungen zu verstehen und Installationen zu planen – vom einzelnen Dach bis zu Großprojekten.",
+    "ge.hero.line2":
+      "Die Idee ist, <strong>erneuerbare Entscheidungen klar</strong> zu machen: was man kauft, was es kostet, wann es sich rechnet und wie es in ein langfristig nachhaltiges Einkommen passt.",
+    "ge.hero.bullets": "VERGLEICHEN · BERECHNEN · PLANEN · INSTALLIEREN",
+    "ge.hero.cta.primary": "Green Solutions entdecken",
+    "ge.hero.cta.secondary": "Planning-Konzept ansehen",
+
+    "ge.solutions.chip": "Lösungen",
+    "ge.solutions.kicker": "Lösungen",
+    "ge.solutions.title": "Solaroptionen vergleichen",
+    "ge.solutions.desc":
+      "In einer späteren Phase wird daraus ein interaktives Vergleichstool mit echten Produkten und Spezifikationen. Aktuell skizziert es, wie SQ-GE über Equipment und Empfehlungen nachdenkt.",
+
+    "ge.solutions.card1.tag": "Panels",
+    "ge.solutions.card1.title": "Solar-Panel-Matching",
+    "ge.solutions.card1.text":
+      "Vergleich führender Panels weltweit: Effizienz, Temperaturverhalten, Garantie und Kosten pro Watt. Produkte passend zu Dachfläche, Klima und Budget finden.",
+    "ge.solutions.card1.meta":
+      "Inputs: Dachfläche · Standort · Budget",
+
+    "ge.solutions.card2.tag": "Inverter &amp; Storage",
+    "ge.solutions.card2.title": "Inverter- &amp; Batterieplanung",
+    "ge.solutions.card2.text":
+      "Den passenden Wechselrichter und eine optionale Batterie auswählen – basierend auf Lastprofilen, Backup-Bedarf und Netzsituation.",
+    "ge.solutions.card2.meta":
+      "Inputs: Nutzungsprofil · Backup-Stunden",
+
+    "ge.solutions.card3.tag": "Packages",
+    "ge.solutions.card3.title": "Home- &amp; Business-Bundles",
+    "ge.solutions.card3.text":
+      "Vordefinierte Anlagengrößen und Paketideen für Häuser, Wohnungen, kleine Unternehmen und Gewerbedächer – inklusive geschätzter Energieerzeugung.",
+    "ge.solutions.card3.meta":
+      "Outputs: kW-Größe · jährliche kWh",
+
+    "ge.planning.chip": "Planning",
+    "ge.planning.kicker": "Rechner &amp; Planung",
+    "ge.planning.title": "Kosten &amp; Amortisation verstehen",
+    "ge.planning.desc":
+      "SQ-GE ist auch ein Planungstool. Es zeigt nicht nur Hardware, sondern erklärt Zahlen: Investition, Förderungen, Einsparungen und Payback.",
+
+    "ge.planning.card1.title": "Investment- &amp; Breakeven-Konzept",
+    "ge.planning.card1.text":
+      "Ein späterer Rechner schätzt Investitionskosten, monatliche Einsparungen und die Jahre bis zur Amortisation – mit und ohne Förderung.",
+    "ge.planning.card1.li1":
+      "Aufschlüsselung der Systemkosten: Panels, Inverter, Unterkonstruktion, Verkabelung, Montage.",
+    "ge.planning.card1.li2":
+      "Erwartete monatliche Erzeugung basierend auf Standort &amp; Neigung.",
+    "ge.planning.card1.li3":
+      "Aktueller Stromtarif vs. Einsparungen durch Solar.",
+    "ge.planning.card1.li4":
+      "Einfache &amp; diskontierte Amortisationszeit.",
+    "ge.planning.card1.badge1": "Capex vs Opex",
+    "ge.planning.card1.badge2": "Förderwirkung",
+    "ge.planning.card1.badge3": "ROI-Timeline",
+
+    "ge.planning.card2.title": "Förderungen &amp; Policy-Überblick",
+    "ge.planning.card2.text":
+      "Mit der Zeit wird SQ-GE bundesweite und regionale Förderprogramme – etwa in Andhra Pradesh – abbilden und zeigen, wie sie die Amortisation verändern.",
+    "ge.planning.card2.li1": "Förderungen für private Dachanlagen.",
+    "ge.planning.card2.li2": "Programme für Gewerbe &amp; Industrie.",
+    "ge.planning.card2.li3": "Net-Metering-Regeln und Einspeisetarife.",
+    "ge.planning.card2.badge1": "Govt Schemes",
+    "ge.planning.card2.badge2": "Eligibility",
+    "ge.planning.card2.badge3": "Aktuelle Policy-Sicht",
+
+    "ge.projects.chip": "Projekte",
+    "ge.projects.kicker": "Projekte",
+    "ge.projects.title": "Vom Dach bis zum Feld",
+    "ge.projects.desc":
+      "Der langfristige Plan ist nicht nur Beratung – SQ-GE soll reale Installationen und später größere Projekte unterstützen.",
+
+    "ge.projects.card1.title": "Residential &amp; Small Commercial",
+    "ge.projects.card1.text":
+      "Start mit einzelnen Kund:innen: Häuser, Wohnungen, Shops und Büros. Beratung, Designvorschläge und Verbindung zu Installationspartnern.",
+    "ge.projects.card1.li1": "Standortanalyse und einfache Layout-Konzepte.",
+    "ge.projects.card1.li2": "Report zu Erzeugung &amp; Einsparungen.",
+    "ge.projects.card1.li3": "Matching mit Partnerinstallateuren (spätere Phase).",
+    "ge.projects.card1.badge1": "Rooftops",
+    "ge.projects.card1.badge2": "Shops &amp; Offices",
+    "ge.projects.card1.badge3": "Proposals",
+
+    "ge.projects.card2.title": "Großanlagen &amp; Government-Projekte",
+    "ge.projects.card2.text":
+      "Eine spätere Phase zielt auf größere Installationen: Dachprogramme im großen Stil und Solarparks – zum Beispiel in Andhra Pradesh – entlang von Ausschreibungen und langfristigen PPAs.",
+    "ge.projects.card2.li1": "High-Level Machbarkeits- und Größenkonzepte.",
+    "ge.projects.card2.li2": "Dashboardartige Übersichten von Projekt-Pipelines.",
+    "ge.projects.card2.li3": "Fokus auf stabile, nachhaltige Einnahmen nach den ersten Jahren.",
+    "ge.projects.card2.badge1": "Andhra-Pradesh-Fokus",
+    "ge.projects.card2.badge2": "Govt Tenders",
+    "ge.projects.card2.badge3": "Langfristige Erlöse",
+
+    "ge.about.chip": "About",
+    "ge.about.kicker": "Über · SQ-GE",
+    "ge.about.title": "Warum Green Energy ein Bereich von Sique ist",
+    "ge.about.p1":
+      "SQ-GE ist der Renewable-Bereich von Still In Queue – ein Ansatz, Daten, Planung und Software-Denken zu nutzen, um Solar einfacher zu machen. Es akzeptiert, dass Green-Projekte oft hohe Anfangsinvestitionen mit verzögerten Erträgen haben, und fokussiert auf langfristige Vorteile: Umwelt, Stabilität und wiederkehrende Einnahmen.",
+    "ge.about.p2":
+      "Diese Seite ist das Konzept-Design. Spätere Versionen verbinden sich mit echten Produktfeeds, Pricing-APIs, Policy-Datenbanken und Projekt-Tracking-Tools auf einem Python-Backend – damit SQ-GE von Erklärung zu Umsetzung werden kann.",
+    "ge.about.note":
+      "High-Level-Path:<br><br><strong>Phase 1:</strong> Konzept-Site &amp; Erklärungstools.<br><strong>Phase 2:</strong> Solar-Vergleich + Basisrechner.<br><strong>Phase 3:</strong> Lead-Management &amp; Installateur-Netzwerk.<br><strong>Phase 4:</strong> Teilnahme an größeren Govt- und Utility-Scale-Projekten.",
+    "ge.footer.copy": "© 2025 Still in Queue · SQ-GE. Alle Rechte vorbehalten."
   }
 };
