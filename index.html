@@ -309,6 +309,45 @@
     }
     .site-footer a { color: var(--text-main); text-decoration: none; }
 
+        /* ===== Language Switcher ===== */
+    .lang-switch {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-muted);
+    }
+    
+    .lang-switch a {
+      text-decoration: none;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        color var(--transition-fast),
+        transform var(--transition-fast);
+    }
+    
+    .lang-switch a:hover {
+      border-color: rgba(148, 163, 184, 0.9);
+      background: rgba(15, 23, 42, 0.95);
+      color: var(--text-main);
+      transform: translateY(-1px);
+    }
+    
+    .lang-switch .lang-active {
+      border-color: rgba(248, 250, 252, 0.95);
+      background: rgba(248, 250, 252, 0.95);
+      color: #020617;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.8);
+    }
+
+
     /* ===== Responsive ===== */
     @media (max-width: 900px) { .pillars-grid { grid-template-columns: 1fr; } }
     @media (max-width: 768px) {
@@ -354,6 +393,18 @@
         <a href="#pillars" class="nav-coffee">Coffee-Cream</a>
         <a href="#about" class="nav-about">About</a>
       </nav>
+
+      <!-- Language switcher -->
+      <div class="lang-switch">
+        <a href="/" data-lang="en" class="lang-active">EN</a>
+        <a href="/de/" data-lang="de">DE</a>
+      </div>
+
+      <div class="auth-buttons">
+        <a href="#auth" class="auth-primary">Login / Sign Up</a>
+      </div>
+    </div>
+
 
       <div class="auth-buttons">
         <a href="#auth" class="auth-primary">Login / Sign Up</a>
@@ -522,6 +573,36 @@
       onScroll();
     });
   </script>
+
+    <!-- Auto language selection: redirect Germans to /de/ on first visit -->
+  <script>
+    (function () {
+      try {
+        // If user already chose language, don't override
+        const chosen = localStorage.getItem("sq_lang_choice");
+        if (chosen) return;
+
+        const lang =
+          (navigator.languages && navigator.languages[0]) ||
+          navigator.language ||
+          navigator.userLanguage ||
+          "";
+
+        const isGerman = lang.toLowerCase().startsWith("de");
+
+        // Only redirect if they are NOT already under /de
+        if (isGerman && !window.location.pathname.startsWith("/de")) {
+          localStorage.setItem("sq_lang_choice", "de");
+          window.location.href = "/de/";
+        } else {
+          localStorage.setItem("sq_lang_choice", "en");
+        }
+      } catch (e) {
+        // fail silently
+      }
+    })();
+  </script>
+
 
   <!-- Sparkle trail: faster motion + idle twinkle -->
   <script>
@@ -782,5 +863,24 @@
     document.addEventListener('visibilitychange', () => { lastFrame = performance.now(); });
   })();
   </script>
+
+    <!-- Remember user's language choice when clicking EN/DE -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const langLinks = document.querySelectorAll(".lang-switch a[data-lang]");
+      langLinks.forEach((link) => {
+        link.addEventListener("click", () => {
+          const code = link.getAttribute("data-lang");
+          try {
+            localStorage.setItem("sq_lang_choice", code);
+          } catch (e) {
+            // ignore if localStorage not available
+          }
+        });
+      });
+    });
+  </script>
+
 </body>
 </html>
+
