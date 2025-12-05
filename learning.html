@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-page="lp">
 <head>
   <meta charset="UTF-8" />
-  <title>Still In Queue · Learning</title>
+  <title data-i18n="lp.meta.title">Still In Queue · Learning</title>
   <link rel="icon" type="image/png" href="Fav-Photoroom.png">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
@@ -51,8 +51,8 @@
       pointer-events: none;
       mix-blend-mode: screen;
       will-change: transform, opacity;
-      opacity: 0;                     /* hidden by default */
-      transition: opacity .18s ease;  /* fade in/out */
+      opacity: 0;
+      transition: opacity .18s ease;
     }
 
     /* ===== Header / Navbar ===== */
@@ -82,6 +82,40 @@
       background: linear-gradient(135deg, #facc15, #fde047, #fbbf24);
       box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9); transform: translateY(-1px);
     }
+
+    /* ===== Language Switch ===== */
+    .lang-switch {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    .lang-switch span.separator {
+      opacity: 0.6;
+      color: #e5e7eb;
+    }
+    .lang-link {
+      text-decoration: none;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: #e5e7eb;
+      transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+    }
+    .lang-link:hover {
+      border-color: rgba(248, 250, 252, 0.85);
+      background: rgba(15, 23, 42, 0.9);
+      transform: translateY(-1px);
+    }
+    .lang-link.active-lang {
+      background: linear-gradient(135deg, #facc15, #fde047, #fbbf24);
+      color: #111827;
+      border-color: rgba(248, 250, 252, 0.95);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.85);
+    }
+
     .auth-buttons { display: flex; align-items: center; }
     .auth-primary {
       font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.18em; text-decoration: none;
@@ -151,7 +185,6 @@
     .section-title { font-family: var(--font-serif); font-size: 1.4rem; letter-spacing: 0.08em; text-transform: uppercase; }
     .section-desc { font-size: 0.9rem; color: var(--text-muted); max-width: 440px; line-height: 1.7; }
 
-    /* centered section chip */
     .section-chip { text-align: center; margin-bottom: 1.6rem; }
     .section-chip span {
       display: inline-block; padding: 0.3rem 1.4rem; border-radius: var(--radius-pill);
@@ -235,6 +268,7 @@
       .section { padding-inline: 1.5rem; }
       .section-header { flex-direction: column; align-items: flex-start; }
       .courses-grid { grid-template-columns: minmax(0, 1fr); }
+      .lang-switch { font-size: 0.7rem; }
     }
   </style>
 </head>
@@ -253,15 +287,21 @@
 
     <div class="header-right">
       <nav class="site-nav">
-        <a href="#top" class="nav-home active">Home</a>
-        <a href="#courses" class="nav-courses">Courses</a>
-        <a href="#sports" class="nav-sports">Sports</a>
-        <a href="#arts" class="nav-arts">Arts &amp; Clubs</a>
-        <a href="#about" class="nav-about">About</a>
+        <a href="#top" class="nav-home active" data-i18n="lp.nav.home">Home</a>
+        <a href="#courses" class="nav-courses" data-i18n="lp.nav.courses">Courses</a>
+        <a href="#sports" class="nav-sports" data-i18n="lp.nav.sports">Sports</a>
+        <a href="#arts" class="nav-arts" data-i18n="lp.nav.arts">Arts &amp; Clubs</a>
+        <a href="#about" class="nav-about" data-i18n="lp.nav.about">About</a>
       </nav>
 
+      <div class="lang-switch">
+        <a href="learning.html?lang=en" class="lang-link" data-lang="en">EN</a>
+        <span class="separator">/</span>
+        <a href="learning.html?lang=de" class="lang-link" data-lang="de">DE</a>
+      </div>
+
       <div class="auth-buttons">
-        <a href="#auth" class="auth-primary">Login / Sign Up</a>
+        <a href="#auth" class="auth-primary" data-i18n="auth.cta">Login / Sign Up</a>
       </div>
     </div>
   </header>
@@ -272,41 +312,41 @@
     <div class="hero-shell"></div>
 
     <div class="hero-inner">
-      <div class="hero-kicker">SQ-LP · Learning Platform</div>
-      <h1 class="hero-title">Learning That Follows Your Life</h1>
-      <div class="hero-pill">Phase 1 · Concept Campus</div>
+      <div class="hero-kicker" data-i18n="lp.hero.kicker">SQ-LP · Learning Platform</div>
+      <h1 class="hero-title" data-i18n="lp.hero.title">Learning That Follows Your Life</h1>
+      <div class="hero-pill" data-i18n="lp.hero.pill">Phase 1 · Concept Campus</div>
 
-      <p class="hero-subline">
+      <p class="hero-subline" data-i18n="lp.hero.line1">
         SQ-LP is a learning platform that combines structured
-        courses, sports academies, arts, and language training into one place — 
+        courses, sports academies, arts, and language training into one place —
         supported by <strong>AI mentors</strong> that guide, coach, and keep
         you on track.
       </p>
-      <p class="hero-subline">
+      <p class="hero-subline" data-i18n="lp.hero.line2">
         From online lessons to real-world clubs and academies, the goal is to
         make it easy to discover, plan, and stay consistent with the skills you
         actually care about.
       </p>
-      <div class="hero-bullets">COURSES · SPORTS · ARTS · CLUBS</div>
+      <div class="hero-bullets" data-i18n="lp.hero.bullets">COURSES · SPORTS · ARTS · CLUBS</div>
 
       <div class="hero-cta">
-        <a href="#courses" class="btn-primary">Explore Learning Areas</a>
-        <a href="#about" class="btn-ghost">About SQ-LP</a>
+        <a href="#courses" class="btn-primary" data-i18n="lp.hero.cta.primary">Explore Learning Areas</a>
+        <a href="#about" class="btn-ghost" data-i18n="lp.hero.cta.secondary">About SQ-LP</a>
       </div>
     </div>
 
-    <div class="scroll-indicator">Scroll</div>
+    <div class="scroll-indicator" data-i18n="hero.scroll">Scroll</div>
   </main>
 
   <!-- Courses Section -->
   <section id="courses" class="section reveal">
-    <div class="section-chip"><span>Courses</span></div>
+    <div class="section-chip"><span data-i18n="lp.courses.chip">Courses</span></div>
     <div class="section-header">
       <div>
-        <div class="section-kicker">E-Learning</div>
-        <h2 class="section-title">Courses for Every Stage</h2>
+        <div class="section-kicker" data-i18n="lp.courses.kicker">E-Learning</div>
+        <h2 class="section-title" data-i18n="lp.courses.title">Courses for Every Stage</h2>
       </div>
-      <p class="section-desc">
+      <p class="section-desc" data-i18n="lp.courses.desc">
         In later phases, this becomes an interactive library of courses with AI
         tutors and personalised paths. For now, it maps the core idea of what
         SQ-LP will cover.
@@ -315,47 +355,47 @@
 
     <div class="courses-grid">
       <article class="course-card">
-        <div class="course-tag">Foundations</div>
-        <h3 class="course-title">School &amp; University Support</h3>
-        <p class="course-text">
+        <div class="course-tag" data-i18n="lp.courses.card1.tag">Foundations</div>
+        <h3 class="course-title" data-i18n="lp.courses.card1.title">School &amp; University Support</h3>
+        <p class="course-text" data-i18n="lp.courses.card1.text">
           Structured content for school and college students, with AI helping
           to explain concepts, create practice questions, and track progress.
         </p>
-        <div class="course-meta">Focus: Maths · Science · Languages · Exams</div>
+        <div class="course-meta" data-i18n="lp.courses.card1.meta">Focus: Maths · Science · Languages · Exams</div>
       </article>
 
       <article class="course-card">
-        <div class="course-tag">Careers</div>
-        <h3 class="course-title">Career &amp; Tech Skills</h3>
-        <p class="course-text">
+        <div class="course-tag" data-i18n="lp.courses.card2.tag">Careers</div>
+        <h3 class="course-title" data-i18n="lp.courses.card2.title">Career &amp; Tech Skills</h3>
+        <p class="course-text" data-i18n="lp.courses.card2.text">
           Data, programming, design, business, and communication skills to
           support modern careers — with project-style learning and portfolio
           guidance.
         </p>
-        <div class="course-meta">Focus: Data · Dev · Design · Business</div>
+        <div class="course-meta" data-i18n="lp.courses.card2.meta">Focus: Data · Dev · Design · Business</div>
       </article>
 
       <article class="course-card">
-        <div class="course-tag">Lifelong</div>
-        <h3 class="course-title">Everyday Learning</h3>
-        <p class="course-text">
+        <div class="course-tag" data-i18n="lp.courses.card3.tag">Lifelong</div>
+        <h3 class="course-title" data-i18n="lp.courses.card3.title">Everyday Learning</h3>
+        <p class="course-text" data-i18n="lp.courses.card3.text">
           Personal finance, productivity, mindset, and hobby-based micro
           courses, designed for short sessions that fit into a busy week.
         </p>
-        <div class="course-meta">Focus: Money · Habits · Hobbies</div>
+        <div class="course-meta" data-i18n="lp.courses.card3.meta">Focus: Money · Habits · Hobbies</div>
       </article>
     </div>
   </section>
 
   <!-- Sports Section -->
   <section id="sports" class="section reveal">
-    <div class="section-chip"><span>Sports</span></div>
+    <div class="section-chip"><span data-i18n="lp.sports.chip">Sports</span></div>
     <div class="section-header">
       <div>
-        <div class="section-kicker">Sport Map</div>
-        <h2 class="section-title">Find Places to Train &amp; Play</h2>
+        <div class="section-kicker" data-i18n="lp.sports.kicker">Sport Map</div>
+        <h2 class="section-title" data-i18n="lp.sports.title">Find Places to Train &amp; Play</h2>
       </div>
-      <p class="section-desc">
+      <p class="section-desc" data-i18n="lp.sports.desc">
         SQ-LP also looks outward: it becomes a directory of academies, clubs,
         and tournaments so sports enthusiasts can find places to actually
         practice — not just watch.
@@ -364,40 +404,40 @@
 
     <div class="two-col">
       <div class="card-soft">
-        <h3>Nearby Academies &amp; Training Centers</h3>
-        <p>
+        <h3 data-i18n="lp.sports.card1.title">Nearby Academies &amp; Training Centers</h3>
+        <p data-i18n="lp.sports.card1.text">
           The sports view is meant to show academies and coaching centers
           around you, with filters for age, level, and budget. Later, AI can
           recommend options based on your interests and schedule.
         </p>
         <ul class="list-clean">
-          <li>Team sports: football, cricket, basketball, volleyball, etc.</li>
-          <li>Individual sports: tennis, badminton, athletics, swimming.</li>
-          <li>Specialized programs: strength &amp; conditioning, kids camps.</li>
+          <li data-i18n="lp.sports.card1.li1">Team sports: football, cricket, basketball, volleyball, etc.</li>
+          <li data-i18n="lp.sports.card1.li2">Individual sports: tennis, badminton, athletics, swimming.</li>
+          <li data-i18n="lp.sports.card1.li3">Specialized programs: strength &amp; conditioning, kids camps.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Maps &amp; distances</span>
-          <span class="badge-pill">Timings</span>
-          <span class="badge-pill">Difficulty level</span>
+          <span class="badge-pill" data-i18n="lp.sports.card1.badge1">Maps &amp; distances</span>
+          <span class="badge-pill" data-i18n="lp.sports.card1.badge2">Timings</span>
+          <span class="badge-pill" data-i18n="lp.sports.card1.badge3">Difficulty level</span>
         </div>
       </div>
 
       <div class="card-soft">
-        <h3>Tournaments, Leagues &amp; Events</h3>
-        <p>
+        <h3 data-i18n="lp.sports.card2.title">Tournaments, Leagues &amp; Events</h3>
+        <p data-i18n="lp.sports.card2.text">
           A calendar-style view will highlight local leagues, tournaments, and
           community events, so players and parents can plan participation in
           advance.
         </p>
         <ul class="list-clean">
-          <li>Monthly and seasonal tournaments.</li>
-          <li>Beginner-friendly events to start competing.</li>
-          <li>Links to registration pages and schedules.</li>
+          <li data-i18n="lp.sports.card2.li1">Monthly and seasonal tournaments.</li>
+          <li data-i18n="lp.sports.card2.li2">Beginner-friendly events to start competing.</li>
+          <li data-i18n="lp.sports.card2.li3">Links to registration pages and schedules.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Calendar</span>
-          <span class="badge-pill">Notifications</span>
-          <span class="badge-pill">Team invites</span>
+          <span class="badge-pill" data-i18n="lp.sports.card2.badge1">Calendar</span>
+          <span class="badge-pill" data-i18n="lp.sports.card2.badge2">Notifications</span>
+          <span class="badge-pill" data-i18n="lp.sports.card2.badge3">Team invites</span>
         </div>
       </div>
     </div>
@@ -405,13 +445,13 @@
 
   <!-- Arts & Clubs Section -->
   <section id="arts" class="section reveal">
-    <div class="section-chip"><span>Arts &amp; Clubs</span></div>
+    <div class="section-chip"><span data-i18n="lp.arts.chip">Arts &amp; Clubs</span></div>
     <div class="section-header">
       <div>
-        <div class="section-kicker">Arts &amp; Creative Clubs</div>
-        <h2 class="section-title">Learning Beyond the Classroom</h2>
+        <div class="section-kicker" data-i18n="lp.arts.kicker">Arts &amp; Creative Clubs</div>
+        <h2 class="section-title" data-i18n="lp.arts.title">Learning Beyond the Classroom</h2>
       </div>
-      <p class="section-desc">
+      <p class="section-desc" data-i18n="lp.arts.desc">
         Dance, music, painting, pottery, photography, acting, cooking, fashion —
         SQ-LP treats them as serious skills, not just hobbies.
       </p>
@@ -419,35 +459,35 @@
 
     <div class="two-col">
       <div class="card-soft">
-        <h3>Studios, Schools &amp; Workshops</h3>
-        <p>
+        <h3 data-i18n="lp.arts.card1.title">Studios, Schools &amp; Workshops</h3>
+        <p data-i18n="lp.arts.card1.text">
           Discover places to learn creative arts offline, with photos, timing,
           and areas of focus. In the future, hybrid programs will combine
           online modules with in-person practice.
         </p>
         <ul class="list-clean">
-          <li>Dance studios, music schools, and theatre groups.</li>
-          <li>Art, pottery, and craft workshops.</li>
-          <li>Cooking, baking, and culinary schools.</li>
+          <li data-i18n="lp.arts.card1.li1">Dance studios, music schools, and theatre groups.</li>
+          <li data-i18n="lp.arts.card1.li2">Art, pottery, and craft workshops.</li>
+          <li data-i18n="lp.arts.card1.li3">Cooking, baking, and culinary schools.</li>
         </ul>
       </div>
 
       <div class="card-soft">
-        <h3>Clubs, Communities &amp; Events</h3>
-        <p>
+        <h3 data-i18n="lp.arts.card2.title">Clubs, Communities &amp; Events</h3>
+        <p data-i18n="lp.arts.card2.text">
           A club directory will help people find photography walks, book clubs,
           jam sessions, open mics, and more — so learning naturally connects to
           community.
         </p>
         <ul class="list-clean">
-          <li>Community clubs and informal meetups.</li>
-          <li>Showcases, recitals, and exhibitions.</li>
-          <li>AI-assisted discovery based on your profile.</li>
+          <li data-i18n="lp.arts.card2.li1">Community clubs and informal meetups.</li>
+          <li data-i18n="lp.arts.card2.li2">Showcases, recitals, and exhibitions.</li>
+          <li data-i18n="lp.arts.card2.li3">AI-assisted discovery based on your profile.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Events</span>
-          <span class="badge-pill">Groups</span>
-          <span class="badge-pill">AI suggestions</span>
+          <span class="badge-pill" data-i18n="lp.arts.card2.badge1">Events</span>
+          <span class="badge-pill" data-i18n="lp.arts.card2.badge2">Groups</span>
+          <span class="badge-pill" data-i18n="lp.arts.card2.badge3">AI suggestions</span>
         </div>
       </div>
     </div>
@@ -455,24 +495,26 @@
 
   <!-- About SQ-LP -->
   <section id="about" class="section reveal">
-    <div class="section-chip"><span>About</span></div>
+    <div class="section-chip"><span data-i18n="lp.about.chip">About</span></div>
     <div class="about-card">
-      <div class="section-kicker">About · SQ-LP</div>
-      <h2 class="section-title" style="margin-bottom:0.7rem;">The Idea Behind the Learning Platform</h2>
-      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;">
+      <div class="section-kicker" data-i18n="lp.about.kicker">About · SQ-LP</div>
+      <h2 class="section-title" style="margin-bottom:0.7rem;" data-i18n="lp.about.title">
+        The Idea Behind the Learning Platform
+      </h2>
+      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;" data-i18n="lp.about.p1">
         SQ-LP is the second fold of Still In Queue — a space where structured
         courses, sports, and arts share the same ecosystem. The long-term goal
         is to combine <strong>high-quality content</strong> with
         <strong>AI guidance</strong> and real-world places to learn.
       </p>
-      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;margin-top:0.6rem;">
+      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;margin-top:0.6rem;" data-i18n="lp.about.p2">
         This page is the concept layout. In future phases it will connect to a
         Python backend, video library, recommendation engine, and a map of
         academies and studios — turning SQ-LP into a real learning companion
         for different ages and goals.
       </p>
 
-      <div class="about-note">
+      <div class="about-note" data-i18n="lp.about.note">
         Rough roadmap:
         <br><br>
         <strong>Phase 1:</strong> Front-end layout and content structure.<br>
@@ -484,8 +526,11 @@
   </section>
 
   <footer class="site-footer">
-    <p>© 2025 Still in Queue · SQ-LP. All rights reserved.</p>
-    <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
+    <p data-i18n="lp.footer.copy">© 2025 Still in Queue · SQ-LP. All rights reserved.</p>
+    <p>
+      <span data-i18n="footer.contactLabel">contact :</span>
+      <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a>
+    </p>
   </footer>
 
   <!-- Sparkles (YELLOW bubbles + SILVER stars), full-viewport, DPR-aware, with safe fade in/out -->
@@ -520,15 +565,15 @@
     matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`).addEventListener?.('change', resize);
 
     // ===== Config (YELLOW variant) =====
-    const YELLOW = '#facc15'; // bubbles
-    const SILVER = '#e5e7eb'; // stars
+    const YELLOW = '#facc15';
+    const SILVER = '#e5e7eb';
 
-    const STEP        = 4;    // sample spacing along pointer path
-    const PER_STEP    = 4;    // bubbles per sample
+    const STEP        = 4;
+    const PER_STEP    = 4;
     const POS_JIT     = 12;
     const POS_JIT_PCT = 0.40;
 
-    const LIFE_MIN    = 900;  // ms
+    const LIFE_MIN    = 900;
     const LIFE_VAR    = 600;
     const FRICTION    = 0.992;
     const GRAVITY     = 0.007;
@@ -544,12 +589,11 @@
     const IDLE_SPREAD   = 18;
     const IDLE_SPEED    = 0.5;
 
-    const MAX = 620; // ring buffer size
+    const MAX = 620;
 
     const P = new Array(MAX).fill(null);
     let head = 0;
 
-    // Visibility control to prevent yellow wash on load
     let visible = false;
     let lastNonEmptyAt = performance.now();
     function showCanvas(){ if (!visible){ canvas.style.opacity = '1'; visible = true; } }
@@ -742,7 +786,12 @@
   })();
   </script>
 
-<script>
+  <!-- Shared translations + main behavior -->
+  <script src="translations.js"></script>
+  <script src="main.js"></script>
+
+  <!-- Nav & reveal -->
+  <script>
   document.addEventListener("DOMContentLoaded", () => {
     const toggle = document.querySelector(".nav-toggle");
     const nav = document.querySelector(".site-nav");
@@ -755,14 +804,12 @@
       });
     }
 
-    // Let the browser handle #hash scrolling; we only manage active state + close nav
+    // Let browser handle #hash scrolling; we only manage active state + close nav
     navLinks.forEach((link) => {
       const href = link.getAttribute("href") || "";
 
       if (href.startsWith("#")) {
         link.addEventListener("click", () => {
-          // allow native scrolling (no preventDefault)
-          // update active pill after hash change
           setTimeout(() => {
             navLinks.forEach((l) => l.classList.remove("active"));
             link.classList.add("active");
@@ -771,7 +818,6 @@
           if (nav) nav.classList.remove("nav-open");
         });
       } else {
-        // external links (like index.html), just close the mobile menu
         link.addEventListener("click", () => {
           if (nav) nav.classList.remove("nav-open");
         });
@@ -790,7 +836,7 @@
     window.addEventListener("scroll", onScroll);
     onScroll();
   });
-</script>
+  </script>
 
 </body>
 </html>

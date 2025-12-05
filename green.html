@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-page="ge">
 <head>
   <meta charset="UTF-8" />
-  <title>Still In Queue · Green Energy</title>
+  <title data-i18n="ge.meta.title">Still In Queue · Green Energy</title>
   <link rel="icon" type="image/png" href="Fav-Photoroom.png">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
@@ -74,6 +74,39 @@
       color:#022c22; border-color:rgba(240,253,244,.95);
       background:linear-gradient(135deg, #22c55e, #4ade80, #16a34a);
       box-shadow:0 18px 40px rgba(15,23,42,.9); transform:translateY(-1px);
+    }
+
+    /* ===== Language Switch ===== */
+    .lang-switch {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    .lang-switch span.separator {
+      opacity: 0.6;
+      color: #e5e7eb;
+    }
+    .lang-link {
+      text-decoration: none;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: #e5e7eb;
+      transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+    }
+    .lang-link:hover {
+      border-color: rgba(248, 250, 252, 0.85);
+      background: rgba(15, 23, 42, 0.9);
+      transform: translateY(-1px);
+    }
+    .lang-link.active-lang {
+      background: linear-gradient(135deg, #22c55e, #4ade80, #a3e635);
+      color: #022c22;
+      border-color: rgba(248, 250, 252, 0.95);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.85);
     }
 
     .auth-buttons{ display:flex; align-items:center; }
@@ -208,6 +241,10 @@
     }
     .about-note{ margin-top:1rem; font-size:.9rem; padding:.85rem 1rem; border-radius:1rem; border:1px dashed rgba(34,197,94,.8); background:rgba(15,23,42,.9); color:var(--text-muted); line-height:1.6; }
 
+    /* ===== Reveal Animation ===== */
+    .reveal { opacity: 0; transform: translateY(14px); transition: opacity 400ms ease-out, transform 400ms ease-out; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
     /* ===== Footer ===== */
     .site-footer{
       border-top:1px solid rgba(148,163,184,.25);
@@ -236,6 +273,7 @@
       .section{ padding-inline:1.5rem; }
       .section-header{ flex-direction:column; align-items:flex-start; }
       .solutions-grid{ grid-template-columns:minmax(0, 1fr); }
+      .lang-switch { font-size: 0.7rem; }
     }
   </style>
 </head>
@@ -254,14 +292,21 @@
 
     <div class="header-right">
       <nav class="site-nav">
-        <a href="#top" class="nav-home active">Home</a>
-        <a href="#solutions" class="nav-solutions">Solutions</a>
-        <a href="#planning" class="nav-planning">Calculator &amp; Planning</a>
-        <a href="#projects" class="nav-projects">Projects</a>
-        <a href="#about" class="nav-about">About</a>
+        <a href="#top" class="nav-home active" data-i18n="ge.nav.home">Home</a>
+        <a href="#solutions" class="nav-solutions" data-i18n="ge.nav.solutions">Solutions</a>
+        <a href="#planning" class="nav-planning" data-i18n="ge.nav.planning">Calculator &amp; Planning</a>
+        <a href="#projects" class="nav-projects" data-i18n="ge.nav.projects">Projects</a>
+        <a href="#about" class="nav-about" data-i18n="ge.nav.about">About</a>
       </nav>
+
+      <div class="lang-switch">
+        <a href="green.html?lang=en" class="lang-link" data-lang="en">EN</a>
+        <span class="separator">/</span>
+        <a href="green.html?lang=de" class="lang-link" data-lang="de">DE</a>
+      </div>
+
       <div class="auth-buttons">
-        <a href="#auth" class="auth-primary">Login / Sign Up</a>
+        <a href="#auth" class="auth-primary" data-i18n="auth.cta">Login / Sign Up</a>
       </div>
     </div>
   </header>
@@ -271,37 +316,39 @@
     <div class="hero-bg"></div>
     <div class="hero-shell"></div>
     <div class="hero-inner">
-      <div class="hero-kicker">SQ-GE · Green Energy</div>
-      <h1 class="hero-title">Solar, Explained &amp; Planned</h1>
-      <div class="hero-pill">Phase 1 · Concept Platform</div>
-      <p class="hero-subline">
+      <div class="hero-kicker" data-i18n="ge.hero.kicker">SQ-GE · Green Energy</div>
+      <h1 class="hero-title" data-i18n="ge.hero.title">Solar, Explained &amp; Planned</h1>
+      <div class="hero-pill" data-i18n="ge.hero.pill">Phase 1 · Concept Platform</div>
+      <p class="hero-subline" data-i18n="ge.hero.line1">
         SQ-GE is a platform that helps you compare world-class
         solar panels and equipment, understand investment and subsidies, and
         plan installations — from a single rooftop to large-scale projects.
       </p>
-      <p class="hero-subline">
+      <p class="hero-subline" data-i18n="ge.hero.line2">
         The idea is to make <strong>renewable decisions clear</strong>:
         what to buy, how much it costs, when it breaks even, and how it fits
         into long-term, sustainable income.
       </p>
-      <div class="hero-bullets">COMPARE · CALCULATE · PLAN · INSTALL</div>
+      <div class="hero-bullets" data-i18n="ge.hero.bullets">COMPARE · CALCULATE · PLAN · INSTALL</div>
       <div class="hero-cta">
-        <a href="#solutions" class="btn-primary">Explore Green Solutions</a>
-        <a href="#planning" class="btn-ghost">See Planning Concept</a>
+        <a href="#solutions" class="btn-primary" data-i18n="ge.hero.cta.primary">Explore Green Solutions</a>
+        <a href="#planning" class="btn-ghost" data-i18n="ge.hero.cta.secondary">See Planning Concept</a>
       </div>
     </div>
-    <div class="scroll-indicator">Scroll</div>
+    <div class="scroll-indicator" data-i18n="hero.scroll">Scroll</div>
   </main>
 
   <!-- Solutions -->
   <section id="solutions" class="section reveal">
-    <div class="section-chip"><span>Solutions</span></div>
+    <div class="section-chip">
+      <span data-i18n="ge.solutions.chip">Solutions</span>
+    </div>
     <div class="section-header">
       <div>
-        <div class="section-kicker">Solutions</div>
-        <h2 class="section-title">Compare Solar Options</h2>
+        <div class="section-kicker" data-i18n="ge.solutions.kicker">Solutions</div>
+        <h2 class="section-title" data-i18n="ge.solutions.title">Compare Solar Options</h2>
       </div>
-      <p class="section-desc">
+      <p class="section-desc" data-i18n="ge.solutions.desc">
         In a later phase, this becomes an interactive comparison tool with
         real products and specs. For now, it outlines how SQ-GE will think
         about equipment and recommendations.
@@ -310,48 +357,50 @@
 
     <div class="solutions-grid">
       <article class="solution-card">
-        <div class="solution-tag">Panels</div>
-        <h3 class="solution-title">Solar Panel Matching</h3>
-        <p class="solution-text">
+        <div class="solution-tag" data-i18n="ge.solutions.card1.tag">Panels</div>
+        <h3 class="solution-title" data-i18n="ge.solutions.card1.title">Solar Panel Matching</h3>
+        <p class="solution-text" data-i18n="ge.solutions.card1.text">
           Compare leading panels globally: efficiency, temperature
           behaviour, warranty, and cost per watt. Match products to roof
           size, climate, and budget.
         </p>
-        <div class="solution-meta">Inputs: roof area · location · budget</div>
+        <div class="solution-meta" data-i18n="ge.solutions.card1.meta">Inputs: roof area · location · budget</div>
       </article>
 
       <article class="solution-card">
-        <div class="solution-tag">Inverters &amp; Storage</div>
-        <h3 class="solution-title">Inverters &amp; Battery Planning</h3>
-        <p class="solution-text">
+        <div class="solution-tag" data-i18n="ge.solutions.card2.tag">Inverters &amp; Storage</div>
+        <h3 class="solution-title" data-i18n="ge.solutions.card2.title">Inverters &amp; Battery Planning</h3>
+        <p class="solution-text" data-i18n="ge.solutions.card2.text">
           Choose the right inverter and optional battery based on load
           profiles, backup requirements, and grid conditions.
         </p>
-        <div class="solution-meta">Inputs: usage pattern · backup hours</div>
+        <div class="solution-meta" data-i18n="ge.solutions.card2.meta">Inputs: usage pattern · backup hours</div>
       </article>
 
       <article class="solution-card">
-        <div class="solution-tag">Packages</div>
-        <h3 class="solution-title">Home &amp; Business Bundles</h3>
-        <p class="solution-text">
+        <div class="solution-tag" data-i18n="ge.solutions.card3.tag">Packages</div>
+        <h3 class="solution-title" data-i18n="ge.solutions.card3.title">Home &amp; Business Bundles</h3>
+        <p class="solution-text" data-i18n="ge.solutions.card3.text">
           Pre-defined system sizes and package ideas for homes, apartments,
           small businesses, and commercial rooftops, including estimated
           energy output.
         </p>
-        <div class="solution-meta">Outputs: kW size · annual kWh</div>
+        <div class="solution-meta" data-i18n="ge.solutions.card3.meta">Outputs: kW size · annual kWh</div>
       </article>
     </div>
   </section>
 
   <!-- Planning -->
   <section id="planning" class="section reveal">
-    <div class="section-chip"><span>Planning</span></div>
+    <div class="section-chip">
+      <span data-i18n="ge.planning.chip">Planning</span>
+    </div>
     <div class="section-header">
       <div>
-        <div class="section-kicker">Calculator &amp; Planning</div>
-        <h2 class="section-title">Understand Costs &amp; Breakeven</h2>
+        <div class="section-kicker" data-i18n="ge.planning.kicker">Calculator &amp; Planning</div>
+        <h2 class="section-title" data-i18n="ge.planning.title">Understand Costs &amp; Breakeven</h2>
       </div>
-      <p class="section-desc">
+      <p class="section-desc" data-i18n="ge.planning.desc">
         SQ-GE is also a planning tool. It doesn’t just show hardware — it
         explains the numbers: investment, subsidies, savings, and payback.
       </p>
@@ -359,41 +408,41 @@
 
     <div class="two-col">
       <div class="card-soft">
-        <h3>Investment &amp; Breakeven Concept</h3>
-        <p>
+        <h3 data-i18n="ge.planning.card1.title">Investment &amp; Breakeven Concept</h3>
+        <p data-i18n="ge.planning.card1.text">
           A future calculator will estimate upfront cost, monthly savings,
           and how many years it takes to recover the investment, with and
           without subsidies.
         </p>
         <ul class="list-clean">
-          <li>System cost breakdown: panels, inverters, structure, wiring, labour.</li>
-          <li>Expected monthly generation based on location &amp; tilt.</li>
-          <li>Current electricity tariff vs. solar savings.</li>
-          <li>Simple &amp; discounted payback period.</li>
+          <li data-i18n="ge.planning.card1.li1">System cost breakdown: panels, inverters, structure, wiring, labour.</li>
+          <li data-i18n="ge.planning.card1.li2">Expected monthly generation based on location &amp; tilt.</li>
+          <li data-i18n="ge.planning.card1.li3">Current electricity tariff vs. solar savings.</li>
+          <li data-i18n="ge.planning.card1.li4">Simple &amp; discounted payback period.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Capex vs Opex</span>
-          <span class="badge-pill">Subsidy impact</span>
-          <span class="badge-pill">ROI timeline</span>
+          <span class="badge-pill" data-i18n="ge.planning.card1.badge1">Capex vs Opex</span>
+          <span class="badge-pill" data-i18n="ge.planning.card1.badge2">Subsidy impact</span>
+          <span class="badge-pill" data-i18n="ge.planning.card1.badge3">ROI timeline</span>
         </div>
       </div>
 
       <div class="card-soft">
-        <h3>Subsidies &amp; Policy Awareness</h3>
-        <p>
+        <h3 data-i18n="ge.planning.card2.title">Subsidies &amp; Policy Awareness</h3>
+        <p data-i18n="ge.planning.card2.text">
           Over time, SQ-GE will map central and state-level subsidy schemes,
           especially in regions like Andhra Pradesh, and show how they affect
           payback.
         </p>
         <ul class="list-clean">
-          <li>Residential rooftop incentives.</li>
-          <li>Commercial and industrial schemes.</li>
-          <li>Net-metering rules and export tariffs.</li>
+          <li data-i18n="ge.planning.card2.li1">Residential rooftop incentives.</li>
+          <li data-i18n="ge.planning.card2.li2">Commercial and industrial schemes.</li>
+          <li data-i18n="ge.planning.card2.li3">Net-metering rules and export tariffs.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Govt schemes</span>
-          <span class="badge-pill">Eligibility</span>
-          <span class="badge-pill">Updated policy view</span>
+          <span class="badge-pill" data-i18n="ge.planning.card2.badge1">Govt schemes</span>
+          <span class="badge-pill" data-i18n="ge.planning.card2.badge2">Eligibility</span>
+          <span class="badge-pill" data-i18n="ge.planning.card2.badge3">Updated policy view</span>
         </div>
       </div>
     </div>
@@ -401,13 +450,15 @@
 
   <!-- Projects -->
   <section id="projects" class="section reveal">
-    <div class="section-chip"><span>Projects</span></div>
+    <div class="section-chip">
+      <span data-i18n="ge.projects.chip">Projects</span>
+    </div>
     <div class="section-header">
       <div>
-        <div class="section-kicker">Projects</div>
-        <h2 class="section-title">From Rooftops to Fields</h2>
+        <div class="section-kicker" data-i18n="ge.projects.kicker">Projects</div>
+        <h2 class="section-title" data-i18n="ge.projects.title">From Rooftops to Fields</h2>
       </div>
-      <p class="section-desc">
+      <p class="section-desc" data-i18n="ge.projects.desc">
         The long-term plan is not just advisory — SQ-GE aims to support
         real installations and, later, larger projects.
       </p>
@@ -415,40 +466,40 @@
 
     <div class="two-col">
       <div class="card-soft">
-        <h3>Residential &amp; Small Commercial</h3>
-        <p>
+        <h3 data-i18n="ge.projects.card1.title">Residential &amp; Small Commercial</h3>
+        <p data-i18n="ge.projects.card1.text">
           Start with individual customers: homes, apartments, shops, and
           offices. Provide consulting, design proposals, and connect to
           installation partners.
         </p>
         <ul class="list-clean">
-          <li>Site assessment and basic layout concepts.</li>
-          <li>Estimated production and savings report.</li>
-          <li>Partner installer matching (future phase).</li>
+          <li data-i18n="ge.projects.card1.li1">Site assessment and basic layout concepts.</li>
+          <li data-i18n="ge.projects.card1.li2">Estimated production and savings report.</li>
+          <li data-i18n="ge.projects.card1.li3">Partner installer matching (future phase).</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Rooftops</span>
-          <span class="badge-pill">Shops &amp; offices</span>
-          <span class="badge-pill">Proposals</span>
+          <span class="badge-pill" data-i18n="ge.projects.card1.badge1">Rooftops</span>
+          <span class="badge-pill" data-i18n="ge.projects.card1.badge2">Shops &amp; offices</span>
+          <span class="badge-pill" data-i18n="ge.projects.card1.badge3">Proposals</span>
         </div>
       </div>
 
       <div class="card-soft">
-        <h3>Large-Scale &amp; Government Projects</h3>
-        <p>
+        <h3 data-i18n="ge.projects.card2.title">Large-Scale &amp; Government Projects</h3>
+        <p data-i18n="ge.projects.card2.text">
           A later phase aims at larger installations such as mass rooftop
           programs and solar fields — for example in Andhra Pradesh — aligned
           with government tenders and long-term PPAs.
         </p>
         <ul class="list-clean">
-          <li>High-level feasibility and sizing concepts.</li>
-          <li>Dashboard-style overviews of project pipelines.</li>
-          <li>Focus on steady, sustainable income after the initial years.</li>
+          <li data-i18n="ge.projects.card2.li1">High-level feasibility and sizing concepts.</li>
+          <li data-i18n="ge.projects.card2.li2">Dashboard-style overviews of project pipelines.</li>
+          <li data-i18n="ge.projects.card2.li3">Focus on steady, sustainable income after the initial years.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Andhra Pradesh focus</span>
-          <span class="badge-pill">Govt tenders</span>
-          <span class="badge-pill">Long-term revenue</span>
+          <span class="badge-pill" data-i18n="ge.projects.card2.badge1">Andhra Pradesh focus</span>
+          <span class="badge-pill" data-i18n="ge.projects.card2.badge2">Govt tenders</span>
+          <span class="badge-pill" data-i18n="ge.projects.card2.badge3">Long-term revenue</span>
         </div>
       </div>
     </div>
@@ -456,24 +507,28 @@
 
   <!-- About -->
   <section id="about" class="section reveal">
-    <div class="section-chip"><span>About</span></div>
+    <div class="section-chip">
+      <span data-i18n="ge.about.chip">About</span>
+    </div>
     <div class="about-card">
-      <div class="section-kicker">About · SQ-GE</div>
-      <h2 class="section-title" style="margin-bottom:.7rem;">Why Green Energy is a Fold of Sique</h2>
-      <p style="font-size:.96rem;color:var(--text-muted);line-height:1.8;">
+      <div class="section-kicker" data-i18n="ge.about.kicker">About · SQ-GE</div>
+      <h2 class="section-title" style="margin-bottom:.7rem;" data-i18n="ge.about.title">
+        Why Green Energy is a Fold of Sique
+      </h2>
+      <p style="font-size:.96rem;color:var(--text-muted);line-height:1.8;" data-i18n="ge.about.p1">
         SQ-GE is the renewable fold of Still In Queue — a way to use data,
         planning, and software thinking to make solar adoption easier. It
         accepts that green projects are often high investment with delayed
         returns, but focuses on the long-term benefits: environment, stability,
         and recurring income.
       </p>
-      <p style="font-size:.96rem;color:var(--text-muted);line-height:1.8;margin-top:.6rem;">
+      <p style="font-size:.96rem;color:var(--text-muted);line-height:1.8;margin-top:.6rem;" data-i18n="ge.about.p2">
         This page is the concept design. Future versions will connect to real
         product feeds, pricing APIs, policy databases, and project tracking
         tools, built on a Python backend — so SQ-GE can move from explanation
         into execution.
       </p>
-      <div class="about-note">
+      <div class="about-note" data-i18n="ge.about.note">
         High-level path:<br><br>
         <strong>Phase 1:</strong> Concept site &amp; explanation tools.<br>
         <strong>Phase 2:</strong> Solar comparison + basic calculators.<br>
@@ -484,8 +539,11 @@
   </section>
 
   <footer class="site-footer">
-    <p>© 2025 Still in Queue · SQ-GE. All rights reserved.</p>
-    <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
+    <p data-i18n="ge.footer.copy">© 2025 Still in Queue · SQ-GE. All rights reserved.</p>
+    <p>
+      <span data-i18n="footer.contactLabel">contact :</span>
+      <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a>
+    </p>
   </footer>
 
   <!-- Sparkles (GREEN bubbles + SILVER stars) with safe fade in/out -->
@@ -517,7 +575,7 @@
       visualViewport.addEventListener('resize', resize);
       visualViewport.addEventListener('scroll', resize);
     }
-    matchMedia(\`(resolution: \${window.devicePixelRatio || 1}dppx)\`).addEventListener?.('change', resize);
+    matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`).addEventListener?.('change', resize);
 
     // ===== Config (GREEN variant) =====
     const GREEN  = '#22c55e';
@@ -549,7 +607,7 @@
       const n=hex.replace('#','');
       const v=parseInt(n.length===3 ? n.split('').map(c=>c+c).join('') : n,16);
       const r=(v>>16)&255, g=(v>>8)&255, b=v&255;
-      return \`rgba(\${r},\${g},\${b},\${a})\`;
+      return `rgba(${r},${g},${b},${a})`;
     };
 
     function drawBubble(x,y,r,color,alpha){
@@ -697,31 +755,41 @@
   })();
   </script>
 
+  <!-- Shared translations + main behavior -->
+  <script src="translations.js"></script>
+  <script src="main.js"></script>
+
+  <!-- Page-specific nav & reveal (same pattern as cc.html) -->
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const toggle = document.querySelector(".nav-toggle");
       const nav = document.querySelector(".site-nav");
       const navLinks = document.querySelectorAll(".site-nav a");
 
-      // Mobile toggle
+      // Mobile navigation toggle
       if (toggle && nav) {
-        toggle.addEventListener("click", () => nav.classList.toggle("nav-open"));
+        toggle.addEventListener("click", () => {
+          nav.classList.toggle("nav-open");
+        });
       }
 
-      // Smooth scroll + active pill
+      // Let browser handle #hash scrolling; we just manage active state + close nav
       navLinks.forEach((link) => {
         const href = link.getAttribute("href") || "";
+
         if (href.startsWith("#")) {
-          link.addEventListener("click", (e) => {
-            e.preventDefault();
-            const target = document.querySelector(href);
-            if (target) target.scrollIntoView({ behavior: "smooth" });
-            navLinks.forEach((l) => l.classList.remove("active"));
-            link.classList.add("active");
-            nav.classList.remove("nav-open");
+          link.addEventListener("click", () => {
+            setTimeout(() => {
+              navLinks.forEach((l) => l.classList.remove("active"));
+              link.classList.add("active");
+            }, 0);
+
+            if (nav) nav.classList.remove("nav-open");
           });
         } else {
-          link.addEventListener("click", () => nav.classList.remove("nav-open"));
+          link.addEventListener("click", () => {
+            if (nav) nav.classList.remove("nav-open");
+          });
         }
       });
 
@@ -740,3 +808,4 @@
   </script>
 </body>
 </html>
+

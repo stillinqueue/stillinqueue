@@ -72,7 +72,7 @@
 
     .site-nav {
       display: flex; align-items: center; gap: 2.4rem;
-      margin-left: 3rem; /* gap between logo and first nav item */
+      margin-left: 3rem;
       font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.18em;
     }
 
@@ -91,7 +91,6 @@
         transform var(--transition-fast);
     }
 
-    /* Base hover for non-active links */
     .site-nav a:not(.active):hover {
       color: #020617;
       box-shadow: 0 18px 40px rgba(15, 23, 42, 0.7);
@@ -99,27 +98,24 @@
       border-color: rgba(248, 250, 252, 0.9);
     }
 
-    /* Per-fold hover gradients (non-active only) */
-    .site-nav a.nav-ai:not(.active):hover { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+    .site-nav a.nav-ai:not(.active):hover       { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
     .site-nav a.nav-learning:not(.active):hover { background: linear-gradient(90deg, #facc15, #fde047); }
-    .site-nav a.nav-green:not(.active):hover { background: linear-gradient(135deg, #22c55e, #16a34a); }
-    .site-nav a.nav-coffee:not(.active):hover { background: linear-gradient(135deg, #fb923c, #f97316); }
-    .site-nav a.nav-about:not(.active):hover { background: linear-gradient(135deg, #ec4899, #a855f7); }
+    .site-nav a.nav-green:not(.active):hover    { background: linear-gradient(135deg, #22c55e, #16a34a); }
+    .site-nav a.nav-coffee:not(.active):hover   { background: linear-gradient(135deg, #fb923c, #f97316); }
+    .site-nav a.nav-about:not(.active):hover    { background: linear-gradient(135deg, #ec4899, #a855f7); }
 
-    /* Active pills (clicked item stays highlighted) */
     .site-nav a.active {
       color: #020617;
       box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
       transform: translateY(-1px);
       border-color: rgba(248, 250, 252, 0.95);
     }
-    .site-nav a.nav-ai.active { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+    .site-nav a.nav-ai.active       { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
     .site-nav a.nav-learning.active { background: linear-gradient(90deg, #facc15, #fde047); }
-    .site-nav a.nav-green.active { background: linear-gradient(135deg, #22c55e, #16a34a); }
-    .site-nav a.nav-coffee.active { background: linear-gradient(135deg, #fb923c, #f97316); }
-    .site-nav a.nav-about.active { background: linear-gradient(135deg, #ec4899, #a855f7); }
+    .site-nav a.nav-green.active    { background: linear-gradient(135deg, #22c55e, #16a34a); }
+    .site-nav a.nav-coffee.active   { background: linear-gradient(135deg, #fb923c, #f97316); }
+    .site-nav a.nav-about.active    { background: linear-gradient(135deg, #ec4899, #a855f7); }
 
-    /* Login / Sign up pill */
     .auth-buttons { display: flex; align-items: center; }
     .auth-primary {
       font-size: 0.8rem;
@@ -154,6 +150,44 @@
       cursor: pointer;
     }
     .nav-toggle span { width: 1.5rem; height: 2px; border-radius: 999px; background: #e5e7eb; }
+
+    /* ===== Language Switcher ===== */
+    .lang-switch {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-muted);
+    }
+
+    .lang-switch a {
+      text-decoration: none;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        color var(--transition-fast),
+        transform var(--transition-fast);
+    }
+
+    .lang-switch a:hover {
+      border-color: rgba(148, 163, 184, 0.9);
+      background: rgba(15, 23, 42, 0.95);
+      color: var(--text-main);
+      transform: translateY(-1px);
+    }
+
+    .lang-switch .lang-active {
+      border-color: rgba(248, 250, 252, 0.95);
+      background: rgba(248, 250, 252, 0.95);
+      color: #020617;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.8);
+    }
 
     /* ===== Hero Section ===== */
     .hero {
@@ -274,10 +308,10 @@
     .pillar-card:hover::before { opacity: 1; }
     .pillars-link:hover { background: rgba(30, 64, 175, 0.95); border-color: rgba(248, 250, 252, 0.9); transform: translateY(-1px); }
 
-    .pillar-ai::before { background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.7), transparent 55%); }
-    .pillar-learning::before { background: radial-gradient(circle at 100% 0, rgba(250, 204, 21, 0.7), transparent 55%); }
-    .pillar-green::before { background: radial-gradient(circle at 0 100%, rgba(34, 197, 94, 0.7), transparent 55%); }
-    .pillar-coffee::before { background: radial-gradient(circle at 100% 100%, rgba(248, 139, 60, 0.8), transparent 55%); }
+    .pillar-ai::before      { background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.7), transparent 55%); }
+    .pillar-learning::before{ background: radial-gradient(circle at 100% 0, rgba(250, 204, 21, 0.7), transparent 55%); }
+    .pillar-green::before   { background: radial-gradient(circle at 0 100%, rgba(34, 197, 94, 0.7), transparent 55%); }
+    .pillar-coffee::before  { background: radial-gradient(circle at 100% 100%, rgba(248, 139, 60, 0.8), transparent 55%); }
 
     /* ===== About Block ===== */
     .section-block { padding: 3.5rem 5vw 0; max-width: 880px; margin: 0 auto; border-top: 1px solid rgba(31, 41, 55, 0.8); margin-top: 3rem; scroll-margin-top: 9rem; }
@@ -336,7 +370,6 @@
 </head>
 <body>
   <header class="site-header">
-    <!-- Logo: back to this index page -->
     <a href="index.html" class="logo">
       <img src="SQ-Group-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
     </a>
@@ -347,120 +380,125 @@
 
     <div class="header-right">
       <nav class="site-nav">
-        <!-- All main items jump to sections on this page -->
-        <a href="#pillars" class="nav-ai">Artificial Intelligence</a>
-        <a href="#pillars" class="nav-learning">Learning Platform</a>
-        <a href="#pillars" class="nav-green">Green Energy</a>
-        <a href="#pillars" class="nav-coffee">Coffee-Cream</a>
-        <a href="#about" class="nav-about">About</a>
+        <a href="#pillars" class="nav-ai"       data-i18n="nav.ai">Artificial Intelligence</a>
+        <a href="#pillars" class="nav-learning" data-i18n="nav.learning">Learning Platform</a>
+        <a href="#pillars" class="nav-green"    data-i18n="nav.green">Green Energy</a>
+        <a href="#pillars" class="nav-coffee"   data-i18n="nav.coffee">Coffee-Cream</a>
+        <a href="#about"   class="nav-about"    data-i18n="nav.about">About</a>
       </nav>
 
+      <div class="lang-switch">
+        <!-- NOTE: no /de URL anymore; just # -->
+        <a href="#" data-lang="en" class="lang-active">EN</a>
+        <a href="#" data-lang="de">DE</a>
+      </div>
+
       <div class="auth-buttons">
-        <a href="#auth" class="auth-primary">Login / Sign Up</a>
+        <a href="#auth" class="auth-primary" data-i18n="auth.cta">Login / Sign Up</a>
       </div>
     </div>
   </header>
 
-  <!-- Sparkles overlay (fixed, full-screen) -->
+  <!-- Sparkles overlay -->
   <canvas id="sparkle-canvas" class="pointer-events-none fixed inset-0 z-50" aria-hidden="true"></canvas>
 
-  <!-- Hero / Home -->
+  <!-- Hero -->
   <main id="home" class="hero">
     <div class="hero-bg"></div>
     <div class="hero-shell"></div>
 
     <div class="hero-inner">
-      <h1 class="hero-title">Still In Queue</h1>
-      <div class="hero-badge">Phase 1 · Concept Platform</div>
-      <p class="hero-subline">
+      <h1 class="hero-title" data-i18n="hero.title">Still In Queue</h1>
+      <div class="hero-badge" data-i18n="hero.badge">Phase 1 · Concept Platform</div>
+      <p class="hero-subline" data-i18n="hero.line1">
         <strong>Sique</strong> is a four-fold startup ecosystem that brings together
         <strong>Artificial Intelligence</strong>, a modern <strong>Learning Platform</strong>,
         <strong>Green Energy</strong> solutions, and a curated <strong>Coffee &amp; Cream</strong> experience.
       </p>
-      <p class="hero-subline">
+      <p class="hero-subline" data-i18n="hero.line2">
         Built step by step, it connects software, education, sustainability, and lifestyle into
         one evolving brand.
       </p>
-      <div class="hero-tagline">AI · Learning · Energy · Coffee</div>
+      <div class="hero-tagline" data-i18n="hero.tagline">AI · Learning · Energy · Coffee</div>
 
       <div class="hero-cta">
-        <a href="#pillars" class="btn-primary">Explore the Four Folds</a>
-        <a href="#about" class="btn-ghost">About Sique</a>
+        <a href="#pillars" class="btn-primary" data-i18n="hero.cta.primary">Explore the Four Folds</a>
+        <a href="#about" class="btn-ghost" data-i18n="hero.cta.secondary">About Sique</a>
       </div>
     </div>
 
-    <div class="scroll-indicator">Scroll</div>
+    <div class="scroll-indicator" data-i18n="hero.scroll">Scroll</div>
   </main>
 
-  <!-- 2x2 Highlight Grid -->
+  <!-- Pillars -->
   <section id="pillars" class="pillars-section reveal">
-    <h2 class="pillars-title">The Four Folds</h2>
+    <h2 class="pillars-title" data-i18n="pillars.title">The Four Folds</h2>
     <div class="pillars-grid">
       <article class="pillar-card pillar-ai">
-        <div class="pillar-tag">SQ-AI · Blue</div>
-        <h2>Artificial Intelligence</h2>
-        <p>
+        <div class="pillar-tag" data-i18n="pillars.ai.tag">SQ-AI · Blue</div>
+        <h2 data-i18n="pillars.ai.title">Artificial Intelligence</h2>
+        <p data-i18n="pillars.ai.body">
           Visual automations and interactive AI agents that keep an eye on
           markets, travel, life goals, and routines — built around drag-and-drop
           workflows.
         </p>
-        <a href="agents.html" class="pillars-link">
+        <a href="agents.html" class="pillars-link" data-i18n="pillars.learnMore">
           Learn more <span>→</span>
         </a>
       </article>
 
       <article class="pillar-card pillar-learning">
-        <div class="pillar-tag">SQ-LP · Yellow</div>
-        <h2>Learning Platform</h2>
-        <p>
+        <div class="pillar-tag" data-i18n="pillars.lp.tag">SQ-LP · Yellow</div>
+        <h2 data-i18n="pillars.lp.title">Learning Platform</h2>
+        <p data-i18n="pillars.lp.body">
           A learning space for all ages: courses, sports academies, arts, and
           language training — supported by AI to guide, coach, and connect.
         </p>
-        <a href="learning.html" class="pillars-link">
+        <a href="learning.html" class="pillars-link" data-i18n="pillars.learnMore">
           Learn more <span>→</span>
         </a>
       </article>
 
       <article class="pillar-card pillar-green">
-        <div class="pillar-tag">SQ-GE · Green</div>
-        <h2>Green Energy</h2>
-        <p>
+        <div class="pillar-tag" data-i18n="pillars.ge.tag">SQ-GE · Green</div>
+        <h2 data-i18n="pillars.ge.title">Green Energy</h2>
+        <p data-i18n="pillars.ge.body">
           A platform to compare world-class solar solutions, plan installations,
           and understand costs and breakeven points for sustainable energy.
         </p>
-        <a href="green.html" class="pillars-link">
+        <a href="green.html" class="pillars-link" data-i18n="pillars.learnMore">
           Learn more <span>→</span>
         </a>
       </article>
 
       <article class="pillar-card pillar-coffee">
-        <div class="pillar-tag">SQ-CC · Orange</div>
-        <h2>Coffee &amp; Cream</h2>
-        <p>
+        <div class="pillar-tag" data-i18n="pillars.cc.tag">SQ-CC · Orange</div>
+        <h2 data-i18n="pillars.cc.title">Coffee &amp; Cream</h2>
+        <p data-i18n="pillars.cc.body">
           A premium Spaghettieis and coffee concept in Hyderabad, with organic,
           health-focused menu options and a carefully designed, appointment-only ambience.
         </p>
-        <a href="cc.html" class="pillars-link">
+        <a href="cc.html" class="pillars-link" data-i18n="pillars.learnMore">
           Learn more <span>→</span>
         </a>
       </article>
     </div>
   </section>
 
-  <!-- About Only -->
+  <!-- About -->
   <section id="about" class="section-block reveal">
     <div class="section-block-inner">
-      <div class="section-label">About · Still In Queue</div>
-      <h2>The Idea Behind Sique</h2>
-      <p>
+      <div class="section-label" data-i18n="about.label">About · Still In Queue</div>
+      <h2 data-i18n="about.title">The Idea Behind Sique</h2>
+      <p data-i18n="about.p1">
         Still In Queue (Sique) is a long-term vision to use AI to transform how people experience technology, learning, sustainability, and coffee through smart, connected platforms.
       </p>
-      <p>
+      <p data-i18n="about.p2">
         The plan is to grow carefully: begin with digital products and AI
         systems, then expand into green energy projects and physical spaces once
         the foundation is stable.
       </p>
-      <p class="about-note">
+      <p class="about-note" data-i18n="about.note">
         This website is Phase 1: a front-end that introduces the four folds.
         Future phases will add user accounts, backends in Python, data
         engineering pipelines, and fully functional platforms under the
@@ -470,317 +508,15 @@
   </section>
 
   <footer class="site-footer">
-    <p>© 2025 Still in Queue. All rights reserved.</p>
-    <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
+    <p data-i18n="footer.copy">© 2025 Still in Queue. All rights reserved.</p>
+    <p>
+      <span data-i18n="footer.contactLabel">contact :</span>
+      <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a>
+    </p>
   </footer>
 
-  <!-- Site JS -->
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const toggle = document.querySelector(".nav-toggle");
-      const nav = document.querySelector(".site-nav");
-      const navLinks = document.querySelectorAll(".site-nav a");
-
-      // Mobile navigation toggle
-      if (toggle && nav) {
-        toggle.addEventListener("click", () => {
-          nav.classList.toggle("nav-open");
-        });
-      }
-
-      // Smooth scroll + active pill switching
-      navLinks.forEach((link) => {
-        const href = link.getAttribute("href") || "";
-
-        if (href.startsWith("#")) {
-          link.addEventListener("click", (e) => {
-            e.preventDefault();
-            const target = document.querySelector(href);
-            if (target) target.scrollIntoView({ behavior: "smooth" });
-
-            navLinks.forEach((l) => l.classList.remove("active"));
-            link.classList.add("active");
-            if (nav) nav.classList.remove("nav-open");
-          });
-        } else {
-          link.addEventListener("click", () => {
-            if (nav) nav.classList.remove("nav-open");
-          });
-        }
-      });
-
-      // Simple scroll reveal
-      const revealElements = document.querySelectorAll(".reveal");
-      const onScroll = () => {
-        const triggerBottom = window.innerHeight * 0.85;
-        revealElements.forEach((el) => {
-          const boxTop = el.getBoundingClientRect().top;
-          if (boxTop < triggerBottom) el.classList.add("visible");
-        });
-      };
-      window.addEventListener("scroll", onScroll);
-      onScroll();
-    });
-  </script>
-
-  <!-- Sparkle trail: faster motion + idle twinkle -->
-  <script>
-  (() => {
-    const HONOR_REDUCED_MOTION = false;
-    if (document.documentElement.dataset.sparkles === 'off') return;
-    if (HONOR_REDUCED_MOTION && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-    const canvas = document.getElementById('sparkle-canvas');
-    const ctx = canvas.getContext('2d', { alpha: true });
-    Object.assign(canvas.style, {
-      mixBlendMode: 'screen',
-      willChange: 'transform',
-      pointerEvents: 'none',
-      position: 'fixed',
-      inset: '0',
-      zIndex: '50',
-      width: '100%',
-      height: '100%'
-    });
-
-    const state = { w: 0, h: 0, dpr: Math.min(2, Math.max(1, window.devicePixelRatio || 1)) };
-    function resize() {
-      state.w = canvas.clientWidth | 0;
-      state.h = canvas.clientHeight | 0;
-      canvas.width  = Math.max(1, state.w * state.dpr);
-      canvas.height = Math.max(1, state.h * state.dpr);
-      ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
-    }
-    resize();
-    addEventListener('resize', resize);
-
-    // ===== CONFIG =====
-    const COLORS        = ['#3b82f6', '#22c55e', '#facc15', '#fb923c'];
-    const SILVER        = '#e5e7eb';
-
-    // Density & spread
-    const STEP          = 4;         // px between samples
-    const PER_STEP      = 4;         // particles per sample
-    const POS_JIT       = 12;        // px jitter ring around path
-    const POS_JIT_PCT   = 0.40;      // extra jitter from segment length
-
-    // Motion (amped up)
-    const LIFE_MIN      = 900;       // ms tail base
-    const LIFE_VAR      = 600;       // ms variation
-    const FRICTION      = 0.992;     // more glide
-    const GRAVITY       = 0.007;     // slight downward drift
-    const SPEED_JIT     = 1.0;       // stronger initial velocities
-    const NOISE         = 0.035;     // per-frame micro-impulse
-
-    // Stars
-    const STAR_CHANCE   = 0.08;
-    const STAR_SCALES   = [0.9, 1.15, 1.4, 1.8, 2.3];
-
-    // Idle emitter
-    const IDLE_DELAY_MS = 120;       // start idling after no movement for this long
-    const IDLE_EVERY_MS = 55;        // spawn cadence while idle
-    const IDLE_COUNT    = 2;         // particles per idle tick
-    const IDLE_SPREAD   = 18;        // px area around last point
-    const IDLE_SPEED    = 0.5;       // initial velocity scale for idle
-
-    const MAX           = 620;       // pool size
-
-    // ===== Pool =====
-    const P = new Array(MAX).fill(null);
-    let head = 0;
-    function addParticle(x, y, vx, vy, color, type='dot', extra={}) {
-      const life = LIFE_MIN + Math.random()*LIFE_VAR;
-      const base = (type === 'dot') ? (1.2 + Math.random()*2.6) : (1.0 + Math.random()*1.5);
-      const rot  = Math.random() * Math.PI * 2;
-      const starScale = (type === 'star') ? STAR_SCALES[(Math.random()*STAR_SCALES.length)|0] : 1;
-      P[head] = { x, y, vx, vy, life, ttl: life, base, color, type, rot, starScale, ...extra };
-      head = (head + 1) % MAX;
-    }
-
-    // ===== Helpers =====
-    const hexA = (hex, a) => {
-      const n = hex.replace('#','');
-      const v = parseInt(n.length===3 ? n.split('').map(c=>c+c).join('') : n, 16);
-      const r=(v>>16)&255,g=(v>>8)&255,b=v&255;
-      return `rgba(${r},${g},${b},${a})`;
-    };
-
-    function drawBubble(x, y, r, color, alpha) {
-      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0.00, hexA(color, Math.min(1, alpha*0.85)));
-      g.addColorStop(0.50, hexA(color, Math.min(1, alpha*0.35)));
-      g.addColorStop(1.00, hexA(color, 0));
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI*2);
-      ctx.fill();
-    }
-
-    function drawStar5(x, y, outerR, alpha) {
-      const innerR = outerR * 0.5;
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(-Math.PI/2);
-      ctx.beginPath();
-      for (let i=0; i<5; i++) {
-        const a0 = (i * 2 * Math.PI) / 5;
-        const a1 = a0 + Math.PI / 5;
-        ctx.lineTo(Math.cos(a0)*outerR, Math.sin(a0)*outerR);
-        ctx.lineTo(Math.cos(a1)*innerR, Math.sin(a1)*innerR);
-      }
-      ctx.closePath();
-      ctx.fillStyle = hexA(SILVER, alpha);
-      ctx.shadowColor = SILVER;
-      ctx.shadowBlur = 14;
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // ===== Spawning =====
-    function spawnAt(x, y, segLen, pressed) {
-      const now = performance.now();
-      const baseIndex = Math.floor(now/140) % COLORS.length; // faster hue cycling
-      const count = PER_STEP + (pressed ? 1 : 0);
-
-      const jitterR = POS_JIT + segLen * POS_JIT_PCT;
-
-      for (let i=0; i<count; i++) {
-        const angPos = Math.random()*Math.PI*2;
-        const jx = Math.cos(angPos) * (Math.random() * jitterR);
-        const jy = Math.sin(angPos) * (Math.random() * jitterR);
-
-        const angVel = Math.random()*Math.PI*2;
-        const pow = Math.random()*SPEED_JIT;
-        const vx = Math.cos(angVel)*pow;
-        const vy = Math.sin(angVel)*pow - 0.02;
-
-        const color = COLORS[(baseIndex + i) % COLORS.length];
-        addParticle(x + jx, y + jy, vx, vy, color, 'dot');
-      }
-
-      if (Math.random() < STAR_CHANCE) {
-        const angVel = Math.random()*Math.PI*2;
-        const vx = Math.cos(angVel) * 0.28;
-        const vy = Math.sin(angVel) * 0.28 - 0.05;
-        addParticle(x, y, vx, vy, SILVER, 'star');
-      }
-    }
-
-    function sampleSpawns(x0, y0, x1, y1, pressed) {
-      if (x0 == null || y0 == null) { spawnAt(x1, y1, STEP, pressed); return; }
-      const dx = x1 - x0, dy = y1 - y0;
-      const dist  = Math.hypot(dx, dy);
-      const steps = Math.max(1, Math.floor(dist / STEP));
-      const segLen = dist / steps;
-      for (let s=1; s<=steps; s++) {
-        const t = s / steps;
-        spawnAt(x0 + dx*t, y0 + dy*t, segLen, pressed);
-      }
-    }
-
-    // ===== Pointer & idle =====
-    let last = null, down = false;
-    let lastMoveAt = performance.now();
-    let idleAcc = 0;
-
-    addEventListener('pointerdown', e => {
-      down = true;
-      last = { x: e.clientX, y: e.clientY };
-      lastMoveAt = performance.now();
-      spawnAt(e.clientX, e.clientY, STEP, true);
-    }, { passive: true });
-
-    addEventListener('pointerup',   () => { down = false; last = null; }, { passive: true });
-
-    addEventListener('pointermove', e => {
-      const list = (typeof e.getCoalescedEvents === 'function') ? e.getCoalescedEvents() : null;
-      if (list && list.length) {
-        for (const ev of list) {
-          if (last) sampleSpawns(last.x, last.y, ev.clientX, ev.clientY, down);
-          else spawnAt(ev.clientX, ev.clientY, STEP, down);
-          last = { x: ev.clientX, y: ev.clientY };
-        }
-      } else {
-        const x = e.clientX, y = e.clientY;
-        if (last) sampleSpawns(last.x, last.y, x, y, down);
-        else spawnAt(x, y, STEP, down);
-        last = { x, y };
-      }
-      lastMoveAt = performance.now();
-    }, { passive: true });
-
-    // Idle emitter
-    function idleEmit(dt) {
-      if (!last) return;
-      const since = performance.now() - lastMoveAt;
-      if (since < IDLE_DELAY_MS) { idleAcc = 0; return; }
-      idleAcc += dt;
-      while (idleAcc >= IDLE_EVERY_MS) {
-        idleAcc -= IDLE_EVERY_MS;
-        for (let i=0; i<IDLE_COUNT; i++) {
-          const ang = Math.random() * Math.PI * 2;
-          const r   = Math.random() * IDLE_SPREAD;
-          const x = last.x + Math.cos(ang) * r;
-          const y = last.y + Math.sin(ang) * r;
-          const vang = Math.random() * Math.PI * 2;
-          const vpow = Math.random() * IDLE_SPEED;
-          const vx = Math.cos(vang) * vpow;
-          const vy = Math.sin(vang) * vpow - 0.02;
-          const color = COLORS[(Math.floor(performance.now()/180)) % COLORS.length];
-          addParticle(x, y, vx, vy, color, 'dot');
-        }
-        if (Math.random() < 0.12) {
-          const vx = (Math.random()-0.5) * 0.3;
-          const vy = (Math.random()-0.8) * 0.3;
-          addParticle(last.x, last.y, vx, vy, SILVER, 'star');
-        }
-      }
-    }
-
-    // ===== Draw loop =====
-    let lastFrame = performance.now();
-    function tick(now) {
-      const dt = now - lastFrame;
-      lastFrame = now;
-
-      ctx.clearRect(0, 0, state.w, state.h);
-
-      // Idle emission
-      idleEmit(dt);
-
-      for (let i=0; i<MAX; i++) {
-        const p = P[i];
-        if (!p || p.ttl <= 0) continue;
-
-        // Chaos
-        p.vx += (Math.random()-0.5) * NOISE;
-        p.vy += (Math.random()-0.5) * NOISE;
-
-        // Motion
-        p.vx *= FRICTION;
-        p.vy = p.vy * FRICTION + GRAVITY;
-        p.x += p.vx;
-        p.y += p.vy;
-
-        // Fade/size
-        p.ttl -= dt;
-        const t = Math.max(0, p.ttl / p.life);
-        const alpha = t;                          // linear slow fade
-        const r = p.base * (0.7 + 1.8*(1 - t));  // grows as it fades
-
-        if (p.type === 'dot') {
-          drawBubble(p.x, p.y, r, p.color, alpha);
-        } else {
-          drawStar5(p.x, p.y, r * p.starScale, Math.min(1, alpha*0.9));
-        }
-      }
-
-      requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-
-    document.addEventListener('visibilitychange', () => { lastFrame = performance.now(); });
-  })();
-  </script>
+  <!-- External JS files -->
+  <script src="translations.js" defer></script>
+  <script src="main.js" defer></script>
 </body>
 </html>
