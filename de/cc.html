@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="UTF-8" />
   <title>Still In Queue · Coffee &amp; Cream</title>
-  <link rel="icon" type="image/png" href="Fav-Photoroom.png">
+  <link rel="icon" type="image/png" href="../Fav-Photoroom.png">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Fonts -->
@@ -51,8 +51,8 @@
       pointer-events: none;
       mix-blend-mode: screen;
       will-change: transform, opacity;
-      opacity: 0;                          /* hidden at load */
-      transition: opacity .18s ease;       /* fade in/out */
+      opacity: 0;
+      transition: opacity .18s ease;
     }
 
     /* ===== Header / Navbar ===== */
@@ -83,6 +83,40 @@
       background: linear-gradient(135deg, #f97316, #fb923c, #fdba74);
       box-shadow: 0 18px 40px rgba(15,23,42,.9); transform: translateY(-1px);
     }
+
+    /* ===== Language Switch ===== */
+    .lang-switch {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    .lang-switch span.separator {
+      opacity: 0.6;
+      color: #e5e7eb;
+    }
+    .lang-link {
+      text-decoration: none;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: #e5e7eb;
+      transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+    }
+    .lang-link:hover {
+      border-color: rgba(248, 250, 252, 0.85);
+      background: rgba(15, 23, 42, 0.9);
+      transform: translateY(-1px);
+    }
+    .lang-link.active-lang {
+      background: linear-gradient(135deg, #f97316, #fb923c, #fdba74);
+      color: #111827;
+      border-color: rgba(248, 250, 252, 0.95);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.85);
+    }
+
     .auth-buttons { display: flex; align-items: center; }
     .auth-primary {
       font-size: .78rem; text-transform: uppercase; letter-spacing: .18em; text-decoration: none;
@@ -236,6 +270,7 @@
       .section { padding-inline: 1.5rem; }
       .section-header { flex-direction: column; align-items: flex-start; }
       .menu-grid { grid-template-columns: minmax(0, 1fr); }
+      .lang-switch { font-size: 0.7rem; }
     }
   </style>
 </head>
@@ -245,25 +280,31 @@
 
   <header class="site-header">
     <!-- Logo: go back to main landing page -->
-    <a href="index.html" class="logo">
-      <img src="SQ-IC-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
+    <a href="../index.html" class="logo">
+      <img src="../SQ-IC-Photoroom.png" alt="Still In Queue Gruppe" class="logo-img" />
     </a>
 
-    <button class="nav-toggle" aria-label="Toggle navigation">
+    <button class="nav-toggle" aria-label="Navigation umschalten">
       <span></span><span></span>
     </button>
 
     <div class="header-right">
       <nav class="site-nav">
-        <a href="#top" class="nav-home active">Home</a>
-        <a href="#menu" class="nav-menu">Menu</a>
-        <a href="#experience" class="nav-experience">Experience</a>
-        <a href="#diy" class="nav-diy">DIY Bar</a>
-        <a href="#about" class="nav-about">About</a>
+        <a href="#top" class="nav-home active">Start</a>
+        <a href="#menu" class="nav-menu">Menü</a>
+        <a href="#experience" class="nav-experience">Erlebnis</a>
+        <a href="#diy" class="nav-diy">DIY-Bar</a>
+        <a href="#about" class="nav-about">Über</a>
       </nav>
 
+      <div class="lang-switch">
+        <a href="../cc.html" class="lang-link">EN</a>
+        <span class="separator">/</span>
+        <a href="cc.html" class="lang-link active-lang">DE</a>
+      </div>
+
       <div class="auth-buttons">
-        <a href="#auth" class="auth-primary">Login / Sign Up</a>
+        <a href="#auth" class="auth-primary">Login / Registrieren</a>
       </div>
     </div>
   </header>
@@ -275,26 +316,27 @@
 
     <div class="hero-inner">
       <div class="hero-kicker">SQ-CC · Coffee &amp; Cream</div>
-      <h1 class="hero-title">Spaghetti eis, Coffee &amp; Calm</h1>
-      <div class="hero-pill">Phase 1 · Concept Storefront</div>
+      <h1 class="hero-title">Spaghettieis, Coffee &amp; Calm</h1>
+      <div class="hero-pill">Phase 1 · Konzept-Storefront</div>
 
       <p class="hero-subline">
-        SQ-CC is an Ice cream and coffee concept that introduces
-        <strong>Spaghettieis</strong> to Hyderabad — alongside bowls, sundaes,
-        cakes, and specialty coffee made with organic, hand-selected
-        ingredients.
+        SQ-CC ist ein Eis- und Kaffee-Konzept, das
+        <strong>Spaghettieis</strong> nach Hyderabad bringt – zusammen mit
+        Bowls, Sundaes, Kuchen und Speciality Coffee aus organischen,
+        sorgfältig ausgewählten Zutaten.
       </p>
       <p class="hero-subline">
-        Think Insta-worthy, health-focused, and appointment-only: 90 minutes
-        per guest, with space for work, conversation, and small celebrations.
+        Denk an Insta-tauglich, gesundheitsbewusst und nur mit Termin:
+        90 Minuten pro Gast, mit Platz zum Arbeiten, Reden und für kleine
+        Feierlichkeiten.
       </p>
       <div class="hero-bullets">
         SPAGHETTIEIS · BOWLS · COFFEE · VIBES
       </div>
 
       <div class="hero-cta">
-        <a href="#menu" class="btn-primary">Explore the Concept Menu</a>
-        <a href="#experience" class="btn-ghost">See the Experience</a>
+        <a href="#menu" class="btn-primary">Konzept-Menü entdecken</a>
+        <a href="#experience" class="btn-ghost">Erlebnis ansehen</a>
       </div>
     </div>
 
@@ -305,27 +347,27 @@
   <section id="menu" class="section reveal">
     <div class="section-header">
       <div>
-        <div class="section-kicker">Menu Concept</div>
+        <div class="section-kicker">Menü-Konzept</div>
         <h2 class="section-title">Coffee, Cream &amp; Spaghettieis</h2>
       </div>
       <p class="section-desc">
-        This is the first sketch of the menu. Later, this page can become an
-        interactive menu with photos, nutrition details, and online ordering or
-        pre-selection for your appointment.
+        Dies ist der erste Entwurf der Karte. Später kann diese Seite zu einem
+        interaktiven Menü mit Fotos, Nährwertangaben und Online-Vorbestellung
+        für deinen Termin werden.
       </p>
     </div>
 
     <div class="menu-grid">
       <article class="menu-card">
         <div class="menu-tag">Signature</div>
-        <h3 class="menu-title">Spaghetti Eis Collection</h3>
+        <h3 class="menu-title">Spaghettieis Kollektion</h3>
         <p class="menu-text">
-          Classic vanilla “pasta”, rich sauces, crunchy toppings, and playful
-          combinations designed for photos and flavour — from strawberry fields
-          to chocolate night.
+          Klassische Vanille-„Pasta“, reichhaltige Saucen, Crunch-Toppings und
+          verspielte Kombinationen – gestaltet für Fotos und Geschmack, von
+          Strawberry Fields bis Chocolate Night.
         </p>
         <div class="menu-meta">
-          Base: organic dairy · low-refined sugar options
+          Basis: Bio-Milch · Optionen mit wenig raffiniertem Zucker
         </div>
       </article>
 
@@ -333,12 +375,12 @@
         <div class="menu-tag">Bowls &amp; Sundaes</div>
         <h3 class="menu-title">Balanced Bowls &amp; Sundaes</h3>
         <p class="menu-text">
-          Fruit-forward bowls, protein-friendly sundaes, and customisable
-          combinations that focus on freshness without losing the fun of a
-          proper dessert.
+          Obstbetonte Bowls, proteinfreundliche Sundaes und frei
+          konfigurierbare Kombinationen, die auf Frische setzen, ohne den
+          Spaß eines echten Desserts zu verlieren.
         </p>
         <div class="menu-meta">
-          Options: plant-based · high-protein · classic
+          Optionen: pflanzlich · proteinreich · klassisch
         </div>
       </article>
 
@@ -346,12 +388,12 @@
         <div class="menu-tag">Cakes &amp; Coffee</div>
         <h3 class="menu-title">Cakes, Bakes &amp; Specialty Coffee</h3>
         <p class="menu-text">
-          Small-batch cakes and bakes, paired with espresso drinks, cold brew,
-          and slow coffee options tailored for people who like to sit, talk, or
-          work for a while.
+          Kleingebäck und Kuchen in kleinen Batches, kombiniert mit
+          Espresso-Getränken, Cold Brew und Slow-Coffee-Optionen – perfekt
+          für Menschen, die gerne sitzen, reden oder arbeiten.
         </p>
         <div class="menu-meta">
-          Roast: curated beans · seasonal specials
+          Röstung: kuratierte Bohnen · saisonale Specials
         </div>
       </article>
     </div>
@@ -361,52 +403,52 @@
   <section id="experience" class="section reveal">
     <div class="section-header">
       <div>
-        <div class="section-kicker">Space &amp; Experience</div>
-        <h2 class="section-title">A 90-Minute Tiny Escape</h2>
+        <div class="section-kicker">Raum &amp; Erlebnis</div>
+        <h2 class="section-title">90 Minuten kleine Auszeit</h2>
       </div>
       <p class="section-desc">
-        SQ-CC is planned as a limited-capacity, appointment-only space —
-        designed for young and working professionals, but welcoming for all
-        ages and celebrations.
+        SQ-CC ist als Ort mit begrenzter Kapazität und Terminpflicht gedacht –
+        gestaltet für junge und berufstätige Menschen, aber offen für alle
+        Altersgruppen und Anlässe.
       </p>
     </div>
 
     <div class="two-col">
       <div class="card-soft">
-        <h3>Ambience &amp; Seating</h3>
+        <h3>Ambiente &amp; Sitzplätze</h3>
         <p>
-          Warm lighting, wood and soft textures, and a layout that works for
-          solo visits, pairs, or small groups. Every corner is designed to be
-          camera-friendly without feeling fake.
+          Warmes Licht, Holz und weiche Texturen sowie ein Layout, das für
+          Alleinbesuche, Paare oder kleine Gruppen funktioniert. Jeder Winkel
+          ist kamera-freundlich, ohne künstlich zu wirken.
         </p>
         <ul class="list-clean">
-          <li>90-minute slots per guest or group.</li>
-          <li>Quiet-friendly tables for laptops and reading.</li>
-          <li>Photo spots for those “this place” moments.</li>
+          <li>90-Minuten-Slots pro Gast oder Gruppe.</li>
+          <li>Ruhige Tische für Laptop, Lesen &amp; Arbeiten.</li>
+          <li>Foto-Spots für diese „hier war ich“-Momente.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Insta-worthy</span>
-          <span class="badge-pill">Cozy seating</span>
+          <span class="badge-pill">Insta-tauglich</span>
+          <span class="badge-pill">Gemütliche Plätze</span>
           <span class="badge-pill">Work-friendly</span>
         </div>
       </div>
 
       <div class="card-soft">
-        <h3>Reservations &amp; Specials</h3>
+        <h3>Reservierung &amp; Specials</h3>
         <p>
-          Access is by appointment only, so the store never feels crowded.
-          Over time, the website can handle slot booking, pre-ordered desserts,
-          and special celebration add-ons.
+          Der Zugang ist nur mit Termin möglich, damit der Laden nie überfüllt
+          wirkt. Langfristig kann die Website Slots, Vorbestellungen und
+          spezielle Celebration-Pakete abbilden.
         </p>
         <ul class="list-clean">
-          <li>Student discount concept: 10% with valid ID.</li>
-          <li>Birthday &amp; celebration packages (future phase).</li>
-          <li>Private or semi-private bookings for small events.</li>
+          <li>Konzept: 10% Studentenrabatt mit gültigem Ausweis.</li>
+          <li>Geburtstags- &amp; Feier-Pakete (spätere Phase).</li>
+          <li>Private oder halbprivate Buchungen für kleine Events.</li>
         </ul>
         <div class="badge-row">
           <span class="badge-pill">Slots</span>
           <span class="badge-pill">Student 10%</span>
-          <span class="badge-pill">Celebrations</span>
+          <span class="badge-pill">Feiern</span>
         </div>
       </div>
     </div>
@@ -416,51 +458,52 @@
   <section id="diy" class="section reveal">
     <div class="section-header">
       <div>
-        <div class="section-kicker">DIY Terminal</div>
-        <h2 class="section-title">Build Your Own Bowl</h2>
+        <div class="section-kicker">DIY-Terminal</div>
+        <h2 class="section-title">Bau dir deine eigene Bowl</h2>
       </div>
       <p class="section-desc">
-        A big part of SQ-CC is choice. The DIY terminal lets guests design
-        their own bowls, sundaes, and Spaghettieis before they reach the
-        counter.
+        Ein großer Teil von SQ-CC ist Wahlfreiheit. Am DIY-Terminal können
+        Gäste ihre eigenen Bowls, Sundaes und Spaghettieis entwerfen, bevor
+        sie zur Theke gehen.
       </p>
     </div>
 
     <div class="two-col">
       <div class="card-soft">
-        <h3>Digital DIY Flow (Concept)</h3>
+        <h3>Digitaler DIY-Flow (Konzept)</h3>
         <p>
-          On this page, the DIY experience can later become an interactive
-          builder: pick a base, sauce, toppings, and extras, see nutrition
-          hints, and save favourites to your profile.
+          Auf dieser Seite kann das DIY-Erlebnis später zu einem interaktiven
+          Builder werden: Basis, Sauce, Toppings und Extras auswählen,
+          Hinweise zu Nährwerten sehen und Favoriten im Profil speichern.
         </p>
         <ul class="list-clean">
-          <li>Step 1: Choose base (ice cream, yoghurt, vegan, etc.).</li>
-          <li>Step 2: Pick sauces, fruits, nuts, crunch.</li>
-          <li>Step 3: Add extras like shots of espresso or protein.</li>
+          <li>Schritt 1: Basis wählen (Eis, Joghurt, vegan, etc.).</li>
+          <li>Schritt 2: Saucen, Früchte, Nüsse, Crunch.</li>
+          <li>Schritt 3: Extras wie Espresso-Shots oder Protein hinzufügen.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Custom combos</span>
-          <span class="badge-pill">Profiles</span>
-          <span class="badge-pill">Recommendations</span>
+          <span class="badge-pill">Eigene Kombinationen</span>
+          <span class="badge-pill">Profile</span>
+          <span class="badge-pill">Empfehlungen</span>
         </div>
       </div>
 
       <div class="card-soft">
-        <h3>Health-Aware, Not “Diet”</h3>
+        <h3>Gesundheitsbewusst, nicht „Diät“</h3>
         <p>
-          The idea is not to remove joy, but to give transparency: clear
-          ingredients, optional lighter choices, and portions that feel good.
+          Die Idee ist nicht, Freude zu streichen, sondern Transparenz zu
+          schaffen: klare Zutaten, optional leichtere Varianten und Portionen,
+          die sich gut anfühlen.
         </p>
         <ul class="list-clean">
-          <li>Organic or carefully sourced key ingredients.</li>
-          <li>Labels for plant-based, protein-rich, or low-sugar options.</li>
-          <li>Room for seasonal menus with local produce.</li>
+          <li>Organische oder sorgfältig ausgewählte Hauptzutaten.</li>
+          <li>Labels für pflanzlich, proteinreich oder zuckerbewusst.</li>
+          <li>Platz für saisonale Karten mit regionalen Produkten.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Ingredient focus</span>
-          <span class="badge-pill">Balanced options</span>
-          <span class="badge-pill">Seasonal menus</span>
+          <span class="badge-pill">Zutaten-Fokus</span>
+          <span class="badge-pill">Balancierte Optionen</span>
+          <span class="badge-pill">Saisonale Menüs</span>
         </div>
       </div>
     </div>
@@ -469,35 +512,35 @@
   <!-- About SQ-CC -->
   <section id="about" class="section reveal">
     <div class="about-card">
-      <div class="section-kicker">About · SQ-CC</div>
-      <h2 class="section-title" style="margin-bottom:0.7rem;">Why Coffee &amp; Cream is a Fold</h2>
+      <div class="section-kicker">Über · SQ-CC</div>
+      <h2 class="section-title" style="margin-bottom:0.7rem;">Warum Coffee &amp; Cream ein Fold ist</h2>
       <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;">
-        SQ-CC is the lifestyle fold of Still In Queue — a physical space that
-        balances the more technical folds of AI, learning, and green energy.
-        It reflects the same mindset: thoughtful design, long-term quality, and
-        experiences that feel considered rather than random.
+        SQ-CC ist der Lifestyle-Fold von Still In Queue – ein physischer Raum,
+        der die eher technischen Bereiche rund um KI, Lernen und grüne Energie
+        ausbalanciert. Die Haltung ist dieselbe: durchdachtes Design,
+        langfristige Qualität und Erlebnisse, die nicht zufällig wirken.
       </p>
       <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;margin-top:0.6rem;">
-        This page is a concept layout for the store and its digital
-        experience. In the future, it can evolve into a full booking system,
-        loyalty or membership features, and a live menu directly connected to
-        SQ’s backend stack.
+        Diese Seite ist ein Konzept-Layout für den Store und sein digitales
+        Erlebnis. Später kann sie zu einem vollständigen Buchungssystem, zu
+        Loyalty- oder Membership-Features und zu einer Live-Karte werden, die
+        direkt an den SQ-Backend-Stack angebunden ist.
       </p>
 
       <div class="about-note">
-        Future ideas:
+        Zukünftige Ideen:
         <br><br>
-        <strong>Phase 1:</strong> Concept site &amp; brand story.<br>
-        <strong>Phase 2:</strong> Slot booking, digital menu, DIY builder UI.<br>
-        <strong>Phase 3:</strong> Loyalty accounts connected to the main Sique login.<br>
-        <strong>Phase 4:</strong> Multiple locations or pop-ups under the SQ-CC brand.
+        <strong>Phase 1:</strong> Konzeptseite &amp; Brand-Story.<br>
+        <strong>Phase 2:</strong> Slot-Buchung, digitale Karte, DIY-Builder-UI.<br>
+        <strong>Phase 3:</strong> Loyalty-Accounts verbunden mit dem Haupt-Sique-Login.<br>
+        <strong>Phase 4:</strong> Mehrere Standorte oder Pop-ups unter der Marke SQ-CC.
       </div>
     </div>
   </section>
 
   <footer class="site-footer">
-    <p>© 2025 Still in Queue · SQ-CC. All rights reserved.</p>
-    <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
+    <p>© 2025 Still in Queue · SQ-CC. Alle Rechte vorbehalten.</p>
+    <p>Kontakt : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
   </footer>
 
   <!-- Sparkles (ORANGE bubbles + SILVER stars), full-viewport, DPR-aware, with safe fade in/out -->
@@ -561,7 +604,6 @@
     const P = new Array(MAX).fill(null);
     let head = 0;
 
-    // Visibility control to avoid initial orange flicker
     let visible = false;
     let lastNonEmptyAt = performance.now();
     function showCanvas(){ if (!visible){ canvas.style.opacity = '1'; visible = true; } }
@@ -761,31 +803,31 @@
       const nav = document.querySelector(".site-nav");
       const navLinks = document.querySelectorAll(".site-nav a");
 
-      // Mobile navigation toggle
       if (toggle && nav) {
         toggle.addEventListener("click", () => {
           nav.classList.toggle("nav-open");
         });
       }
 
-      // Active pill + smooth scroll for in-page links
       navLinks.forEach((link) => {
         const href = link.getAttribute("href") || "";
+
         if (href.startsWith("#")) {
-          link.addEventListener("click", (e) => {
-            e.preventDefault();
-            const target = document.querySelector(href);
-            if (target) target.scrollIntoView({ behavior: "smooth" });
-            navLinks.forEach((l) => l.classList.remove("active"));
-            link.classList.add("active");
+          link.addEventListener("click", () => {
+            setTimeout(() => {
+              navLinks.forEach((l) => l.classList.remove("active"));
+              link.classList.add("active");
+            }, 0);
+
             if (nav) nav.classList.remove("nav-open");
           });
         } else {
-          link.addEventListener("click", () => { if (nav) nav.classList.remove("nav-open"); });
+          link.addEventListener("click", () => {
+            if (nav) nav.classList.remove("nav-open");
+          });
         }
       });
 
-      // Simple scroll reveal
       const revealElements = document.querySelectorAll(".reveal");
       const onScroll = () => {
         const triggerBottom = window.innerHeight * 0.85;
