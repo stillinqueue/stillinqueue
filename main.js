@@ -307,7 +307,9 @@
 
 // ===== Nav, reveal, i18n =====
 document.addEventListener("DOMContentLoaded", () => {
-  const translations = window.SQ_TRANSLATIONS || {};
+  // 👇 CHANGED: pick up the global from translations.js
+  const translations =
+    window.TRANSLATIONS || window.SQ_TRANSLATIONS || {};
 
   function setLanguage(lang) {
     const dict = translations[lang] || translations.en || {};
