@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Still In Queue · SQ-AI Agents & Automations</title>
+  <title data-i18n="ai.meta.title">Still In Queue · SQ-AI Agents & Automations</title>
   <link rel="icon" type="image/png" href="Fav-Photoroom.png">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
@@ -86,23 +86,23 @@
       gap: 2.4rem;
     }
 
-    /* ===== Language Toggle ===== */
-    .lang-toggle {
+    /* ===== Language Switcher (same pattern as index) ===== */
+    .lang-switch {
       display: flex;
-      gap: 0.35rem;
       align-items: center;
-      font-size: 0.7rem;
+      gap: 0.4rem;
+      font-size: 0.78rem;
       text-transform: uppercase;
       letter-spacing: 0.16em;
+      color: var(--text-muted);
     }
 
-    .lang-pill {
-      padding: 0.2rem 0.75rem;
-      border-radius: var(--radius-pill);
-      border: 1px solid rgba(148, 163, 184, 0.6);
-      color: #e5e7eb;
+    .lang-switch a {
       text-decoration: none;
-      background: rgba(15, 23, 42, 0.8);
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: var(--text-muted);
       transition:
         background var(--transition-fast),
         border-color var(--transition-fast),
@@ -110,16 +110,18 @@
         transform var(--transition-fast);
     }
 
-    .lang-pill:hover {
-      background: rgba(30, 64, 175, 0.95);
-      border-color: rgba(248, 250, 252, 0.9);
+    .lang-switch a:hover {
+      border-color: rgba(148, 163, 184, 0.9);
+      background: rgba(15, 23, 42, 0.95);
+      color: var(--text-main);
       transform: translateY(-1px);
     }
 
-    .lang-pill.lang-active {
-      background: linear-gradient(135deg, #3b82f6, #22c55e);
+    .lang-switch .lang-active {
+      border-color: rgba(248, 250, 252, 0.95);
+      background: rgba(248, 250, 252, 0.95);
       color: #020617;
-      border-color: #ffffff;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.8);
     }
 
     .site-nav {
@@ -718,21 +720,21 @@
     </button>
 
     <div class="header-right">
-      <!-- Language toggle -->
-      <div class="lang-toggle">
-        <a href="agents.html" class="lang-pill lang-active">EN</a>
-        <a href="de/agents.html" class="lang-pill">DE</a>
+      <!-- Language switch (same JS as index) -->
+      <div class="lang-switch">
+        <a href="#" data-lang="en" class="lang-active">EN</a>
+        <a href="#" data-lang="de">DE</a>
       </div>
 
       <nav class="site-nav">
-        <a href="#top" class="nav-home active">Home</a>
-        <a href="#agents" class="nav-agents">Agents</a>
-        <a href="#flows" class="nav-flows">Automations</a>
-        <a href="#about" class="nav-about">About</a>
+        <a href="#top" class="nav-home active" data-i18n="ai.nav.home">Home</a>
+        <a href="#agents" class="nav-agents" data-i18n="ai.nav.agents">Agents</a>
+        <a href="#flows" class="nav-flows" data-i18n="ai.nav.flows">Automations</a>
+        <a href="#about" class="nav-about" data-i18n="ai.nav.about">About</a>
       </nav>
 
       <div class="auth-buttons">
-        <a href="#auth" class="auth-primary">Login / Sign Up</a>
+        <a href="#auth" class="auth-primary" data-i18n="auth.cta">Login / Sign Up</a>
       </div>
     </div>
   </header>
@@ -743,42 +745,42 @@
     <div class="hero-shell"></div>
 
     <div class="hero-inner">
-      <div class="hero-kicker">SQ-AI · Agents &amp; Workflows</div>
-      <h1 class="hero-title">Agents That Watch What You Care About</h1>
-      <div class="hero-pill">Phase 1 · Concept Platform</div>
+      <div class="hero-kicker" data-i18n="ai.hero.kicker">SQ-AI · Agents &amp; Workflows</div>
+      <h1 class="hero-title" data-i18n="ai.hero.title">Agents That Watch What You Care About</h1>
+      <div class="hero-pill" data-i18n="ai.hero.pill">Phase 1 · Concept Platform</div>
 
-      <p class="hero-subline">
+      <p class="hero-subline" data-i18n="ai.hero.p1">
         SQ-AI is a layer of <strong>visual workflows</strong> and
         <strong>AI agents</strong> built to track markets, trips, routines and goals —
         without needing to code or manage complex dashboards.
       </p>
-      <p class="hero-subline">
+      <p class="hero-subline" data-i18n="ai.hero.p2">
         The idea is simple: draw what should be monitored, decide when to be
         nudged, and let the system keep an eye on it in the background.
       </p>
-      <div class="hero-bullets">
+      <div class="hero-bullets" data-i18n="ai.hero.bullets">
         AGENTS · ALERTS · ROUTINES · BLUEPRINTS
       </div>
 
       <div class="hero-cta">
-        <a href="#agents" class="btn-primary">Explore Agent Types</a>
-        <a href="#flows" class="btn-ghost">See Automation Concept</a>
+        <a href="#agents" class="btn-primary" data-i18n="ai.hero.cta.primary">Explore Agent Types</a>
+        <a href="#flows" class="btn-ghost" data-i18n="ai.hero.cta.secondary">See Automation Concept</a>
       </div>
     </div>
 
-    <div class="scroll-indicator">Scroll</div>
+    <div class="scroll-indicator" data-i18n="hero.scroll">Scroll</div>
   </main>
 
   <!-- Agent Types -->
   <section id="agents" class="section reveal">
-    <div class="section-chip"><span>Agents</span></div>
+    <div class="section-chip"><span data-i18n="ai.agents.chip">Agents</span></div>
 
     <div class="section-header">
       <div>
-        <div class="section-kicker">Agent Types</div>
-        <h2 class="section-title">Different Agents for Different Queues</h2>
+        <div class="section-kicker" data-i18n="ai.agents.kicker">Agent Types</div>
+        <h2 class="section-title" data-i18n="ai.agents.title">Different Agents for Different Queues</h2>
       </div>
-      <p class="section-desc">
+      <p class="section-desc" data-i18n="ai.agents.desc">
         Over time, SQ-AI becomes a library of agents you can switch on: finance,
         travel, habits, research, and more. Phase 1 is a concept of how they’re
         grouped and what they watch.
@@ -787,38 +789,38 @@
 
     <div class="three-grid">
       <article class="card">
-        <div class="card-tag">Signals</div>
-        <h3 class="card-title">Finance &amp; Market Agents</h3>
-        <p class="card-text">
+        <div class="card-tag" data-i18n="ai.cards.signals.tag">Signals</div>
+        <h3 class="card-title" data-i18n="ai.cards.signals.title">Finance &amp; Market Agents</h3>
+        <p class="card-text" data-i18n="ai.cards.signals.text">
           Agents that keep track of stocks, ETFs, crypto, and macro indicators.
           Instead of charts all day, you set triggers and get nudged only when it
           matters.
         </p>
-        <div class="card-meta">
+        <div class="card-meta" data-i18n="ai.cards.signals.meta">
           Inputs: Symbols · Ranges · Alerts
         </div>
       </article>
 
       <article class="card">
-        <div class="card-tag">Life</div>
-        <h3 class="card-title">Life &amp; Routine Agents</h3>
-        <p class="card-text">
+        <div class="card-tag" data-i18n="ai.cards.life.tag">Life</div>
+        <h3 class="card-title" data-i18n="ai.cards.life.title">Life &amp; Routine Agents</h3>
+        <p class="card-text" data-i18n="ai.cards.life.text">
           Checklists and micro routines: health, workouts, reading, progress on
           projects. Agents act like small coaches that watch streaks, not just to-dos.
         </p>
-        <div class="card-meta">
+        <div class="card-meta" data-i18n="ai.cards.life.meta">
           Focus: Habits · Journals · Check-ins
         </div>
       </article>
 
       <article class="card">
-        <div class="card-tag">Travel</div>
-        <h3 class="card-title">Travel &amp; Exploration Agents</h3>
-        <p class="card-text">
+        <div class="card-tag" data-i18n="ai.cards.travel.tag">Travel</div>
+        <h3 class="card-title" data-i18n="ai.cards.travel.title">Travel &amp; Exploration Agents</h3>
+        <p class="card-text" data-i18n="ai.cards.travel.text">
           Track flight prices, visa slots, and destinations you pin on a map. Agents
           surface windows of opportunity instead of random deals.
         </p>
-        <div class="card-meta">
+        <div class="card-meta" data-i18n="ai.cards.travel.meta">
           Focus: Dates · Routes · Preferences
         </div>
       </article>
@@ -827,14 +829,14 @@
 
   <!-- Flows / Automations -->
   <section id="flows" class="section reveal">
-    <div class="section-chip"><span>Automations</span></div>
+    <div class="section-chip"><span data-i18n="ai.flows.chip">Automations</span></div>
 
     <div class="section-header">
       <div>
-        <div class="section-kicker">Visual Workflows</div>
-        <h2 class="section-title">Draw the Flow Instead of Writing Code</h2>
+        <div class="section-kicker" data-i18n="ai.flows.kicker">Visual Workflows</div>
+        <h2 class="section-title" data-i18n="ai.flows.title">Draw the Flow Instead of Writing Code</h2>
       </div>
-      <p class="section-desc">
+      <p class="section-desc" data-i18n="ai.flows.desc">
         SQ-AI is meant to feel like a canvas: you drag nodes, connect them, and
         define how data moves — from APIs and files to summaries and notifications.
       </p>
@@ -842,40 +844,40 @@
 
     <div class="two-col">
       <div class="card-soft">
-        <h3>Node-Based Flow Builder</h3>
-        <p>
+        <h3 data-i18n="ai.flows.node.title">Node-Based Flow Builder</h3>
+        <p data-i18n="ai.flows.node.text">
           A future version will provide a node editor where each block represents
           an action: fetch, transform, analyze, notify, or store. You connect them
           visually instead of writing glue code.
         </p>
         <ul class="list-clean">
-          <li>Input blocks: APIs, CSV, Google Sheets, databases.</li>
-          <li>AI blocks: summarise, extract, classify, generate ideas.</li>
-          <li>Output blocks: email, chat, dashboards, webhooks.</li>
+          <li data-i18n="ai.flows.node.li1">Input blocks: APIs, CSV, Google Sheets, databases.</li>
+          <li data-i18n="ai.flows.node.li2">AI blocks: summarise, extract, classify, generate ideas.</li>
+          <li data-i18n="ai.flows.node.li3">Output blocks: email, chat, dashboards, webhooks.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">No-code feel</span>
-          <span class="badge-pill">Python backend</span>
-          <span class="badge-pill">Composable flows</span>
+          <span class="badge-pill" data-i18n="ai.flows.node.badge1">No-code feel</span>
+          <span class="badge-pill" data-i18n="ai.flows.node.badge2">Python backend</span>
+          <span class="badge-pill" data-i18n="ai.flows.node.badge3">Composable flows</span>
         </div>
       </div>
 
       <div class="card-soft">
-        <h3>Blueprints &amp; Reusable Templates</h3>
-        <p>
+        <h3 data-i18n="ai.flows.blueprints.title">Blueprints &amp; Reusable Templates</h3>
+        <p data-i18n="ai.flows.blueprints.text">
           Instead of building everything from scratch, SQ-AI will ship with
           blueprints you can customise: monitoring templates, trackers, and life
           dashboards.
         </p>
         <ul class="list-clean">
-          <li>Weekly review &amp; summary agents.</li>
-          <li>“Watch this metric &amp; tell me when…” flows.</li>
-          <li>Templates for finance, travel, and learning.</li>
+          <li data-i18n="ai.flows.blueprints.li1">Weekly review &amp; summary agents.</li>
+          <li data-i18n="ai.flows.blueprints.li2">“Watch this metric &amp; tell me when…” flows.</li>
+          <li data-i18n="ai.flows.blueprints.li3">Templates for finance, travel, and learning.</li>
         </ul>
         <div class="badge-row">
-          <span class="badge-pill">Blueprints</span>
-          <span class="badge-pill">Personalised</span>
-          <span class="badge-pill">Shareable flows</span>
+          <span class="badge-pill" data-i18n="ai.flows.blueprints.badge1">Blueprints</span>
+          <span class="badge-pill" data-i18n="ai.flows.blueprints.badge2">Personalised</span>
+          <span class="badge-pill" data-i18n="ai.flows.blueprints.badge3">Shareable flows</span>
         </div>
       </div>
     </div>
@@ -883,23 +885,25 @@
 
   <!-- About SQ-AI -->
   <section id="about" class="section reveal">
-    <div class="section-chip"><span>About</span></div>
+    <div class="section-chip"><span data-i18n="ai.about.chip">About</span></div>
 
     <div class="about-card">
-      <div class="section-kicker">About · SQ-AI</div>
-      <h2 class="section-title" style="margin-bottom:0.7rem;">How SQ-AI Fits into Sique</h2>
-      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;">
+      <div class="section-kicker" data-i18n="ai.about.kicker">About · SQ-AI</div>
+      <h2 class="section-title" style="margin-bottom:0.7rem;" data-i18n="ai.about.title">
+        How SQ-AI Fits into Sique
+      </h2>
+      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;" data-i18n="ai.about.p1">
         SQ-AI is the first fold of Still In Queue — the software and automation
         layer that eventually connects to the learning platform, green energy
         dashboards, and even the physical coffee space.
       </p>
-      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;margin-top:0.6rem;">
+      <p style="font-size:0.96rem;color:var(--text-muted);line-height:1.8;margin-top:0.6rem;" data-i18n="ai.about.p2">
         This page is a concept layout. Future phases will wire it to a Python
         backend, a database of flows, and an interface for creating, saving, and
         sharing agents that run on real data.
       </p>
 
-      <div class="about-note">
+      <div class="about-note" data-i18n="ai.about.note">
         Rough path:
         <br><br>
         <strong>Phase 1:</strong> Front-end concept &amp; agent categories.<br>
@@ -911,10 +915,15 @@
   </section>
 
   <footer class="site-footer">
-    <p>© 2025 Still in Queue · SQ-AI. All rights reserved.</p>
-    <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
+    <p data-i18n="ai.footer.copy">© 2025 Still in Queue · SQ-AI. All rights reserved.</p>
+    <p><span data-i18n="footer.contactLabel">contact :</span> <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
   </footer>
 
+  <!-- Shared translations + main logic (same as index.html) -->
+  <script src="translations.js"></script>
+  <script src="main.js"></script>
+
+  <!-- Page-local nav + scroll reveal (same as before) -->
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const toggle = document.querySelector(".nav-toggle");
