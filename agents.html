@@ -86,6 +86,44 @@
       gap: 2.4rem;
     }
 
+    /* ===== Language Switcher (same pattern as index) ===== */
+    .lang-switch {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-muted);
+    }
+
+    .lang-switch a {
+      text-decoration: none;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        color var(--transition-fast),
+        transform var(--transition-fast);
+    }
+
+    .lang-switch a:hover {
+      border-color: rgba(148, 163, 184, 0.9);
+      background: rgba(15, 23, 42, 0.95);
+      color: var(--text-main);
+      transform: translateY(-1px);
+    }
+
+    .lang-switch .lang-active {
+      border-color: rgba(248, 250, 252, 0.95);
+      background: rgba(248, 250, 252, 0.95);
+      color: #020617;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.8);
+    }
+
     .site-nav {
       display: flex;
       align-items: center;
@@ -124,44 +162,6 @@
       background: linear-gradient(135deg, #3b82f6, #22d3ee);
       box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
       transform: translateY(-1px);
-    }
-
-    /* ===== Language Switcher ===== */
-    .lang-switch {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      font-size: 0.78rem;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      color: var(--text-muted);
-    }
-
-    .lang-switch a {
-      text-decoration: none;
-      padding: 0.25rem 0.7rem;
-      border-radius: 999px;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      transition:
-        background var(--transition-fast),
-        border-color var(--transition-fast),
-        color var(--transition-fast),
-        transform var(--transition-fast);
-    }
-
-    .lang-switch a:hover {
-      border-color: rgba(148, 163, 184, 0.9);
-      background: rgba(15, 23, 42, 0.95);
-      color: var(--text-main);
-      transform: translateY(-1px);
-    }
-
-    .lang-switch .lang-active {
-      border-color: rgba(248, 250, 252, 0.95);
-      background: rgba(248, 250, 252, 0.95);
-      color: #020617;
-      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.8);
     }
 
     .auth-buttons {
@@ -709,8 +709,6 @@
   </style>
 </head>
 <body>
-
-  <canvas id="sparkle-canvas"></canvas>
   <header class="site-header">
     <!-- Logo: go back to main landing page -->
     <a href="index.html" class="logo">
@@ -722,6 +720,7 @@
     </button>
 
     <div class="header-right">
+      <!-- Nav first, then language switcher (like index.html) -->
       <nav class="site-nav">
         <a href="#top" class="nav-home active" data-i18n="ai.nav.home">Home</a>
         <a href="#agents" class="nav-agents" data-i18n="ai.nav.agents">Agents</a>
@@ -729,6 +728,7 @@
         <a href="#about" class="nav-about" data-i18n="ai.nav.about">About</a>
       </nav>
 
+      <!-- Language switch -->
       <div class="lang-switch">
         <a href="#" data-lang="en" class="lang-active">EN</a>
         <a href="#" data-lang="de">DE</a>
@@ -739,6 +739,9 @@
       </div>
     </div>
   </header>
+
+  <!-- Sparkles overlay (needed for trailing cursor) -->
+  <canvas id="sparkle-canvas" class="pointer-events-none fixed inset-0 z-50" aria-hidden="true"></canvas>
 
   <!-- Hero -->
   <main id="top" class="hero">
@@ -920,9 +923,9 @@
     <p><span data-i18n="footer.contactLabel">contact :</span> <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
   </footer>
 
-  <!-- Shared translations + main logic (same as index.html) -->
-  <script src="translations.js" defer></script>
-  <script src="main.js" defer></script>
+  <!-- Shared translations + main logic -->
+  <script src="translations.js"></script>
+  <script src="main.js"></script>
 
   <!-- Page-local nav + scroll reveal -->
   <script>
@@ -931,12 +934,14 @@
       const nav = document.querySelector(".site-nav");
       const navLinks = document.querySelectorAll(".site-nav a");
 
+      // Mobile navigation toggle
       if (toggle && nav) {
         toggle.addEventListener("click", () => {
           nav.classList.toggle("nav-open");
         });
       }
 
+      // Active pill + smooth scroll for in-page links
       navLinks.forEach((link) => {
         const href = link.getAttribute("href") || "";
 
@@ -949,18 +954,22 @@
               target.scrollIntoView({ behavior: "smooth" });
             }
 
+            // Update active pill
             navLinks.forEach((l) => l.classList.remove("active"));
             link.classList.add("active");
 
+            // Close mobile nav
             if (nav) nav.classList.remove("nav-open");
           });
         } else {
+          // External link: just close mobile nav on click
           link.addEventListener("click", () => {
             if (nav) nav.classList.remove("nav-open");
           });
         }
       });
 
+      // Simple scroll reveal
       const revealElements = document.querySelectorAll(".reveal");
       const onScroll = () => {
         const triggerBottom = window.innerHeight * 0.85;
@@ -978,4 +987,3 @@
   </script>
 </body>
 </html>
-
