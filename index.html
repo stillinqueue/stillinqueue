@@ -439,7 +439,15 @@
       .site-nav.nav-open { opacity: 1; visibility: visible; transform: scaleY(1); }
       .site-nav a { width: 100%; padding: 0.5rem 0.4rem; }
 
-      .auth-buttons { display: none; }
+        /* Keep login button visible on mobile, just a bit smaller */
+      .auth-buttons {
+        display: flex;
+      }
+      .auth-primary {
+      padding: 0.35rem 0.9rem;
+      font-size: 0.7rem;
+      }
+
       .hero { padding-inline: 1.5rem; }
       .section-block-inner { padding-inline: 1.5rem; }
       .logo-img { height: 110px; }
@@ -888,3 +896,4 @@
   </script>
 </body>
 </html>
+
