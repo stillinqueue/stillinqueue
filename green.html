@@ -589,7 +589,13 @@
 
       .site-nav a { width:100%; padding:.5rem .4rem; }
 
-      .auth-buttons { display:none; }
+      .auth-buttons {
+        display: flex;              /* ✅ keep it visible */
+      }
+      .auth-primary {
+      padding: 0.35rem 0.9rem;    /* slightly smaller on mobile */
+      font-size: 0.7rem;
+      }
 
       .hero { padding-inline:1.5rem; }
       .section { padding-inline:1.5rem; }
@@ -1199,4 +1205,5 @@
   </script>
 </body>
 </html>
+
 
