@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Still In Queue · AI</title>
+  <title>Still In Queue · Agents</title>
   <link rel="icon" type="image/png" href="Fav-Photoroom.png">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
@@ -12,1109 +12,183 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet">
 
   <style>
-    /* ===== Reset ===== */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
       --bg-dark: #020617;
-      --bg-card: #020818;
       --text-main: #f9fafb;
       --text-muted: #9ca3af;
       --accent-blue: #3b82f6;
-      --accent-blue-soft: #60a5fa;
-      --accent-cyan: #22d3ee;
-      --accent-green: #22c55e;
       --radius-lg: 1.25rem;
-      --radius-xl: 1.75rem;
       --radius-pill: 999px;
       --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.75);
-      --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --font-serif: "Playfair Display", "Times New Roman", serif;
-      --transition-fast: 160ms ease-out;
-      --transition-med: 260ms ease;
+      --font-sans: "Inter", system-ui, sans-serif;
+      --font-serif: "Playfair Display", serif;
     }
-
-    html { scroll-behavior: smooth; }
 
     body {
+      margin: 0;
       font-family: var(--font-sans);
+      background: radial-gradient(circle at 0 0, #0b1120, #020617 60%);
+      color: var(--text-main);
       min-height: 100vh;
-      color: var(--text-main);
-      background: radial-gradient(circle at 0 0, #0b1120 0, #020617 55%, #020617 100%);
     }
 
-    /* Sparkle canvas: full-viewport, never blocks clicks, starts hidden to avoid blue flicker */
-    #sparkle-canvas {
-      position: fixed; inset: 0;
-      width: 100vw; height: 100vh;
-      z-index: 50;
-      pointer-events: none;
-      mix-blend-mode: screen;
-      will-change: transform, opacity;
-      opacity: 0;                   /* HIDDEN until first pointer event */
-      transition: opacity .18s ease;
-    }
-
-    /* ===== Header / Navbar ===== */
-    .site-header {
-      position: sticky; top: 0; z-index: 20;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0.6rem 5vw;
-      backdrop-filter: blur(18px);
-      background: linear-gradient(to bottom, rgba(2,6,23,.96), rgba(2,6,23,.8), transparent);
-      border-bottom: 1px solid rgba(148,163,184,.22);
-    }
-
-    .logo { display: flex; align-items: center; }
-    .logo-img { height: 150px; width: auto; display: block; }
-
-    .header-right { display: flex; align-items: center; gap: 2.4rem; }
-
-    .site-nav {
-      display: flex; align-items: center; gap: 1.8rem;
-      font-size: .78rem; text-transform: uppercase; letter-spacing: .18em;
-    }
-
-    .site-nav a {
-      text-decoration: none; color: #cbd5f5;
-      padding: .35rem .9rem; border-radius: var(--radius-pill);
-      border: 1px solid transparent; background: transparent;
-      transition: color var(--transition-fast), border-color var(--transition-fast),
-                  background var(--transition-fast), box-shadow var(--transition-fast),
-                  transform var(--transition-fast);
-    }
-
-    .site-nav a:not(.active):hover {
-      color: #020617;
-      box-shadow: 0 18px 40px rgba(15,23,42,.7);
-      transform: translateY(-1px);
-      border-color: rgba(248,250,252,.9);
-      background: linear-gradient(135deg, #1d4ed8, #2563eb, #0ea5e9);
-    }
-
-    .site-nav a.active {
-      color: #020617;
-      border-color: rgba(248,250,252,.9);
-      background: linear-gradient(135deg, #1d4ed8, #2563eb, #0ea5e9);
-      box-shadow: 0 18px 40px rgba(15,23,42,.9);
-      transform: translateY(-1px);
-    }
-
-    .auth-buttons { display: flex; align-items: center; }
-    .auth-primary {
-      font-size: .78rem; text-transform: uppercase; letter-spacing: .18em;
-      text-decoration: none; padding: .45rem 1.5rem; border-radius: var(--radius-pill);
-      border: 1px solid rgba(248,250,252,.95);
-      background: linear-gradient(135deg, #3b82f6, #22c55e);
-      color: #f9fafb;
-      transition: background var(--transition-fast), border-color var(--transition-fast),
-                  box-shadow var(--transition-fast), transform var(--transition-fast);
-    }
-    .auth-primary:hover { background: linear-gradient(135deg, #60a5fa, #4ade80); border-color: #fff; box-shadow: 0 18px 40px rgba(15,23,42,.9); transform: translateY(-1px); }
-
-    .nav-toggle { display: none; flex-direction: column; gap: .2rem; background: none; border: none; cursor: pointer; }
-    .nav-toggle span { width: 1.5rem; height: 2px; border-radius: 999px; background: #e5e7eb; }
-
-    /* ===== Hero ===== */
-    .hero {
-      position: relative; min-height: 88vh;
-      padding: 5.5rem 5vw 4.5rem;
-      display: flex; align-items: center; justify-content: center;
-      overflow: hidden; isolation: isolate;
-    }
-
-    .hero-bg {
-      position: absolute; inset: -30%;
-      background:
-        radial-gradient(circle at 0 0, rgba(56,189,248,.6), transparent 60%),
-        radial-gradient(circle at 100% 10%, rgba(37,99,235,.65), transparent 60%),
-        radial-gradient(circle at 50% 120%, rgba(34,197,94,.4), transparent 60%);
-      opacity: .9; mix-blend-mode: screen; animation: floatGradient 20s ease-in-out infinite alternate;
-      z-index: -2;
-    }
-
-    .hero-shell {
-      position: absolute; inset: 7%;
-      border-radius: 3rem; border: 1px solid rgba(148,163,184,.5);
-      background: radial-gradient(circle at top, rgba(15,23,42,.96), rgba(15,23,42,.8), rgba(15,23,42,.4));
-      backdrop-filter: blur(26px);
-      z-index: -1;
-    }
-
-    @keyframes floatGradient {
-      0% { transform: translate3d(0,0,0) scale(1); }
-      50% { transform: translate3d(0,-4%,0) scale(1.04); }
-      100% { transform: translate3d(0,3%,0) scale(1.02); }
-    }
-
-    .hero-inner { max-width: 780px; text-align: center; }
-    .hero-kicker { font-size: .8rem; text-transform: uppercase; letter-spacing: .2em; color: #bfdbfe; margin-bottom: .9rem; }
-    .hero-title { font-family: var(--font-serif); font-size: clamp(2.6rem, 4vw, 3.6rem); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 1rem; }
-    .hero-pill { display: inline-flex; align-items: center; justify-content: center; padding: .25rem .9rem; border-radius: var(--radius-pill); border: 1px solid rgba(148,163,184,.7); background: rgba(15,23,42,.85); font-size: .74rem; letter-spacing: .18em; text-transform: uppercase; color: #cbd5f5; margin-bottom: 1.1rem; }
-    .hero-subline { color: var(--text-muted); font-size: .98rem; line-height: 1.8; margin-bottom: .6rem; }
-    .hero-subline strong { color: #e5e7eb; }
-    .hero-bullets { margin-top: .75rem; font-size: .84rem; letter-spacing: .18em; text-transform: uppercase; color: #93c5fd; }
-
-    .hero-cta { margin-top: 2rem; display: flex; justify-content: center; gap: .9rem; flex-wrap: wrap; }
-    .btn-primary {
-      padding: .9rem 1.8rem; border-radius: var(--radius-pill);
-      background: linear-gradient(135deg, #3b82f6, #0ea5e9, #22c55e);
-      color: #020617; font-weight: 600; border: none; text-decoration: none;
-      box-shadow: var(--shadow-soft); cursor: pointer;
-      transition: transform var(--transition-med), box-shadow var(--transition-med), filter var(--transition-med);
-    }
-    .btn-primary:hover { transform: translateY(-2px) scale(1.01); filter: brightness(1.05); box-shadow: 0 24px 60px rgba(15,23,42,.95); }
-
-    .btn-ghost {
-      padding: .85rem 1.6rem; border-radius: var(--radius-pill);
-      border: 1px solid rgba(148,163,184,.7); background: rgba(15,23,42,.85);
-      color: var(--text-main); text-decoration: none; font-size: .9rem; display: inline-flex; align-items: center; gap: .4rem;
-      transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
-    }
-    .btn-ghost:hover { background: rgba(30,64,175,.95); border-color: rgba(248,250,252,.9); transform: translateY(-1px); }
-
-    .scroll-indicator {
-      position: absolute; bottom: 1.9rem; left: 50%; transform: translateX(-50%);
-      color: #9ca3af; font-size: .78rem; letter-spacing: .2em; text-transform: uppercase; opacity: .75;
-      animation: scrollPulse 1.6s ease-in-out infinite;
-    }
-    @keyframes scrollPulse { 0%,100% { transform: translate(-50%,0); opacity:.4; } 50% { transform: translate(-50%,-4px); opacity:1; } }
-
-    /* ===== Sections ===== */
-    .section { padding: 3.5rem 5vw 0; max-width: 1180px; margin: 0 auto; scroll-margin-top: 9rem; }
-    .section-header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 1.6rem; }
-    .section-kicker { font-size: .78rem; text-transform: uppercase; letter-spacing: .18em; color: #93c5fd; margin-bottom: .4rem; }
-    .section-title { font-family: var(--font-serif); font-size: 1.4rem; letter-spacing: .08em; text-transform: uppercase; }
-    .section-desc { font-size: .9rem; color: var(--text-muted); max-width: 440px; line-height: 1.7; }
-
-    .section-chip { text-align: center; margin-bottom: 1.6rem; }
-    .section-chip span {
-      display: inline-block; padding: .3rem 1.4rem; border-radius: var(--radius-pill);
-      border: 1px solid rgba(191,219,254,.95);
-      background: linear-gradient(135deg, #1d4ed8, #2563eb, #0ea5e9);
-      font-size: .7rem; text-transform: uppercase; letter-spacing: .2em; color: #020617;
-    }
-
-    .agents-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.4rem; }
-    .agent-card {
-      border-radius: var(--radius-lg);
-      background: radial-gradient(circle at top left, #020617, #020617 45%, #020819 100%);
-      border: 1px solid rgba(148,163,184,.35);
-      padding: 1.35rem 1.25rem 1.4rem;
-      box-shadow: 0 16px 36px rgba(15,23,42,.9);
-      position: relative; overflow: hidden;
-      transition: transform var(--transition-med), box-shadow var(--transition-med),
-                  border-color var(--transition-med), background var(--transition-med);
-    }
-    .agent-card::before {
-      content: ""; position: absolute; inset: -30%; opacity: 0; pointer-events: none;
-      background: radial-gradient(circle at 0 0, rgba(59,130,246,.4), transparent 55%);
-      mix-blend-mode: screen; transition: opacity var(--transition-med);
-    }
-    .agent-card:hover { transform: translateY(-4px); box-shadow: 0 28px 70px rgba(15,23,42,.9); border-color: rgba(129,140,248,.9); background: radial-gradient(circle at top right, #020617, #020617 40%, #02091c 100%); }
-    .agent-card:hover::before { opacity: 1; }
-    .agent-tag { font-size: .7rem; text-transform: uppercase; letter-spacing: .18em; color: #93c5fd; margin-bottom: .65rem; }
-    .agent-title { font-weight: 600; margin-bottom: .35rem; }
-    .agent-text { font-size: .9rem; color: var(--text-muted); line-height: 1.6; margin-bottom: .75rem; }
-    .agent-meta { font-size: .8rem; color: #e5e7eb; opacity: .9; }
-    .agent-meta span { opacity: .8; }
-
-    /* NEW: agent action link */
-    .agent-action {
-      display: inline-flex;
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
       align-items: center;
-      gap: .45rem;
-      margin-top: .2rem;
-      padding: .55rem 1rem;
-      border-radius: var(--radius-pill);
-      border: 1px solid rgba(148,163,184,.7);
-      background: rgba(15,23,42,.85);
-      color: var(--text-main);
+      padding: 0.8rem 5vw;
+      backdrop-filter: blur(16px);
+      background: rgba(2,6,23,.9);
+      border-bottom: 1px solid rgba(148,163,184,.25);
+    }
+
+    header img {
+      height: 90px;
+    }
+
+    nav a {
+      margin-left: 1.5rem;
       text-decoration: none;
-      font-size: .84rem;
-      transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
-      position: relative;
-      z-index: 2;
-    }
-    .agent-action:hover {
-      background: rgba(30,64,175,.95);
-      border-color: rgba(248,250,252,.9);
-      transform: translateY(-1px);
+      color: #cbd5f5;
+      font-size: .75rem;
+      letter-spacing: .18em;
+      text-transform: uppercase;
     }
 
-    .workflow-layout { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(0,1fr); gap: 1.6rem; margin-top: .8rem; }
-    .workflow-canvas { border-radius: var(--radius-xl); background: radial-gradient(circle at top left, #020617, #020617 55%, #030816 100%); border: 1px dashed rgba(148,163,184,.55); padding: 1.6rem 1.4rem; box-shadow: 0 20px 50px rgba(15,23,42,.9); position: relative; overflow: hidden; }
-    .workflow-canvas::before { content: "Drag & drop nodes here · SQ-AI Canvas (coming soon)"; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: .82rem; letter-spacing: .16em; text-transform: uppercase; color: rgba(148,163,184,.7); pointer-events: none; }
-    .workflow-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(15,23,42,.7) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,.7) 1px, transparent 1px); background-size: 28px 28px; opacity: .35; pointer-events: none; }
+    main {
+      padding: 4rem 5vw;
+      max-width: 1200px;
+      margin: auto;
+    }
 
-    .workflow-sidebar { border-radius: var(--radius-xl); background: radial-gradient(circle at top, #020617, #020617 55%, #02091b 100%); border: 1px solid rgba(148,163,184,.5); padding: 1.5rem 1.4rem; box-shadow: 0 18px 40px rgba(15,23,42,.9); }
-    .workflow-sidebar h3 { font-size: 1rem; margin-bottom: .5rem; }
-    .workflow-sidebar p  { font-size: .9rem; color: var(--text-muted); line-height: 1.6; margin-bottom: .7rem; }
-    .node-list { margin-top: .6rem; display: grid; gap: .4rem; font-size: .86rem; }
-    .node-chip { border-radius: 999px; padding: .4rem .8rem; background: rgba(15,23,42,.85); border: 1px solid rgba(148,163,184,.7); display: inline-flex; align-items: center; justify-content: space-between; gap: .4rem; }
-    .node-chip span { font-size: .72rem; text-transform: uppercase; letter-spacing: .16em; color: #a5b4fc; }
+    h1 {
+      font-family: var(--font-serif);
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      margin-bottom: 1.2rem;
+    }
 
-    .alerts-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1.4rem; margin-top: .8rem; }
-    .alert-card { border-radius: var(--radius-lg); background: radial-gradient(circle at top left, #020617, #020617 45%, #020818 100%); border: 1px solid rgba(148,163,184,.4); padding: 1.3rem 1.25rem 1.35rem; box-shadow: 0 18px 40px rgba(15,23,42,.9); }
-    .alert-title { font-weight: 600; margin-bottom: .35rem; }
-    .alert-text { font-size: .9rem; color: var(--text-muted); line-height: 1.6; margin-bottom: .65rem; }
-    .alert-meta { font-size: .8rem; color: #bfdbfe; letter-spacing: .14em; text-transform: uppercase; }
+    p.lead {
+      color: var(--text-muted);
+      max-width: 520px;
+      line-height: 1.7;
+      margin-bottom: 3rem;
+    }
 
-    .about-card { border-radius: 1.9rem; padding: 2.1rem 2rem; border: 1px solid rgba(148,163,184,.45); background: radial-gradient(circle at top left, #020617, #020617 55%, #020819 100%); box-shadow: 0 22px 55px rgba(15,23,42,.95); margin-top: .4rem; }
-    .about-note { margin-top: 1rem; font-size: .9rem; padding: .85rem 1rem; border-radius: 1rem; border: 1px dashed rgba(148,163,184,.8); background: rgba(15,23,42,.85); color: var(--text-muted); line-height: 1.6; }
-
-    /* NEW: Real Estate studio UI */
-    .studio-layout {
+    .agents-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr);
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       gap: 1.4rem;
-      margin-top: .8rem;
     }
-    .studio-panel {
-      border-radius: var(--radius-xl);
-      background: radial-gradient(circle at top left, #020617, #020617 55%, #02091b 100%);
-      border: 1px solid rgba(148,163,184,.45);
-      padding: 1.2rem 1.2rem 1.3rem;
-      box-shadow: 0 20px 50px rgba(15,23,42,.9);
+
+    .agent-card {
+      background: radial-gradient(circle at top left, #020617, #020819);
+      border: 1px solid rgba(148,163,184,.35);
+      border-radius: var(--radius-lg);
+      padding: 1.4rem 1.3rem 1.5rem;
+      box-shadow: var(--shadow-soft);
+      transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
     }
-    .studio-label {
-      font-size: .72rem;
+
+    .agent-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 28px 70px rgba(15,23,42,.9);
+      border-color: rgba(129,140,248,.9);
+    }
+
+    .agent-tag {
+      font-size: .7rem;
       text-transform: uppercase;
       letter-spacing: .18em;
       color: #93c5fd;
       margin-bottom: .6rem;
     }
-    .studio-textarea {
-      width: 100%;
-      min-height: 320px;
-      resize: vertical;
-      border-radius: 1rem;
-      border: 1px solid rgba(148,163,184,.45);
-      background: rgba(15,23,42,.85);
-      color: #e5e7eb;
-      padding: .9rem .95rem;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: .85rem;
-      line-height: 1.55;
-      outline: none;
-    }
-    .studio-textarea:focus {
-      border-color: rgba(191,219,254,.95);
-      box-shadow: 0 0 0 3px rgba(59,130,246,.25);
-    }
-    .studio-actions {
-      display: flex;
-      gap: .65rem;
-      flex-wrap: wrap;
-      margin-top: .85rem;
-    }
-    .studio-btn {
-      padding: .8rem 1.2rem;
-      border-radius: var(--radius-pill);
-      border: 1px solid rgba(248,250,252,.85);
-      background: linear-gradient(135deg, #3b82f6, #0ea5e9, #22c55e);
-      color: #020617;
+
+    .agent-title {
       font-weight: 600;
-      cursor: pointer;
-      box-shadow: var(--shadow-soft);
-      transition: transform var(--transition-med), filter var(--transition-med), box-shadow var(--transition-med);
+      margin-bottom: .4rem;
     }
-    .studio-btn:hover { transform: translateY(-1px); filter: brightness(1.05); box-shadow: 0 24px 60px rgba(15,23,42,.95); }
-    .studio-btn:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(1); transform: none; box-shadow: none; }
 
-    .studio-btn-secondary {
-      padding: .8rem 1.2rem;
-      border-radius: var(--radius-pill);
-      border: 1px solid rgba(148,163,184,.7);
-      background: rgba(15,23,42,.85);
-      color: var(--text-main);
-      cursor: pointer;
-      transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
-    }
-    .studio-btn-secondary:hover { background: rgba(30,64,175,.95); border-color: rgba(248,250,252,.9); transform: translateY(-1px); }
-    .studio-btn-secondary:disabled { opacity: .45; cursor: not-allowed; transform: none; }
-
-    .studio-status {
-      margin-top: .85rem;
+    .agent-text {
       font-size: .9rem;
       color: var(--text-muted);
       line-height: 1.6;
-    }
-    .studio-preview {
-      border-radius: var(--radius-xl);
-      background: radial-gradient(circle at top left, #020617, #020617 55%, #02091b 100%);
-      border: 1px solid rgba(148,163,184,.45);
-      padding: 1rem;
-      box-shadow: 0 20px 50px rgba(15,23,42,.9);
-      overflow: auto;
-      max-height: 70vh;
-    }
-    .studio-preview svg {
-      max-width: 100%;
-      height: auto;
-      display: block;
+      margin-bottom: .9rem;
     }
 
-    .reveal { opacity: 0; transform: translateY(14px); transition: opacity 400ms ease-out, transform 400ms ease-out; }
-    .reveal.visible { opacity: 1; transform: translateY(0); }
-
-    .site-footer { border-top: 1px solid rgba(148,163,184,.25); padding: 1.7rem 5vw 2.1rem; margin-top: 3.2rem; text-align: center; font-size: .85rem; color: var(--text-muted); }
-    .site-footer a { color: var(--text-main); text-decoration: none; }
-
-    @media (max-width: 1040px) { .agents-grid, .alerts-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-    @media (max-width: 900px)  { .workflow-layout { grid-template-columns: minmax(0,1fr); } .workflow-canvas { min-height: 260px; } }
-    @media (max-width: 900px)  { .studio-layout { grid-template-columns: minmax(0,1fr); } }
-    @media (max-width: 768px)  {
-      .site-header { padding-inline: 1.25rem; }
-      .header-right { gap: 1.2rem; }
-      .nav-toggle { display: inline-flex; }
-      .site-nav {
-        position: absolute; top: 100%; right: 0; flex-direction: column; align-items: flex-start;
-        width: min(260px, 80vw); padding: .75rem 1rem 1rem;
-        background: rgba(15,23,42,.98); border-radius: 0 0 1.5rem 1.5rem;
-        border-left: 1px solid rgba(148,163,184,.3); border-bottom: 1px solid rgba(148,163,184,.3);
-        transform-origin: top right; transform: scaleY(.8);
-        opacity: 0; visibility: hidden;
-        transition: opacity var(--transition-fast), transform var(--transition-fast), visibility var(--transition-fast);
-      }
-      .site-nav.nav-open { opacity: 1; visibility: visible; transform: scaleY(1); }
-      .site-nav a { width: 100%; padding: .5rem .4rem; }
-      .auth-buttons { display: flex; }
-      .auth-primary { padding: 0.35rem 0.9rem; font-size: 0.7rem; }
-      .hero { padding-inline: 1.5rem; }
-      .section { padding-inline: 1.5rem; }
-      .section-header { flex-direction: column; align-items: flex-start; }
-      .agents-grid, .alerts-grid { grid-template-columns: minmax(0,1fr); }
-      .studio-textarea { min-height: 260px; }
-      .studio-preview { max-height: 55vh; }
+    .agent-link {
+      display: inline-block;
+      margin-top: .4rem;
+      font-size: .75rem;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: #020617;
+      background: linear-gradient(135deg, #3b82f6, #0ea5e9);
+      padding: .45rem 1.1rem;
+      border-radius: var(--radius-pill);
+      text-decoration: none;
     }
   </style>
 </head>
+
 <body>
-  <!-- Sparkle canvas -->
-  <canvas id="sparkle-canvas" aria-hidden="true"></canvas>
+<header>
+  <img src="SQ-AI-Photoroom.png" alt="Still In Queue">
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="agents.html">Agents</a>
+    <a href="login.html">Login</a>
+  </nav>
+</header>
 
-  <header class="site-header">
-    <a href="index.html" class="logo">
-      <img src="SQ-AI-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
-    </a>
+<main>
+  <h1>AI Agents</h1>
+  <p class="lead">
+    Explore pre-built SQ-AI agents. Each agent focuses on a real-world problem
+    and can later be customized, automated, and connected into workflows.
+  </p>
 
-    <button class="nav-toggle" aria-label="Toggle navigation">
-      <span></span><span></span>
-    </button>
+  <div class="agents-grid">
 
-    <div class="header-right">
-      <nav class="site-nav">
-        <a href="#top" class="nav-home active">Home</a>
-        <a href="#agents" class="nav-agents">Agents</a>
-        <a href="#realestate" class="nav-realestate">Real Estate</a>
-        <a href="#workflows" class="nav-workflows">Workflows</a>
-        <a href="#alerts" class="nav-alerts">Alerts</a>
-        <a href="#about" class="nav-about">About</a>
-      </nav>
-
-      <div class="auth-buttons">
-        <a href="login.html" class="auth-primary">Login / Sign Up</a>
-      </div>
-    </div>
-  </header>
-
-  <!-- Hero -->
-  <main id="top" class="hero">
-    <div class="hero-bg"></div>
-    <div class="hero-shell"></div>
-
-    <div class="hero-inner">
-      <div class="hero-kicker">SQ-AI · Artificial Intelligence</div>
-      <h1 class="hero-title">Workflow Agents for Real Life</h1>
-      <div class="hero-pill">Phase 1 · Concept Console</div>
-
-      <p class="hero-subline">
-        Still In Queue (SQ-AI) is a platform where you interact with
-        AI agents, design workflows through drag-and-drop, and automate the
-        systems around you — inspired by tools like n8n, built to be
-        <strong>agent-first</strong>.
-      </p>
-      <p class="hero-subline">
-        Pre-built agents like <strong>Stock Watch</strong>, <strong>Flight
-        Scout</strong>, <strong>Weather Guard</strong>, <strong>Job Radar</strong>,
-        <strong>Social Desk</strong>, <strong>Diet &amp; Workout Coach</strong>,
-        <strong>Spiritual Guide</strong>, <strong>Money Map</strong>,
-        <strong>Vacation Planner</strong>, and <strong>Sports Alerts</strong>
-        keep you notified as trends change.
-      </p>
-      <div class="hero-bullets">AGENTS · WORKFLOWS · ALERTS</div>
-
-      <div class="hero-cta">
-        <a href="#agents" class="btn-primary">Preview Agents</a>
-        <a href="#realestate" class="btn-ghost">Real Estate Layout Studio</a>
+    <div class="agent-card">
+      <div class="agent-tag">Markets · Money</div>
+      <div class="agent-title">Stock Watch & Money Map</div>
+      <div class="agent-text">
+        Track prices, trends, sentiment, and portfolio performance.
       </div>
     </div>
 
-    <div class="scroll-indicator">Scroll</div>
-  </main>
-
-  <!-- Agents Section -->
-  <section id="agents" class="section reveal">
-    <div class="section-chip"><span>Agents</span></div>
-
-    <div class="section-header">
-      <div>
-        <div class="section-kicker">Agent Library</div>
-        <h2 class="section-title">Pre-built SQ-AI Agents</h2>
-      </div>
-      <p class="section-desc">
-        These cards represent the first generation of SQ-AI agents. Later,
-        each card becomes its own interactive chat window with settings,
-        notifications, and connections into your workflows.
-      </p>
-    </div>
-
-    <div class="agents-grid">
-      <article class="agent-card">
-        <div class="agent-tag">Markets · Money</div>
-        <h3 class="agent-title">Stock Watch &amp; Money Map</h3>
-        <p class="agent-text">
-          Track watchlists, price levels, news sentiment, and portfolio
-          snapshots. Configure alerts for movements, volatility spikes,
-          or custom rules.
-        </p>
-        <div class="agent-meta">Triggers: <span>price · volume · news · custom rules</span></div>
-      </article>
-
-      <article class="agent-card">
-        <div class="agent-tag">Travel · Logistics</div>
-        <h3 class="agent-title">Flight Scout &amp; Vacation Planner</h3>
-        <p class="agent-text">
-          Monitor flight price trends, ideal booking windows, and itinerary
-          options. Chain it with a vacation planner that balances budget,
-          days off, and interests.
-        </p>
-        <div class="agent-meta">Triggers: <span>price drops · route changes · date windows</span></div>
-      </article>
-
-      <article class="agent-card">
-        <div class="agent-tag">Environment · Daily Life</div>
-        <h3 class="agent-title">Weather Guard &amp; Appointments</h3>
-        <p class="agent-text">
-          Get weather-aware reminders for commutes, outdoor plans, and
-          appointments. Integrate with calendars and location preferences.
-        </p>
-        <div class="agent-meta">Triggers: <span>severe alerts · rain chances · time windows</span></div>
-      </article>
-
-      <article class="agent-card">
-        <div class="agent-tag">Career · Content</div>
-        <h3 class="agent-title">Job Radar &amp; Social Desk</h3>
-        <p class="agent-text">
-          Watch job boards, role keywords, and companies while another
-          agent drafts, schedules, and evaluates social media content for
-          reach and consistency.
-        </p>
-        <div class="agent-meta">Triggers: <span>new roles · keyword matches · post performance</span></div>
-      </article>
-
-      <article class="agent-card">
-        <div class="agent-tag">Health · Routine</div>
-        <h3 class="agent-title">Diet, Workout &amp; Spiritual Coach</h3>
-        <p class="agent-text">
-          Build plans for meals, workouts, and spiritual routines, then get
-          nudges and reflections that adapt to your actual behavior.
-        </p>
-        <div class="agent-meta">Triggers: <span>time of day · completion · streaks</span></div>
-      </article>
-
-      <article class="agent-card">
-        <div class="agent-tag">Sports · Signals</div>
-        <h3 class="agent-title">Sports Alerts</h3>
-        <p class="agent-text">
-          Follow teams, leagues, or specific events. Combine live scores,
-          stats, and schedule changes into one signal stream.
-        </p>
-        <div class="agent-meta">Triggers: <span>kickoff · score changes · standings</span></div>
-      </article>
-
-      <!-- NEW CARD: Real Estate -->
-      <article class="agent-card">
-        <div class="agent-tag">Design · Real Estate</div>
-        <h3 class="agent-title">Real Estate Layout Studio</h3>
-        <p class="agent-text">
-          Generate plot-aware layouts and preview them instantly in-browser.
-          Iterate by updating the plan JSON and re-rendering until it matches the vision.
-        </p>
-        <div class="agent-meta">Output: <span>SVG preview · PDF export</span></div>
-        <a class="agent-action" href="#realestate">Open Studio →</a>
-      </article>
-    </div>
-  </section>
-
-  <!-- NEW: Real Estate Layout Studio Section -->
-  <section id="realestate" class="section reveal">
-    <div class="section-chip"><span>Real Estate</span></div>
-
-    <div class="section-header">
-      <div>
-        <div class="section-kicker">Live Demo · Renderer</div>
-        <h2 class="section-title">Layout Studio</h2>
-      </div>
-      <p class="section-desc">
-        Edit the plan JSON, render an instant layout preview, and export a PDF.
-        Next step: connect this to a chat agent that edits the plan for you.
-      </p>
-    </div>
-
-    <div class="studio-layout">
-      <div class="studio-panel">
-        <div class="studio-label">Plan JSON</div>
-        <textarea id="planJson" class="studio-textarea" spellcheck="false"></textarea>
-
-        <div class="studio-actions">
-          <button id="btnRender" class="studio-btn">Render Layout</button>
-          <button id="btnDownloadPdf" class="studio-btn-secondary" disabled>Download PDF</button>
-          <button id="btnLoadSample" class="studio-btn-secondary">Load Sample</button>
-        </div>
-
-        <p id="renderStatus" class="studio-status">
-          Tip: change room sizes/positions and click <strong>Render Layout</strong>.
-        </p>
-      </div>
-
-      <div class="studio-preview">
-        <div class="studio-label">Preview (SVG)</div>
-        <div id="preview" style="margin-top:.75rem; color: rgba(148,163,184,.8);">
-          Preview will appear here after rendering.
-        </div>
+    <div class="agent-card">
+      <div class="agent-tag">Travel · Logistics</div>
+      <div class="agent-title">Flight Scout & Vacation Planner</div>
+      <div class="agent-text">
+        Monitor flight prices, booking windows, and itinerary ideas.
       </div>
     </div>
-  </section>
 
-  <!-- Workflows Section -->
-  <section id="workflows" class="section reveal">
-    <div class="section-chip"><span>Workflows</span></div>
-
-    <div class="section-header">
-      <div>
-        <div class="section-kicker">Visual Builder</div>
-        <h2 class="section-title">Drag-and-Drop Workflows</h2>
-      </div>
-      <p class="section-desc">
-        SQ-AI takes inspiration from n8n and similar tools, but is designed
-        around agents instead of raw APIs. Later, this canvas becomes where
-        you link agents, data sources, and notifications.
-      </p>
-    </div>
-
-    <div class="workflow-layout">
-      <div class="workflow-canvas">
-        <div class="workflow-grid"></div>
-      </div>
-
-      <aside class="workflow-sidebar">
-        <h3>Node Palette (Concept)</h3>
-        <p>
-          The workflow starts with <strong>triggers</strong> (time, data,
-          or events), flows through <strong>agents</strong> that add logic,
-          and ends in <strong>actions</strong> like notifications, webhooks,
-          or updates to your tools.
-        </p>
-
-        <div class="node-list">
-          <div class="node-chip">Trigger <span>Schedule · Webhook · Event</span></div>
-          <div class="node-chip">Agent <span>Stock · Travel · Health · etc.</span></div>
-          <div class="node-chip">Action <span>Email · Chat · API Call</span></div>
-          <div class="node-chip">Logic  <span>Filters · Branches · Loops</span></div>
-        </div>
-
-        <p style="margin-top:.85rem;font-size:.86rem;color:var(--text-muted);">
-          Under the hood this will run on a Python stack (e.g. FastAPI / Django)
-          so you can connect databases, dashboards, and external APIs directly.
-        </p>
-      </aside>
-    </div>
-  </section>
-
-  <!-- Alerts Section -->
-  <section id="alerts" class="section reveal">
-    <div class="section-chip"><span>Alerts</span></div>
-
-    <div class="section-header">
-      <div>
-        <div class="section-kicker">Signals &amp; Notifications</div>
-        <h2 class="section-title">Alerts that Respect Your Attention</h2>
-      </div>
-      <p class="section-desc">
-        Instead of constant noise, SQ-AI focuses on <strong>trend-based</strong>,
-        <strong>rule-based</strong>, and <strong>exception-based</strong> alerts
-        so you only hear from agents when it actually matters.
-      </p>
-    </div>
-
-    <div class="alerts-grid">
-      <article class="alert-card">
-        <h3 class="alert-title">Trend-Based Alerts</h3>
-        <p class="alert-text">
-          Configure agents to react to patterns instead of single events:
-          moving averages in markets, multi-day price drifts in flights, or
-          week-over-week changes in your habits.
-        </p>
-        <div class="alert-meta">Example · Stock · Flights · Habits</div>
-      </article>
-
-      <article class="alert-card">
-        <h3 class="alert-title">Rule-Based &amp; Thresholds</h3>
-        <p class="alert-text">
-          Simple “if this then that” rules with AI helping you design good
-          thresholds. For example: “Alert me if monthly expenses cross X% of
-          income for two weeks in a row.”
-        </p>
-        <div class="alert-meta">Example · Money · Energy · Time</div>
-      </article>
-
-      <article class="alert-card">
-        <h3 class="alert-title">Streams &amp; Digest Views</h3>
-        <p class="alert-text">
-          Choose between real-time streams (chat-style) or calm digests
-          delivered daily or weekly. Later, these will link into email,
-          chat apps, and a dedicated SQ-AI console.
-        </p>
-        <div class="alert-meta">Example · Daily · Weekly · Custom</div>
-      </article>
-    </div>
-  </section>
-
-  <!-- About SQ-AI -->
-  <section id="about" class="section reveal">
-    <div class="section-chip"><span>About</span></div>
-
-    <div class="about-card">
-      <div class="section-kicker">About · SQ-AI</div>
-      <h2 class="section-title" style="margin-bottom:.7rem;">The Vision Behind SQ-AI</h2>
-      <p style="font-size:.96rem;color:var(--text-muted);line-height:1.8;">
-        SQ-AI is the first fold of Still In Queue — a long-term vision to
-        harness AI and unify technology, learning, sustainability, and coffee
-        into connected digital experiences. SQ-AI focuses on workflows and
-        agents: practical building blocks that can watch trends, react to
-        signals, and help with daily decisions.
-      </p>
-      <p style="font-size:.96rem;color:var(--text-muted);line-height:1.8;margin-top:.6rem;">
-        This page is the design layer for the future console. In upcoming
-        phases, it will connect to a Python backend (FastAPI / Django), data
-        engineering pipelines, real-time notifications, and a secure login
-        system — turning these concepts into live tools that people can rely on.
-      </p>
-
-      <div class="about-note">
-        Roadmap idea:<br><br>
-        <strong>Phase 1:</strong> Front-end and information architecture.<br>
-        <strong>Phase 2:</strong> User accounts, basic agents, manual triggers.<br>
-        <strong>Phase 3:</strong> Full workflow engine with scheduling and integrations.<br>
-        <strong>Phase 4:</strong> Marketplace of community-built agents and templates.
+    <div class="agent-card">
+      <div class="agent-tag">Health · Routine</div>
+      <div class="agent-title">Diet, Workout & Spiritual Coach</div>
+      <div class="agent-text">
+        Adaptive daily routines for body, mind, and habits.
       </div>
     </div>
-  </section>
 
-  <footer class="site-footer">
-    <p>© 2025 Still in Queue · SQ-AI. All rights reserved.</p>
-    <p>contact : <a href="mailto:Stillinqueue25@gmail.com">Stillinqueue25@gmail.com</a></p>
-  </footer>
-
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const toggle = document.querySelector(".nav-toggle");
-      const nav = document.querySelector(".site-nav");
-      const navLinks = document.querySelectorAll(".site-nav a");
-
-      if (toggle && nav) {
-        toggle.addEventListener("click", () => { nav.classList.toggle("nav-open"); });
-      }
-
-      navLinks.forEach((link) => {
-        const href = link.getAttribute("href") || "";
-        if (href.startsWith("#")) {
-          link.addEventListener("click", (e) => {
-            e.preventDefault();
-            const target = document.querySelector(href);
-            if (target) target.scrollIntoView({ behavior: "smooth" });
-            navLinks.forEach((l) => l.classList.remove("active"));
-            link.classList.add("active");
-            if (nav) nav.classList.remove("nav-open");
-          });
-        }
-      });
-
-      const revealElements = document.querySelectorAll(".reveal");
-      const onScroll = () => {
-        const triggerBottom = window.innerHeight * 0.85;
-        revealElements.forEach((el) => {
-          const boxTop = el.getBoundingClientRect().top;
-          if (boxTop < triggerBottom) el.classList.add("visible");
-        });
-      };
-      window.addEventListener("scroll", onScroll);
-      onScroll();
-    });
-  </script>
-
-  <!-- NEW: Real Estate Studio JS -->
-  <script>
-    (function () {
-      const API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-
-      const planBox = document.getElementById("planJson");
-      const preview = document.getElementById("preview");
-      const statusEl = document.getElementById("renderStatus");
-      const btnRender = document.getElementById("btnRender");
-      const btnPdf = document.getElementById("btnDownloadPdf");
-      const btnSample = document.getElementById("btnLoadSample");
-
-      if (!planBox || !preview || !statusEl || !btnRender || !btnPdf || !btnSample) return;
-
-      const samplePayload = {
-        plan: {
-          meta: { title: "30x40 Demo Plan (v1)" },
-          plot: { w: 9, h: 12 },
-          setbacks: { left: 0.6, right: 0.6, front: 1.2, back: 0.6 },
-          rooms: [
-            { name: "Living",  x: 0.6, y: 1.2, w: 4.0, h: 3.2 },
-            { name: "Kitchen", x: 4.8, y: 1.2, w: 3.0, h: 3.0 },
-            { name: "Bed 1",   x: 0.6, y: 4.8, w: 3.6, h: 3.2 },
-            { name: "Bath",    x: 4.4, y: 4.8, w: 1.6, h: 2.0 }
-          ]
-        }
-      };
-
-      let lastPdfBase64 = null;
-
-      function setStatus(msg) {
-        statusEl.innerHTML = msg;
-      }
-
-      function loadSample() {
-        planBox.value = JSON.stringify(samplePayload, null, 2);
-        setStatus("Loaded sample. Click <strong>Render Layout</strong>.");
-      }
-
-      async function renderNow() {
-        btnRender.disabled = true;
-        btnPdf.disabled = true;
-        lastPdfBase64 = null;
-        setStatus("Rendering...");
-
-        let payload;
-        try {
-          payload = JSON.parse(planBox.value);
-        } catch (e) {
-          setStatus("<span style='color:#fca5a5;'>Invalid JSON.</span> Please fix the JSON and try again.");
-          btnRender.disabled = false;
-          return;
-        }
-
-        try {
-          const res = await fetch(API, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-
-          const data = await res.json().catch(() => ({}));
-
-          if (!res.ok) {
-            const msg = data.error || ("Render failed (HTTP " + res.status + ")");
-            setStatus("<span style='color:#fca5a5;'>Render error:</span> " + msg);
-            btnRender.disabled = false;
-            return;
-          }
-
-          preview.innerHTML = data.svg || "(No SVG returned)";
-          lastPdfBase64 = data.pdf_base64 || null;
-          btnPdf.disabled = !lastPdfBase64;
-
-          setStatus("Done ✅ Layout updated.");
-        } catch (err) {
-          console.error(err);
-          setStatus("<span style='color:#fca5a5;'>Network error.</span> Check console.");
-        } finally {
-          btnRender.disabled = false;
-        }
-      }
-
-      function downloadPdf() {
-        if (!lastPdfBase64) return;
-
-        const byteChars = atob(lastPdfBase64);
-        const byteNumbers = new Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-
-        const blob = new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
-
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "layout.pdf";
-        a.click();
-
-        URL.revokeObjectURL(url);
-      }
-
-      btnRender.addEventListener("click", renderNow);
-      btnPdf.addEventListener("click", downloadPdf);
-      btnSample.addEventListener("click", loadSample);
-
-      // initialize with sample
-      loadSample();
-    })();
-  </script>
-
-  <!-- Sparkle trail (blue bubbles + silver stars) with safe start/stop opacity -->
-  <script>
-  (() => {
-    const canvas = document.getElementById('sparkle-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d', { alpha: true });
-
-    const vw = () => Math.max(document.documentElement.clientWidth,  window.innerWidth  || 0);
-    const vh = () => Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
-    const state = { w: 0, h: 0, dpr: Math.min(2, Math.max(1, window.devicePixelRatio || 1)) };
-
-    function resize() {
-      canvas.style.width = '100vw';
-      canvas.style.height = '100vh';
-      const w = vw(), h = vh();
-      const dprNow = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-      state.dpr = dprNow;
-      canvas.width  = Math.max(1, Math.floor(w * dprNow));
-      canvas.height = Math.max(1, Math.floor(h * dprNow));
-      ctx.setTransform(dprNow, 0, 0, dprNow, 0, 0);
-      state.w = w; state.h = h;
-    }
-    resize();
-    requestAnimationFrame(resize);
-    addEventListener('resize', resize);
-    if (window.visualViewport) {
-      visualViewport.addEventListener('resize', resize);
-      visualViewport.addEventListener('scroll', resize);
-    }
-    matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`).addEventListener?.('change', resize);
-
-    // CONFIG
-    const BLUE   = '#3b82f6';
-    const SILVER = '#e5e7eb';
-
-    const STEP        = 4;
-    const PER_STEP    = 4;
-    const POS_JIT     = 12;
-    const POS_JIT_PCT = 0.40;
-
-    const LIFE_MIN    = 900;
-    const LIFE_VAR    = 600;
-    const FRICTION    = 0.992;
-    const GRAVITY     = 0.007;
-    const SPEED_JIT   = 1.0;
-    const NOISE       = 0.035;
-
-    const STAR_CHANCE = 0.08;
-    const STAR_SCALES = [0.9, 1.15, 1.4, 1.8, 2.3];
-
-    const IDLE_DELAY_MS = 120;
-    const IDLE_EVERY_MS = 55;
-    const IDLE_COUNT    = 2;
-
-    const MAX = 620;
-    const P = new Array(MAX).fill(null);
-    let head = 0;
-
-    // Visibility control to prevent initial blue flicker
-    let visible = false;
-    let lastNonEmptyAt = performance.now();
-
-    function showCanvas() { if (!visible) { canvas.style.opacity = '1'; visible = true; } }
-    function hideCanvas() { if (visible) { canvas.style.opacity = '0'; visible = false; } }
-
-    function addParticle(x, y, vx, vy, color, type='dot') {
-      const life = LIFE_MIN + Math.random()*LIFE_VAR;
-      const base = (type === 'dot') ? (1.2 + Math.random()*2.6) : (1.0 + Math.random()*1.5);
-      const starScale = (type === 'star') ? STAR_SCALES[(Math.random()*STAR_SCALES.length)|0] : 1;
-      P[head] = { x, y, vx, vy, life, ttl: life, base, color, type, starScale };
-      head = (head + 1) % MAX;
-    }
-
-    const hexA = (hex, a) => {
-      const n = hex.replace('#','');
-      const v = parseInt(n.length===3 ? n.split('').map(c=>c+c).join('') : n, 16);
-      const r=(v>>16)&255,g=(v>>8)&255,b=v&255;
-      return `rgba(${r},${g},${b},${a})`;
-    };
-
-    function drawBubble(x, y, r, color, alpha) {
-      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0.00, hexA(color, Math.min(1, alpha*0.85)));
-      g.addColorStop(0.50, hexA(color, Math.min(1, alpha*0.35)));
-      g.addColorStop(1.00, hexA(color, 0));
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-    }
-
-    function drawStar5(x, y, outerR, alpha) {
-      const innerR = outerR * 0.5;
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(-Math.PI/2);
-      ctx.beginPath();
-      for (let i=0; i<5; i++) {
-        const a0 = (i * 2 * Math.PI) / 5;
-        const a1 = a0 + Math.PI / 5;
-        ctx.lineTo(Math.cos(a0)*outerR, Math.sin(a0)*outerR);
-        ctx.lineTo(Math.cos(a1)*innerR, Math.sin(a1)*innerR);
-      }
-      ctx.closePath();
-      ctx.fillStyle = hexA(SILVER, alpha);
-      ctx.shadowColor = SILVER;
-      ctx.shadowBlur = 14;
-      ctx.fill();
-      ctx.restore();
-    }
-
-    function spawnAt(x, y, segLen, pressed) {
-      const count = PER_STEP + (pressed ? 1 : 0);
-      const jitterR = POS_JIT + segLen * POS_JIT_PCT;
-
-      for (let i=0; i<count; i++) {
-        const angPos = Math.random()*Math.PI*2;
-        const jx = Math.cos(angPos) * (Math.random() * jitterR);
-        const jy = Math.sin(angPos) * (Math.random() * jitterR);
-
-        const angVel = Math.random()*Math.PI*2;
-        const pow = Math.random()*SPEED_JIT;
-        const vx = Math.cos(angVel)*pow;
-        const vy = Math.sin(angVel)*pow - 0.02;
-
-        addParticle(x + jx, y + jy, vx, vy, BLUE, 'dot');
-      }
-
-      if (Math.random() < STAR_CHANCE) {
-        const angVel = Math.random()*Math.PI*2;
-        const vx = Math.cos(angVel) * 0.28;
-        const vy = Math.sin(angVel) * 0.28 - 0.05;
-        addParticle(x, y, vx, vy, SILVER, 'star');
-      }
-    }
-
-    function sampleSpawns(x0, y0, x1, y1, pressed) {
-      if (x0 == null || y0 == null) { spawnAt(x1, y1, STEP, pressed); return; }
-      const dx = x1 - x0, dy = y1 - y0;
-      const dist  = Math.hypot(dx, dy);
-      const steps = Math.max(1, Math.floor(dist / STEP));
-      const segLen = dist / steps;
-      for (let s=1; s<=steps; s++) {
-        const t = s / steps;
-        spawnAt(x0 + dx*t, y0 + dy*t, segLen, pressed);
-      }
-    }
-
-    let last = null, down = false;
-    let lastMoveAt = performance.now();
-    let idleAcc = 0;
-
-    function wake() { showCanvas(); }
-
-    addEventListener('pointerdown', e => {
-      down = true; last = { x: e.clientX, y: e.clientY }; lastMoveAt = performance.now();
-      wake(); spawnAt(e.clientX, e.clientY, STEP, true);
-    }, { passive: true });
-
-    addEventListener('pointerup', () => { down = false; last = null; }, { passive: true });
-
-    addEventListener('pointermove', e => {
-      wake();
-      const list = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
-      if (list && list.length) {
-        for (const ev of list) {
-          if (last) sampleSpawns(last.x, last.y, ev.clientX, ev.clientY, down);
-          else spawnAt(ev.clientX, ev.clientY, STEP, down);
-          last = { x: ev.clientX, y: ev.clientY };
-        }
-      } else {
-        const x = e.clientX, y = e.clientY;
-        if (last) sampleSpawns(last.x, last.y, x, y, down);
-        else spawnAt(x, y, STEP, down);
-        last = { x, y };
-      }
-      lastMoveAt = performance.now();
-    }, { passive: true });
-
-    function idleEmit(dt) {
-      if (!last) return;
-      const since = performance.now() - lastMoveAt;
-      if (since < 120) { idleAcc = 0; return; }
-      idleAcc += dt;
-      while (idleAcc >= 55) {
-        idleAcc -= 55;
-        for (let i=0; i<2; i++) {
-          const ang = Math.random() * Math.PI * 2;
-          const r   = Math.random() * 18;
-          const x = last.x + Math.cos(ang) * r;
-          const y = last.y + Math.sin(ang) * r;
-          const vang = Math.random() * Math.PI * 2;
-          const vpow = Math.random() * 0.5;
-          const vx = Math.cos(vang) * vpow;
-          const vy = Math.sin(vang) * vpow - 0.02;
-          addParticle(x, y, vx, vy, BLUE, 'dot');
-        }
-        if (Math.random() < 0.12) {
-          const vx = (Math.random()-0.5) * 0.3;
-          const vy = (Math.random()-0.8) * 0.3;
-          addParticle(last.x, last.y, vx, vy, SILVER, 'star');
-        }
-      }
-    }
-
-    let lastFrame = performance.now();
-    function tick(now) {
-      const dt = now - lastFrame;
-      lastFrame = now;
-
-      ctx.clearRect(0, 0, state.w, state.h);
-      idleEmit(dt);
-
-      let any = false;
-      for (let i=0; i<MAX; i++) {
-        const p = P[i];
-        if (!p || p.ttl <= 0) continue;
-
-        any = true;
-
-        p.vx += (Math.random()-0.5) * 0.035;
-        p.vy += (Math.random()-0.5) * 0.035;
-
-        p.vx *= 0.992;
-        p.vy = p.vy * 0.992 + 0.007;
-        p.x += p.vx; p.y += p.vy;
-
-        p.ttl -= dt;
-        const t = Math.max(0, p.ttl / p.life);
-        const alpha = t;
-        const r = p.base * (0.7 + 1.8*(1 - t));
-
-        if (p.type === 'dot') {
-          drawBubble(p.x, p.y, r, p.color, alpha);
-        } else {
-          drawStar5(p.x, p.y, r * p.starScale, Math.min(1, alpha*0.9));
-        }
-      }
-
-      if (any) {
-        lastNonEmptyAt = now;
-        showCanvas();
-      } else {
-        if (now - lastNonEmptyAt > 220) hideCanvas();
-      }
-
-      requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-
-    document.addEventListener('visibilitychange', () => { lastFrame = performance.now(); });
-  })();
-  </script>
+    <!-- REAL ESTATE ENTRY -->
+    <div class="agent-card">
+      <div class="agent-tag">Design · Real Estate</div>
+      <div class="agent-title">Real Estate Intelligence</div>
+      <div class="agent-text">
+        AI-assisted layout planning, cost estimation, compliance checks,
+        and spatial design intelligence.
+      </div>
+      <a class="agent-link" href="realestate.html">Open →</a>
+    </div>
+
+  </div>
+</main>
 </body>
 </html>
