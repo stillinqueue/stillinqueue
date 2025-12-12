@@ -37,6 +37,18 @@
       background: radial-gradient(circle at 0 0, #0b1120 0, #020617 55%, #020617 100%);
     }
 
+    /* Sparkle canvas: full-viewport, never blocks clicks, starts hidden */
+    #sparkle-canvas {
+      position: fixed; inset: 0;
+      width: 100vw; height: 100vh;
+      z-index: 50;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      will-change: transform, opacity;
+      opacity: 0;
+      transition: opacity .18s ease;
+    }
+
     /* ===== Header (match your style) ===== */
     .site-header {
       position: sticky; top: 0; z-index: 20;
@@ -212,6 +224,9 @@
 </head>
 
 <body>
+  <!-- Sparkle canvas -->
+  <canvas id="sparkle-canvas" aria-hidden="true"></canvas>
+
   <header class="site-header">
     <a href="agents.html" class="logo" title="Back to Agents">
       <img src="SQ-AI-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
@@ -425,6 +440,253 @@
 
       loadSample();
     })();
+  </script>
+
+  <!-- Sparkle trail (same as agents.html) -->
+  <script>
+  (() => {
+    const canvas = document.getElementById('sparkle-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    const vw = () => Math.max(document.documentElement.clientWidth,  window.innerWidth  || 0);
+    const vh = () => Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
+    const state = { w: 0, h: 0, dpr: Math.min(2, Math.max(1, window.devicePixelRatio || 1)) };
+
+    function resize() {
+      canvas.style.width = '100vw';
+      canvas.style.height = '100vh';
+      const w = vw(), h = vh();
+      const dprNow = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+      state.dpr = dprNow;
+      canvas.width  = Math.max(1, Math.floor(w * dprNow));
+      canvas.height = Math.max(1, Math.floor(h * dprNow));
+      ctx.setTransform(dprNow, 0, 0, dprNow, 0, 0);
+      state.w = w; state.h = h;
+    }
+    resize();
+    requestAnimationFrame(resize);
+    addEventListener('resize', resize);
+    if (window.visualViewport) {
+      visualViewport.addEventListener('resize', resize);
+      visualViewport.addEventListener('scroll', resize);
+    }
+    matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`).addEventListener?.('change', resize);
+
+    const BLUE   = '#3b82f6';
+    const SILVER = '#e5e7eb';
+
+    const STEP        = 4;
+    const PER_STEP    = 4;
+    const POS_JIT     = 12;
+    const POS_JIT_PCT = 0.40;
+
+    const LIFE_MIN    = 900;
+    const LIFE_VAR    = 600;
+    const FRICTION    = 0.992;
+    const GRAVITY     = 0.007;
+    const SPEED_JIT   = 1.0;
+    const NOISE       = 0.035;
+
+    const STAR_CHANCE = 0.08;
+    const STAR_SCALES = [0.9, 1.15, 1.4, 1.8, 2.3];
+
+    const IDLE_DELAY_MS = 120;
+    const IDLE_EVERY_MS = 55;
+    const IDLE_COUNT    = 2;
+
+    const MAX = 620;
+    const P = new Array(MAX).fill(null);
+    let head = 0;
+
+    let visible = false;
+    let lastNonEmptyAt = performance.now();
+
+    function showCanvas() { if (!visible) { canvas.style.opacity = '1'; visible = true; } }
+    function hideCanvas() { if (visible) { canvas.style.opacity = '0'; visible = false; } }
+
+    function addParticle(x, y, vx, vy, color, type='dot') {
+      const life = LIFE_MIN + Math.random()*LIFE_VAR;
+      const base = (type === 'dot') ? (1.2 + Math.random()*2.6) : (1.0 + Math.random()*1.5);
+      const starScale = (type === 'star') ? STAR_SCALES[(Math.random()*STAR_SCALES.length)|0] : 1;
+      P[head] = { x, y, vx, vy, life, ttl: life, base, color, type, starScale };
+      head = (head + 1) % MAX;
+    }
+
+    const hexA = (hex, a) => {
+      const n = hex.replace('#','');
+      const v = parseInt(n.length===3 ? n.split('').map(c=>c+c).join('') : n, 16);
+      const r=(v>>16)&255,g=(v>>8)&255,b=v&255;
+      return `rgba(${r},${g},${b},${a})`;
+    };
+
+    function drawBubble(x, y, r, color, alpha) {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0.00, hexA(color, Math.min(1, alpha*0.85)));
+      g.addColorStop(0.50, hexA(color, Math.min(1, alpha*0.35)));
+      g.addColorStop(1.00, hexA(color, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    }
+
+    function drawStar5(x, y, outerR, alpha) {
+      const innerR = outerR * 0.5;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-Math.PI/2);
+      ctx.beginPath();
+      for (let i=0; i<5; i++) {
+        const a0 = (i * 2 * Math.PI) / 5;
+        const a1 = a0 + Math.PI / 5;
+        ctx.lineTo(Math.cos(a0)*outerR, Math.sin(a0)*outerR);
+        ctx.lineTo(Math.cos(a1)*innerR, Math.sin(a1)*innerR);
+      }
+      ctx.closePath();
+      ctx.fillStyle = hexA(SILVER, alpha);
+      ctx.shadowColor = SILVER;
+      ctx.shadowBlur = 14;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function spawnAt(x, y, segLen, pressed) {
+      const count = PER_STEP + (pressed ? 1 : 0);
+      const jitterR = POS_JIT + segLen * POS_JIT_PCT;
+
+      for (let i=0; i<count; i++) {
+        const angPos = Math.random()*Math.PI*2;
+        const jx = Math.cos(angPos) * (Math.random() * jitterR);
+        const jy = Math.sin(angPos) * (Math.random() * jitterR);
+
+        const angVel = Math.random()*Math.PI*2;
+        const pow = Math.random()*SPEED_JIT;
+        const vx = Math.cos(angVel)*pow;
+        const vy = Math.sin(angVel)*pow - 0.02;
+
+        addParticle(x + jx, y + jy, vx, vy, BLUE, 'dot');
+      }
+
+      if (Math.random() < STAR_CHANCE) {
+        const angVel = Math.random()*Math.PI*2;
+        const vx = Math.cos(angVel) * 0.28;
+        const vy = Math.sin(angVel) * 0.28 - 0.05;
+        addParticle(x, y, vx, vy, SILVER, 'star');
+      }
+    }
+
+    function sampleSpawns(x0, y0, x1, y1, pressed) {
+      if (x0 == null || y0 == null) { spawnAt(x1, y1, STEP, pressed); return; }
+      const dx = x1 - x0, dy = y1 - y0;
+      const dist  = Math.hypot(dx, dy);
+      const steps = Math.max(1, Math.floor(dist / STEP));
+      const segLen = dist / steps;
+      for (let s=1; s<=steps; s++) {
+        const t = s / steps;
+        spawnAt(x0 + dx*t, y0 + dy*t, segLen, pressed);
+      }
+    }
+
+    let last = null, down = false;
+    let lastMoveAt = performance.now();
+    let idleAcc = 0;
+
+    function wake() { showCanvas(); }
+
+    addEventListener('pointerdown', e => {
+      down = true; last = { x: e.clientX, y: e.clientY }; lastMoveAt = performance.now();
+      wake(); spawnAt(e.clientX, e.clientY, STEP, true);
+    }, { passive: true });
+
+    addEventListener('pointerup', () => { down = false; last = null; }, { passive: true });
+
+    addEventListener('pointermove', e => {
+      wake();
+      const list = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
+      if (list && list.length) {
+        for (const ev of list) {
+          if (last) sampleSpawns(last.x, last.y, ev.clientX, ev.clientY, down);
+          else spawnAt(ev.clientX, ev.clientY, STEP, down);
+          last = { x: ev.clientX, y: ev.clientY };
+        }
+      } else {
+        const x = e.clientX, y = e.clientY;
+        if (last) sampleSpawns(last.x, last.y, x, y, down);
+        else spawnAt(x, y, STEP, down);
+        last = { x, y };
+      }
+      lastMoveAt = performance.now();
+    }, { passive: true });
+
+    function idleEmit(dt) {
+      if (!last) return;
+      const since = performance.now() - lastMoveAt;
+      if (since < IDLE_DELAY_MS) { idleAcc = 0; return; }
+      idleAcc += dt;
+      while (idleAcc >= IDLE_EVERY_MS) {
+        idleAcc -= IDLE_EVERY_MS;
+        for (let i=0; i<IDLE_COUNT; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const r   = Math.random() * 18;
+          const x = last.x + Math.cos(ang) * r;
+          const y = last.y + Math.sin(ang) * r;
+          const vang = Math.random() * Math.PI * 2;
+          const vpow = Math.random() * 0.5;
+          const vx = Math.cos(vang) * vpow;
+          const vy = Math.sin(vang) * vpow - 0.02;
+          addParticle(x, y, vx, vy, BLUE, 'dot');
+        }
+        if (Math.random() < 0.12) {
+          const vx = (Math.random()-0.5) * 0.3;
+          const vy = (Math.random()-0.8) * 0.3;
+          addParticle(last.x, last.y, vx, vy, SILVER, 'star');
+        }
+      }
+    }
+
+    let lastFrame = performance.now();
+    function tick(now) {
+      const dt = now - lastFrame;
+      lastFrame = now;
+
+      ctx.clearRect(0, 0, state.w, state.h);
+      idleEmit(dt);
+
+      let any = false;
+      for (let i=0; i<MAX; i++) {
+        const p = P[i];
+        if (!p || p.ttl <= 0) continue;
+
+        any = true;
+
+        p.vx += (Math.random()-0.5) * NOISE;
+        p.vy += (Math.random()-0.5) * NOISE;
+
+        p.vx *= FRICTION;
+        p.vy = p.vy * FRICTION + GRAVITY;
+        p.x += p.vx; p.y += p.vy;
+
+        p.ttl -= dt;
+        const t = Math.max(0, p.ttl / p.life);
+        const alpha = t;
+        const r = p.base * (0.7 + 1.8*(1 - t));
+
+        if (p.type === 'dot') drawBubble(p.x, p.y, r, p.color, alpha);
+        else drawStar5(p.x, p.y, r * p.starScale, Math.min(1, alpha*0.9));
+      }
+
+      if (any) {
+        lastNonEmptyAt = now;
+        showCanvas();
+      } else {
+        if (now - lastNonEmptyAt > 220) hideCanvas();
+      }
+
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    document.addEventListener('visibilitychange', () => { lastFrame = performance.now(); });
+  })();
   </script>
 </body>
 </html>
