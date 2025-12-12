@@ -219,6 +219,29 @@
     .agent-meta { font-size: .8rem; color: #e5e7eb; opacity: .9; }
     .agent-meta span { opacity: .8; }
 
+    /* NEW: agent action link */
+    .agent-action {
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      margin-top: .2rem;
+      padding: .55rem 1rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148,163,184,.7);
+      background: rgba(15,23,42,.85);
+      color: var(--text-main);
+      text-decoration: none;
+      font-size: .84rem;
+      transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+      position: relative;
+      z-index: 2;
+    }
+    .agent-action:hover {
+      background: rgba(30,64,175,.95);
+      border-color: rgba(248,250,252,.9);
+      transform: translateY(-1px);
+    }
+
     .workflow-layout { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(0,1fr); gap: 1.6rem; margin-top: .8rem; }
     .workflow-canvas { border-radius: var(--radius-xl); background: radial-gradient(circle at top left, #020617, #020617 55%, #030816 100%); border: 1px dashed rgba(148,163,184,.55); padding: 1.6rem 1.4rem; box-shadow: 0 20px 50px rgba(15,23,42,.9); position: relative; overflow: hidden; }
     .workflow-canvas::before { content: "Drag & drop nodes here · SQ-AI Canvas (coming soon)"; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: .82rem; letter-spacing: .16em; text-transform: uppercase; color: rgba(148,163,184,.7); pointer-events: none; }
@@ -240,6 +263,98 @@
     .about-card { border-radius: 1.9rem; padding: 2.1rem 2rem; border: 1px solid rgba(148,163,184,.45); background: radial-gradient(circle at top left, #020617, #020617 55%, #020819 100%); box-shadow: 0 22px 55px rgba(15,23,42,.95); margin-top: .4rem; }
     .about-note { margin-top: 1rem; font-size: .9rem; padding: .85rem 1rem; border-radius: 1rem; border: 1px dashed rgba(148,163,184,.8); background: rgba(15,23,42,.85); color: var(--text-muted); line-height: 1.6; }
 
+    /* NEW: Real Estate studio UI */
+    .studio-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr);
+      gap: 1.4rem;
+      margin-top: .8rem;
+    }
+    .studio-panel {
+      border-radius: var(--radius-xl);
+      background: radial-gradient(circle at top left, #020617, #020617 55%, #02091b 100%);
+      border: 1px solid rgba(148,163,184,.45);
+      padding: 1.2rem 1.2rem 1.3rem;
+      box-shadow: 0 20px 50px rgba(15,23,42,.9);
+    }
+    .studio-label {
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .18em;
+      color: #93c5fd;
+      margin-bottom: .6rem;
+    }
+    .studio-textarea {
+      width: 100%;
+      min-height: 320px;
+      resize: vertical;
+      border-radius: 1rem;
+      border: 1px solid rgba(148,163,184,.45);
+      background: rgba(15,23,42,.85);
+      color: #e5e7eb;
+      padding: .9rem .95rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: .85rem;
+      line-height: 1.55;
+      outline: none;
+    }
+    .studio-textarea:focus {
+      border-color: rgba(191,219,254,.95);
+      box-shadow: 0 0 0 3px rgba(59,130,246,.25);
+    }
+    .studio-actions {
+      display: flex;
+      gap: .65rem;
+      flex-wrap: wrap;
+      margin-top: .85rem;
+    }
+    .studio-btn {
+      padding: .8rem 1.2rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(248,250,252,.85);
+      background: linear-gradient(135deg, #3b82f6, #0ea5e9, #22c55e);
+      color: #020617;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: var(--shadow-soft);
+      transition: transform var(--transition-med), filter var(--transition-med), box-shadow var(--transition-med);
+    }
+    .studio-btn:hover { transform: translateY(-1px); filter: brightness(1.05); box-shadow: 0 24px 60px rgba(15,23,42,.95); }
+    .studio-btn:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(1); transform: none; box-shadow: none; }
+
+    .studio-btn-secondary {
+      padding: .8rem 1.2rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148,163,184,.7);
+      background: rgba(15,23,42,.85);
+      color: var(--text-main);
+      cursor: pointer;
+      transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+    }
+    .studio-btn-secondary:hover { background: rgba(30,64,175,.95); border-color: rgba(248,250,252,.9); transform: translateY(-1px); }
+    .studio-btn-secondary:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+    .studio-status {
+      margin-top: .85rem;
+      font-size: .9rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .studio-preview {
+      border-radius: var(--radius-xl);
+      background: radial-gradient(circle at top left, #020617, #020617 55%, #02091b 100%);
+      border: 1px solid rgba(148,163,184,.45);
+      padding: 1rem;
+      box-shadow: 0 20px 50px rgba(15,23,42,.9);
+      overflow: auto;
+      max-height: 70vh;
+    }
+    .studio-preview svg {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
     .reveal { opacity: 0; transform: translateY(14px); transition: opacity 400ms ease-out, transform 400ms ease-out; }
     .reveal.visible { opacity: 1; transform: translateY(0); }
 
@@ -248,6 +363,7 @@
 
     @media (max-width: 1040px) { .agents-grid, .alerts-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
     @media (max-width: 900px)  { .workflow-layout { grid-template-columns: minmax(0,1fr); } .workflow-canvas { min-height: 260px; } }
+    @media (max-width: 900px)  { .studio-layout { grid-template-columns: minmax(0,1fr); } }
     @media (max-width: 768px)  {
       .site-header { padding-inline: 1.25rem; }
       .header-right { gap: 1.2rem; }
@@ -263,17 +379,14 @@
       }
       .site-nav.nav-open { opacity: 1; visibility: visible; transform: scaleY(1); }
       .site-nav a { width: 100%; padding: .5rem .4rem; }
-      .auth-buttons {
-        display: flex;              /* ✅ keep it visible */
-      }
-      .auth-primary {
-      padding: 0.35rem 0.9rem;    /* slightly smaller on mobile */
-      font-size: 0.7rem;
-      }
+      .auth-buttons { display: flex; }
+      .auth-primary { padding: 0.35rem 0.9rem; font-size: 0.7rem; }
       .hero { padding-inline: 1.5rem; }
       .section { padding-inline: 1.5rem; }
       .section-header { flex-direction: column; align-items: flex-start; }
       .agents-grid, .alerts-grid { grid-template-columns: minmax(0,1fr); }
+      .studio-textarea { min-height: 260px; }
+      .studio-preview { max-height: 55vh; }
     }
   </style>
 </head>
@@ -294,6 +407,7 @@
       <nav class="site-nav">
         <a href="#top" class="nav-home active">Home</a>
         <a href="#agents" class="nav-agents">Agents</a>
+        <a href="#realestate" class="nav-realestate">Real Estate</a>
         <a href="#workflows" class="nav-workflows">Workflows</a>
         <a href="#alerts" class="nav-alerts">Alerts</a>
         <a href="#about" class="nav-about">About</a>
@@ -333,7 +447,7 @@
 
       <div class="hero-cta">
         <a href="#agents" class="btn-primary">Preview Agents</a>
-        <a href="#workflows" class="btn-ghost">Workflow Canvas (Soon)</a>
+        <a href="#realestate" class="btn-ghost">Real Estate Layout Studio</a>
       </div>
     </div>
 
@@ -419,6 +533,58 @@
         </p>
         <div class="agent-meta">Triggers: <span>kickoff · score changes · standings</span></div>
       </article>
+
+      <!-- NEW CARD: Real Estate -->
+      <article class="agent-card">
+        <div class="agent-tag">Design · Real Estate</div>
+        <h3 class="agent-title">Real Estate Layout Studio</h3>
+        <p class="agent-text">
+          Generate plot-aware layouts and preview them instantly in-browser.
+          Iterate by updating the plan JSON and re-rendering until it matches the vision.
+        </p>
+        <div class="agent-meta">Output: <span>SVG preview · PDF export</span></div>
+        <a class="agent-action" href="#realestate">Open Studio →</a>
+      </article>
+    </div>
+  </section>
+
+  <!-- NEW: Real Estate Layout Studio Section -->
+  <section id="realestate" class="section reveal">
+    <div class="section-chip"><span>Real Estate</span></div>
+
+    <div class="section-header">
+      <div>
+        <div class="section-kicker">Live Demo · Renderer</div>
+        <h2 class="section-title">Layout Studio</h2>
+      </div>
+      <p class="section-desc">
+        Edit the plan JSON, render an instant layout preview, and export a PDF.
+        Next step: connect this to a chat agent that edits the plan for you.
+      </p>
+    </div>
+
+    <div class="studio-layout">
+      <div class="studio-panel">
+        <div class="studio-label">Plan JSON</div>
+        <textarea id="planJson" class="studio-textarea" spellcheck="false"></textarea>
+
+        <div class="studio-actions">
+          <button id="btnRender" class="studio-btn">Render Layout</button>
+          <button id="btnDownloadPdf" class="studio-btn-secondary" disabled>Download PDF</button>
+          <button id="btnLoadSample" class="studio-btn-secondary">Load Sample</button>
+        </div>
+
+        <p id="renderStatus" class="studio-status">
+          Tip: change room sizes/positions and click <strong>Render Layout</strong>.
+        </p>
+      </div>
+
+      <div class="studio-preview">
+        <div class="studio-label">Preview (SVG)</div>
+        <div id="preview" style="margin-top:.75rem; color: rgba(148,163,184,.8);">
+          Preview will appear here after rendering.
+        </div>
+      </div>
     </div>
   </section>
 
@@ -589,6 +755,116 @@
     });
   </script>
 
+  <!-- NEW: Real Estate Studio JS -->
+  <script>
+    (function () {
+      const API = "https://sq-ai-renderer.onrender.com/api/plans/render";
+
+      const planBox = document.getElementById("planJson");
+      const preview = document.getElementById("preview");
+      const statusEl = document.getElementById("renderStatus");
+      const btnRender = document.getElementById("btnRender");
+      const btnPdf = document.getElementById("btnDownloadPdf");
+      const btnSample = document.getElementById("btnLoadSample");
+
+      if (!planBox || !preview || !statusEl || !btnRender || !btnPdf || !btnSample) return;
+
+      const samplePayload = {
+        plan: {
+          meta: { title: "30x40 Demo Plan (v1)" },
+          plot: { w: 9, h: 12 },
+          setbacks: { left: 0.6, right: 0.6, front: 1.2, back: 0.6 },
+          rooms: [
+            { name: "Living",  x: 0.6, y: 1.2, w: 4.0, h: 3.2 },
+            { name: "Kitchen", x: 4.8, y: 1.2, w: 3.0, h: 3.0 },
+            { name: "Bed 1",   x: 0.6, y: 4.8, w: 3.6, h: 3.2 },
+            { name: "Bath",    x: 4.4, y: 4.8, w: 1.6, h: 2.0 }
+          ]
+        }
+      };
+
+      let lastPdfBase64 = null;
+
+      function setStatus(msg) {
+        statusEl.innerHTML = msg;
+      }
+
+      function loadSample() {
+        planBox.value = JSON.stringify(samplePayload, null, 2);
+        setStatus("Loaded sample. Click <strong>Render Layout</strong>.");
+      }
+
+      async function renderNow() {
+        btnRender.disabled = true;
+        btnPdf.disabled = true;
+        lastPdfBase64 = null;
+        setStatus("Rendering...");
+
+        let payload;
+        try {
+          payload = JSON.parse(planBox.value);
+        } catch (e) {
+          setStatus("<span style='color:#fca5a5;'>Invalid JSON.</span> Please fix the JSON and try again.");
+          btnRender.disabled = false;
+          return;
+        }
+
+        try {
+          const res = await fetch(API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            const msg = data.error || ("Render failed (HTTP " + res.status + ")");
+            setStatus("<span style='color:#fca5a5;'>Render error:</span> " + msg);
+            btnRender.disabled = false;
+            return;
+          }
+
+          preview.innerHTML = data.svg || "(No SVG returned)";
+          lastPdfBase64 = data.pdf_base64 || null;
+          btnPdf.disabled = !lastPdfBase64;
+
+          setStatus("Done ✅ Layout updated.");
+        } catch (err) {
+          console.error(err);
+          setStatus("<span style='color:#fca5a5;'>Network error.</span> Check console.");
+        } finally {
+          btnRender.disabled = false;
+        }
+      }
+
+      function downloadPdf() {
+        if (!lastPdfBase64) return;
+
+        const byteChars = atob(lastPdfBase64);
+        const byteNumbers = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+
+        const blob = new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "layout.pdf";
+        a.click();
+
+        URL.revokeObjectURL(url);
+      }
+
+      btnRender.addEventListener("click", renderNow);
+      btnPdf.addEventListener("click", downloadPdf);
+      btnSample.addEventListener("click", loadSample);
+
+      // initialize with sample
+      loadSample();
+    })();
+  </script>
+
   <!-- Sparkle trail (blue bubbles + silver stars) with safe start/stop opacity -->
   <script>
   (() => {
@@ -648,16 +924,11 @@
     let head = 0;
 
     // Visibility control to prevent initial blue flicker
-    let anyActive = false;
     let visible = false;
     let lastNonEmptyAt = performance.now();
 
-    function showCanvas() {
-      if (!visible) { canvas.style.opacity = '1'; visible = true; }
-    }
-    function hideCanvas() {
-      if (visible) { canvas.style.opacity = '0'; visible = false; }
-    }
+    function showCanvas() { if (!visible) { canvas.style.opacity = '1'; visible = true; } }
+    function hideCanvas() { if (visible) { canvas.style.opacity = '0'; visible = false; } }
 
     function addParticle(x, y, vx, vy, color, type='dot') {
       const life = LIFE_MIN + Math.random()*LIFE_VAR;
@@ -665,7 +936,6 @@
       const starScale = (type === 'star') ? STAR_SCALES[(Math.random()*STAR_SCALES.length)|0] : 1;
       P[head] = { x, y, vx, vy, life, ttl: life, base, color, type, starScale };
       head = (head + 1) % MAX;
-      anyActive = true;
     }
 
     const hexA = (hex, a) => {
@@ -775,11 +1045,11 @@
     function idleEmit(dt) {
       if (!last) return;
       const since = performance.now() - lastMoveAt;
-      if (since < IDLE_DELAY_MS) { idleAcc = 0; return; }
+      if (since < 120) { idleAcc = 0; return; }
       idleAcc += dt;
-      while (idleAcc >= IDLE_EVERY_MS) {
-        idleAcc -= IDLE_EVERY_MS;
-        for (let i=0; i<IDLE_COUNT; i++) {
+      while (idleAcc >= 55) {
+        idleAcc -= 55;
+        for (let i=0; i<2; i++) {
           const ang = Math.random() * Math.PI * 2;
           const r   = Math.random() * 18;
           const x = last.x + Math.cos(ang) * r;
@@ -813,11 +1083,11 @@
 
         any = true;
 
-        p.vx += (Math.random()-0.5) * NOISE;
-        p.vy += (Math.random()-0.5) * NOISE;
+        p.vx += (Math.random()-0.5) * 0.035;
+        p.vy += (Math.random()-0.5) * 0.035;
 
-        p.vx *= FRICTION;
-        p.vy = p.vy * FRICTION + GRAVITY;
+        p.vx *= 0.992;
+        p.vy = p.vy * 0.992 + 0.007;
         p.x += p.vx; p.y += p.vy;
 
         p.ttl -= dt;
@@ -834,9 +1104,8 @@
 
       if (any) {
         lastNonEmptyAt = now;
-        showCanvas();           // ensure visible when drawing
+        showCanvas();
       } else {
-        // If nothing on screen for a short moment, fade the canvas out
         if (now - lastNonEmptyAt > 220) hideCanvas();
       }
 
@@ -849,5 +1118,3 @@
   </script>
 </body>
 </html>
-
-
