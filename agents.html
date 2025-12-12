@@ -407,7 +407,6 @@
       <nav class="site-nav">
         <a href="#top" class="nav-home active">Home</a>
         <a href="#agents" class="nav-agents">Agents</a>
-        <a href="#realestate" class="nav-realestate">Real Estate</a>
         <a href="#workflows" class="nav-workflows">Workflows</a>
         <a href="#alerts" class="nav-alerts">Alerts</a>
         <a href="#about" class="nav-about">About</a>
@@ -548,45 +547,7 @@
     </div>
   </section>
 
-  <!-- NEW: Real Estate Layout Studio Section -->
-  <section id="realestate" class="section reveal">
-    <div class="section-chip"><span>Real Estate</span></div>
-
-    <div class="section-header">
-      <div>
-        <div class="section-kicker">Live Demo · Renderer</div>
-        <h2 class="section-title">Layout Studio</h2>
-      </div>
-      <p class="section-desc">
-        Edit the plan JSON, render an instant layout preview, and export a PDF.
-        Next step: connect this to a chat agent that edits the plan for you.
-      </p>
-    </div>
-
-    <div class="studio-layout">
-      <div class="studio-panel">
-        <div class="studio-label">Plan JSON</div>
-        <textarea id="planJson" class="studio-textarea" spellcheck="false"></textarea>
-
-        <div class="studio-actions">
-          <button id="btnRender" class="studio-btn">Render Layout</button>
-          <button id="btnDownloadPdf" class="studio-btn-secondary" disabled>Download PDF</button>
-          <button id="btnLoadSample" class="studio-btn-secondary">Load Sample</button>
-        </div>
-
-        <p id="renderStatus" class="studio-status">
-          Tip: change room sizes/positions and click <strong>Render Layout</strong>.
-        </p>
-      </div>
-
-      <div class="studio-preview">
-        <div class="studio-label">Preview (SVG)</div>
-        <div id="preview" style="margin-top:.75rem; color: rgba(148,163,184,.8);">
-          Preview will appear here after rendering.
-        </div>
-      </div>
-    </div>
-  </section>
+ 
 
   <!-- Workflows Section -->
   <section id="workflows" class="section reveal">
@@ -1118,3 +1079,4 @@
   </script>
 </body>
 </html>
+
