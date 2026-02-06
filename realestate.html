@@ -49,7 +49,7 @@
       transition: opacity .18s ease;
     }
 
-    /* ===== Header (match your style) ===== */
+    /* ===== Header ===== */
     .site-header {
       position: sticky; top: 0; z-index: 20;
       display: flex; align-items: center; justify-content: space-between;
@@ -158,32 +158,103 @@
       color: #93c5fd;
       margin-bottom: .6rem;
     }
-    .studio-textarea {
-      width: 100%;
-      min-height: 320px;
-      resize: vertical;
+
+    /* ===== Chat UI (left side) ===== */
+    .chat-shell {
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+      min-height: 430px;
+    }
+
+    .chat-thread {
+      flex: 1;
+      overflow: auto;
       border-radius: 1rem;
+      border: 1px solid rgba(148,163,184,.45);
+      background: rgba(15,23,42,.70);
+      padding: .85rem;
+    }
+
+    .chat-bubble {
+      max-width: 92%;
+      padding: .65rem .8rem;
+      border-radius: 1rem;
+      margin-bottom: .55rem;
+      font-size: .9rem;
+      line-height: 1.55;
+      border: 1px solid rgba(148,163,184,.18);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .chat-bubble.user {
+      margin-left: auto;
+      background: rgba(59,130,246,.18);
+      border-color: rgba(59,130,246,.35);
+    }
+    .chat-bubble.assistant {
+      margin-right: auto;
+      background: rgba(2,6,23,.55);
+      border-color: rgba(148,163,184,.18);
+    }
+
+    .chat-meta {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: .75rem;
+      font-size: .75rem;
+      color: rgba(148,163,184,.95);
+      text-transform: uppercase;
+      letter-spacing: .14em;
+      margin-top: .15rem;
+      margin-bottom: .35rem;
+    }
+
+    .chat-input-row {
+      display: flex;
+      gap: .65rem;
+      align-items: center;
+    }
+
+    .chat-input {
+      flex: 1;
+      border-radius: 999px;
       border: 1px solid rgba(148,163,184,.45);
       background: rgba(15,23,42,.85);
       color: #e5e7eb;
-      padding: .9rem .95rem;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: .85rem;
-      line-height: 1.55;
+      padding: .75rem 1rem;
       outline: none;
+      font-size: .92rem;
     }
-    .studio-textarea:focus {
+    .chat-input:focus {
       border-color: rgba(191,219,254,.95);
       box-shadow: 0 0 0 3px rgba(59,130,246,.25);
     }
-    .studio-actions { display: flex; gap: .65rem; flex-wrap: wrap; margin-top: .85rem; }
+
+    .chat-send {
+      padding: .78rem 1.1rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(248,250,252,.85);
+      background: linear-gradient(135deg, #3b82f6, #0ea5e9, #22c55e);
+      color: #020617;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: var(--shadow-soft);
+      transition: transform var(--transition-med), filter var(--transition-med), box-shadow var(--transition-med);
+      white-space: nowrap;
+    }
+    .chat-send:hover { transform: translateY(-1px); filter: brightness(1.05); box-shadow: 0 24px 60px rgba(15,23,42,.95); }
+    .chat-send:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(1); transform: none; box-shadow: none; }
+
+    /* ===== Action buttons ===== */
+    .studio-actions { display: flex; gap: .65rem; flex-wrap: wrap; margin-top: .2rem; }
     .studio-btn {
       padding: .8rem 1.2rem;
       border-radius: var(--radius-pill);
       border: 1px solid rgba(248,250,252,.85);
       background: linear-gradient(135deg, #3b82f6, #0ea5e9, #22c55e);
       color: #020617;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
       box-shadow: var(--shadow-soft);
       transition: transform var(--transition-med), filter var(--transition-med), box-shadow var(--transition-med);
@@ -204,21 +275,68 @@
     .studio-btn-secondary:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 
     .studio-status { margin-top: .85rem; font-size: .9rem; color: var(--text-muted); line-height: 1.6; }
-    .studio-preview { overflow: auto; max-height: 70vh; }
-    .studio-preview svg { max-width: 100%; height: auto; display: block; }
+
+    /* ===== Preview viewer controls ===== */
+    .studio-preview { overflow: hidden; max-height: 70vh; display: flex; flex-direction: column; gap: .65rem; }
+    .viewer-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .55rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .viewer-controls { display: flex; gap: .5rem; flex-wrap: wrap; }
+    .viewer-pill {
+      padding: .55rem .9rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148,163,184,.7);
+      background: rgba(15,23,42,.85);
+      color: var(--text-main);
+      cursor: pointer;
+      font-size: .85rem;
+      transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+    }
+    .viewer-pill:hover { background: rgba(30,64,175,.95); border-color: rgba(248,250,252,.9); transform: translateY(-1px); }
+
+    .viewer-hint {
+      font-size: .82rem;
+      color: rgba(156,163,175,.95);
+      line-height: 1.4;
+    }
+
+    .viewer-stage {
+      position: relative;
+      flex: 1;
+      min-height: 420px;
+      border-radius: 1rem;
+      border: 1px solid rgba(148,163,184,.45);
+      background: rgba(15,23,42,.65);
+      overflow: hidden;
+      touch-action: none; /* allow our own pan/zoom */
+    }
+
+    .viewer-canvas {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    /* Put svg to nice size; actual zoom comes from transforms */
+    .viewer-canvas svg { display: block; max-width: none; height: auto; }
 
     .site-footer { border-top: 1px solid rgba(148,163,184,.25); padding: 1.7rem 5vw 2.1rem; margin-top: 3.2rem; text-align: center; font-size: .85rem; color: var(--text-muted); }
 
     @media (max-width: 1040px) { .agents-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-    @media (max-width: 900px)  { .studio-layout { grid-template-columns: minmax(0,1fr); } }
+    @media (max-width: 900px)  { .studio-layout { grid-template-columns: minmax(0,1fr); } .viewer-stage { min-height: 360px; } }
     @media (max-width: 768px)  {
       .site-header { padding-inline: 1.25rem; }
       .hero { padding-inline: 1.5rem; }
       .section { padding-inline: 1.5rem; }
       .section-header { flex-direction: column; align-items: flex-start; }
       .agents-grid { grid-template-columns: minmax(0,1fr); }
-      .studio-textarea { min-height: 260px; }
-      .studio-preview { max-height: 55vh; }
+      .viewer-stage { min-height: 320px; }
     }
   </style>
 </head>
@@ -246,7 +364,7 @@
       <h1 class="hero-title">Real Estate Intelligence</h1>
       <p class="hero-subline">
         A vertical inside SQ-AI for layout planning and design iteration.
-        Today: Layout Studio preview + PDF export. Next: chat-driven revisions, vastu, and cost estimation.
+        Today: Chat-driven layout capture + SVG preview + PDF export. Next: vastu, cost estimation, and compliance.
       </p>
     </div>
   </main>
@@ -269,7 +387,7 @@
         <div class="agent-tag">Layouts · Design</div>
         <h3 class="agent-title">Layout Studio</h3>
         <p class="agent-text">
-          Generate plot-aware floor layouts. Preview instantly in SVG and export PDF.
+          Chat with the agent, generate plot-aware floor layouts. Preview instantly in SVG and export PDF.
         </p>
         <div class="agent-meta">Status: <span>Live</span></div>
       </article>
@@ -300,33 +418,61 @@
     <div class="section-header">
       <div>
         <div class="section-kicker">Live Demo · Renderer</div>
-        <h2 class="section-title">Generate & Export</h2>
+        <h2 class="section-title">Chat → Render → Confirm → Download</h2>
       </div>
       <p class="section-desc">
-        Edit the JSON, render the layout, and download a PDF.
+        Describe your plot + room requirements in chat. Render updates the SVG. Confirm enables PDF download.
       </p>
     </div>
 
     <div class="studio-layout">
+      <!-- LEFT: Chat -->
       <div class="studio-panel">
-        <div class="studio-label">Plan JSON</div>
-        <textarea id="planJson" class="studio-textarea" spellcheck="false"></textarea>
+        <div class="studio-label">AI Layout Agent (Chat)</div>
 
-        <div class="studio-actions">
-          <button id="btnRender" class="studio-btn">Render Layout</button>
-          <button id="btnDownloadPdf" class="studio-btn-secondary" disabled>Download PDF</button>
-          <button id="btnLoadSample" class="studio-btn-secondary">Load Sample</button>
+        <div class="chat-shell">
+          <div class="chat-thread" id="chatThread" aria-live="polite"></div>
+
+          <div class="chat-input-row">
+            <input id="chatInput" class="chat-input" type="text" placeholder="Type plot size, rooms, directions… e.g., 'Plot 30x40, 2BHK, kitchen east, living north'">
+            <button id="chatSend" class="chat-send">Send</button>
+          </div>
+
+          <div class="studio-actions">
+            <button id="btnRender" class="studio-btn">Render Layout</button>
+            <button id="btnConfirm" class="studio-btn-secondary" disabled>Confirm Layout</button>
+            <button id="btnDownloadPdf" class="studio-btn-secondary" disabled>Download PDF</button>
+          </div>
+
+          <p id="renderStatus" class="studio-status">
+            Start by describing your plot size and requirements. Then click <strong>Render Layout</strong>.
+          </p>
         </div>
-
-        <p id="renderStatus" class="studio-status">
-          Tip: change room sizes/positions and click <strong>Render Layout</strong>.
-        </p>
       </div>
 
+      <!-- RIGHT: Preview (kept as SVG, but enhanced viewer controls) -->
       <div class="studio-preview">
-        <div class="studio-label">Preview (SVG)</div>
-        <div id="preview" style="margin-top:.75rem; color: rgba(148,163,184,.8);">
-          Preview will appear here after rendering.
+        <div class="viewer-toolbar">
+          <div>
+            <div class="studio-label" style="margin-bottom:.35rem;">Preview (SVG)</div>
+            <div class="viewer-hint">Mouse wheel to zoom · Drag to pan · Use rotate buttons</div>
+          </div>
+
+          <div class="viewer-controls">
+            <button class="viewer-pill" id="zoomIn">Zoom +</button>
+            <button class="viewer-pill" id="zoomOut">Zoom −</button>
+            <button class="viewer-pill" id="rotateLeft">⟲ Rotate</button>
+            <button class="viewer-pill" id="rotateRight">⟳ Rotate</button>
+            <button class="viewer-pill" id="resetView">Reset</button>
+          </div>
+        </div>
+
+        <div class="viewer-stage" id="viewerStage" aria-label="SVG viewer">
+          <div class="viewer-canvas" id="viewerCanvas">
+            <div id="preview" style="color: rgba(148,163,184,.8); padding: 1rem;">
+              Preview will appear here after rendering.
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -338,17 +484,36 @@
 
   <script>
     (function () {
-      const API = "https://sq-ai-renderer.onrender.com/api/plans/render";
+      // Renderer API (unchanged)
+      const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
 
-      const planBox = document.getElementById("planJson");
-      const preview = document.getElementById("preview");
-      const statusEl = document.getElementById("renderStatus");
-      const btnRender = document.getElementById("btnRender");
-      const btnPdf = document.getElementById("btnDownloadPdf");
-      const btnSample = document.getElementById("btnLoadSample");
+      // OPTIONAL: If/when you connect your OpenAI agent backend, set this to your server endpoint.
+      // Example backend: POST /api/realestate/chat  { messages: [...] }  -> { reply: "...", plan?: {...} }
+      // For now, the page works without it (local mini-agent).
+      const CHAT_API = ""; // e.g. "https://your-domain.com/api/realestate/chat";
 
-      if (!planBox || !preview || !statusEl || !btnRender || !btnPdf || !btnSample) return;
+      const chatThread = document.getElementById("chatThread");
+      const chatInput  = document.getElementById("chatInput");
+      const chatSend   = document.getElementById("chatSend");
 
+      const preview    = document.getElementById("preview");
+      const statusEl   = document.getElementById("renderStatus");
+      const btnRender  = document.getElementById("btnRender");
+      const btnConfirm = document.getElementById("btnConfirm");
+      const btnPdf     = document.getElementById("btnDownloadPdf");
+
+      if (!chatThread || !chatInput || !chatSend || !preview || !statusEl || !btnRender || !btnConfirm || !btnPdf) return;
+
+      // Viewer elements
+      const viewerStage  = document.getElementById("viewerStage");
+      const viewerCanvas = document.getElementById("viewerCanvas");
+      const zoomInBtn    = document.getElementById("zoomIn");
+      const zoomOutBtn   = document.getElementById("zoomOut");
+      const rotLBtn      = document.getElementById("rotateLeft");
+      const rotRBtn      = document.getElementById("rotateRight");
+      const resetBtn     = document.getElementById("resetView");
+
+      // Sample payload (used for first render or fallback)
       const samplePayload = {
         plan: {
           meta: { title: "30x40 Demo Plan (v1)" },
@@ -363,32 +528,178 @@
         }
       };
 
+      // State
+      const messages = []; // { role: "user"|"assistant", content: string }
+      let draftPlan = null; // plan object (NOT payload wrapper)
       let lastPdfBase64 = null;
+      let isConfirmed = false;
 
+      // ---------- helpers ----------
       function setStatus(html) { statusEl.innerHTML = html; }
 
-      function loadSample() {
-        planBox.value = JSON.stringify(samplePayload, null, 2);
-        setStatus("Loaded sample. Click <strong>Render Layout</strong>.");
+      function escapeHtml(str) {
+        return String(str)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
       }
 
-      async function renderNow() {
-        btnRender.disabled = true;
-        btnPdf.disabled = true;
-        lastPdfBase64 = null;
-        setStatus("Rendering...");
+      function addMessage(role, content) {
+        messages.push({ role, content });
 
-        let payload;
-        try {
-          payload = JSON.parse(planBox.value);
-        } catch (e) {
-          setStatus("<span style='color:#fca5a5;'>Invalid JSON.</span> Please fix the JSON and try again.");
-          btnRender.disabled = false;
-          return;
+        const meta = document.createElement("div");
+        meta.className = "chat-meta";
+        meta.innerHTML = `<span>${role === "user" ? "You" : "SQ Agent"}</span><span>${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
+
+        const bubble = document.createElement("div");
+        bubble.className = "chat-bubble " + (role === "user" ? "user" : "assistant");
+        bubble.textContent = content;
+
+        chatThread.appendChild(meta);
+        chatThread.appendChild(bubble);
+        chatThread.scrollTop = chatThread.scrollHeight;
+      }
+
+      function getPlanPayloadForRender() {
+        // If chat built a plan, use it. Else sample.
+        const plan = draftPlan || samplePayload.plan;
+        return { plan };
+      }
+
+      // ---------- mini local agent (works even with no backend) ----------
+      // This is intentionally simple. When you plug OpenAI in, replace this path with CHAT_API calls.
+      function localAgentReply(userText) {
+        const t = userText.toLowerCase();
+
+        // Try to extract plot size like "30x40" (feet) or "9x12" (meters-ish)
+        // We'll convert feet to meters approx if it looks like 30x40, but keep it simple.
+        const sizeMatch = t.match(/(\d+)\s*x\s*(\d+)/);
+        let plotW = 9, plotH = 12; // default sample
+        if (sizeMatch) {
+          const a = parseFloat(sizeMatch[1]);
+          const b = parseFloat(sizeMatch[2]);
+          // Heuristic: if values are big (>=20), assume feet and convert to meters (~0.3048)
+          if (a >= 20 || b >= 20) {
+            plotW = +(a * 0.3048).toFixed(2);
+            plotH = +(b * 0.3048).toFixed(2);
+          } else {
+            plotW = a; plotH = b;
+          }
         }
 
+        // Rooms heuristic
+        const wants2bhk = t.includes("2bhk") || t.includes("2 bhk");
+        const wants3bhk = t.includes("3bhk") || t.includes("3 bhk");
+
+        const rooms = [];
+        // very rough layout blocks, just to produce something renderable
+        const left = 0.6, front = 1.2;
+        const usableW = Math.max(2, plotW - 1.2);
+        const usableH = Math.max(2, plotH - 1.8);
+
+        rooms.push({ name: "Living", x: left, y: front, w: +(usableW * 0.52).toFixed(2), h: +(usableH * 0.28).toFixed(2) });
+        rooms.push({ name: "Kitchen", x: +(left + usableW * 0.56).toFixed(2), y: front, w: +(usableW * 0.40).toFixed(2), h: +(usableH * 0.26).toFixed(2) });
+
+        rooms.push({ name: "Bed 1", x: left, y: +(front + usableH * 0.33).toFixed(2), w: +(usableW * 0.46).toFixed(2), h: +(usableH * 0.27).toFixed(2) });
+        rooms.push({ name: "Bath",  x: +(left + usableW * 0.50).toFixed(2), y: +(front + usableH * 0.33).toFixed(2), w: +(usableW * 0.20).toFixed(2), h: +(usableH * 0.18).toFixed(2) });
+
+        if (wants2bhk || wants3bhk) {
+          rooms.push({ name: "Bed 2", x: left, y: +(front + usableH * 0.63).toFixed(2), w: +(usableW * 0.46).toFixed(2), h: +(usableH * 0.25).toFixed(2) });
+        }
+        if (wants3bhk) {
+          rooms.push({ name: "Bed 3", x: +(left + usableW * 0.52).toFixed(2), y: +(front + usableH * 0.63).toFixed(2), w: +(usableW * 0.42).toFixed(2), h: +(usableH * 0.25).toFixed(2) });
+        }
+
+        // Save draft plan
+        draftPlan = {
+          meta: { title: "Draft Plan (chat)" },
+          plot: { w: plotW, h: plotH },
+          setbacks: { left: 0.6, right: 0.6, front: 1.2, back: 0.6 },
+          rooms
+        };
+
+        // Reply
+        const reply =
+`Got it. I captured a draft plan.
+
+- Plot: ${plotW} x ${plotH}
+- Rooms: ${rooms.map(r => r.name).join(", ")}
+
+Next: click "Render Layout" to preview. If you want changes, tell me (ex: "make kitchen bigger", "add pooja room", "living north").`;
+
+        return { reply, plan: draftPlan };
+      }
+
+      async function sendChat() {
+        const text = (chatInput.value || "").trim();
+        if (!text) return;
+
+        addMessage("user", text);
+        chatInput.value = "";
+
+        chatSend.disabled = true;
+        chatInput.disabled = true;
+
         try {
-          const res = await fetch(API, {
+          // If you wire OpenAI via your backend, use CHAT_API.
+          if (CHAT_API) {
+            const res = await fetch(CHAT_API, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ messages }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || ("Chat failed (HTTP " + res.status + ")"));
+
+            const reply = data.reply || "Okay.";
+            addMessage("assistant", reply);
+
+            if (data.plan && typeof data.plan === "object") {
+              draftPlan = data.plan;
+              setStatus("Draft updated ✅ Click <strong>Render Layout</strong> to preview.");
+            } else {
+              setStatus("Message received ✅ Click <strong>Render Layout</strong> when ready.");
+            }
+          } else {
+            // Local fallback agent (so the page works right now)
+            const out = localAgentReply(text);
+            addMessage("assistant", out.reply);
+            setStatus("Draft updated ✅ Click <strong>Render Layout</strong> to preview.");
+          }
+
+          // If user changes anything after confirming, un-confirm
+          if (isConfirmed) {
+            isConfirmed = false;
+            btnConfirm.disabled = false; // they can confirm again after re-render
+            btnPdf.disabled = true;
+            setStatus("You changed requirements. Please <strong>Render Layout</strong> again, then <strong>Confirm Layout</strong>.");
+          }
+
+        } catch (err) {
+          console.error(err);
+          addMessage("assistant", "Sorry — I hit a problem. Try again.");
+          setStatus("<span style='color:#fca5a5;'>Chat error.</span> Check console.");
+        } finally {
+          chatSend.disabled = false;
+          chatInput.disabled = false;
+          chatInput.focus();
+        }
+      }
+
+      // ---------- render / confirm / download ----------
+      async function renderNow() {
+        btnRender.disabled = true;
+        btnConfirm.disabled = true;
+        btnPdf.disabled = true;
+        lastPdfBase64 = null;
+        isConfirmed = false;
+
+        setStatus("Rendering...");
+
+        const payload = getPlanPayloadForRender();
+
+        try {
+          const res = await fetch(RENDER_API, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -398,16 +709,22 @@
 
           if (!res.ok) {
             const msg = data.error || ("Render failed (HTTP " + res.status + ")");
-            setStatus("<span style='color:#fca5a5;'>Render error:</span> " + msg);
+            setStatus("<span style='color:#fca5a5;'>Render error:</span> " + escapeHtml(msg));
             btnRender.disabled = false;
             return;
           }
 
+          // Keep preview SVG as-is (still SVG), but place inside viewer canvas
           preview.innerHTML = data.svg || "(No SVG returned)";
           lastPdfBase64 = data.pdf_base64 || null;
-          btnPdf.disabled = !lastPdfBase64;
 
-          setStatus("Done ✅ Layout updated.");
+          // After render, allow confirm (even if pdf missing, confirm will still gate download)
+          btnConfirm.disabled = false;
+
+          // Reset viewer so new SVG fits nicely
+          resetView(true);
+
+          setStatus("Rendered ✅ Review in preview. If it looks good, click <strong>Confirm Layout</strong>.");
         } catch (err) {
           console.error(err);
           setStatus("<span style='color:#fca5a5;'>Network error.</span> Check console.");
@@ -416,8 +733,22 @@
         }
       }
 
+      function confirmLayout() {
+        isConfirmed = true;
+
+        // Enable download only when confirmed AND pdf exists
+        const canDownload = !!lastPdfBase64;
+        btnPdf.disabled = !canDownload;
+
+        if (canDownload) {
+          setStatus("Confirmed ✅ You can now <strong>Download PDF</strong>.");
+        } else {
+          setStatus("Confirmed ✅ (PDF not available from renderer response.)");
+        }
+      }
+
       function downloadPdf() {
-        if (!lastPdfBase64) return;
+        if (!lastPdfBase64 || !isConfirmed) return;
 
         const byteChars = atob(lastPdfBase64);
         const byteNumbers = new Array(byteChars.length);
@@ -434,11 +765,132 @@
         URL.revokeObjectURL(url);
       }
 
-      btnRender.addEventListener("click", renderNow);
-      btnPdf.addEventListener("click", downloadPdf);
-      btnSample.addEventListener("click", loadSample);
+      // ---------- SVG Viewer: zoom / pan / rotate ----------
+      let view = {
+        scale: 1,
+        rotate: 0,   // degrees
+        tx: 0,       // px
+        ty: 0,       // px
+        dragging: false,
+        lastX: 0,
+        lastY: 0
+      };
 
-      loadSample();
+      function applyTransform() {
+        if (!viewerCanvas) return;
+        // We anchor at center using left/top 50% + translate. viewerCanvas uses origin (0,0)
+        // transform: translate(tx,ty) rotate() scale()
+        // plus initial - we set canvas at center (50%,50%), so first translate acts from that center.
+        const t = `translate(${view.tx}px, ${view.ty}px) rotate(${view.rotate}deg) scale(${view.scale})`;
+        viewerCanvas.style.transform = `translate(-50%, -50%) ${t}`;
+      }
+
+      function clampScale(s) {
+        return Math.min(8, Math.max(0.2, s));
+      }
+
+      function zoomBy(factor, anchorClientX = null, anchorClientY = null) {
+        const prev = view.scale;
+        const next = clampScale(prev * factor);
+        if (next === prev) return;
+
+        // Optional: zoom around cursor point by adjusting translate
+        if (anchorClientX != null && anchorClientY != null && viewerStage) {
+          const rect = viewerStage.getBoundingClientRect();
+          const ax = anchorClientX - (rect.left + rect.width / 2);
+          const ay = anchorClientY - (rect.top + rect.height / 2);
+
+          // Keep anchor stable: tx/ty changes by (1 - factor) * anchor offset
+          const f = next / prev;
+          view.tx = view.tx - ax * (f - 1);
+          view.ty = view.ty - ay * (f - 1);
+        }
+
+        view.scale = next;
+        applyTransform();
+      }
+
+      function rotateBy(deg) {
+        view.rotate = (view.rotate + deg) % 360;
+        applyTransform();
+      }
+
+      function resetView(silent=false) {
+        view.scale = 1;
+        view.rotate = 0;
+        view.tx = 0;
+        view.ty = 0;
+        applyTransform();
+        if (!silent) setStatus("View reset ✅");
+      }
+
+      function onPointerDown(e) {
+        if (!viewerStage) return;
+        view.dragging = true;
+        view.lastX = e.clientX;
+        view.lastY = e.clientY;
+        viewerStage.setPointerCapture?.(e.pointerId);
+      }
+
+      function onPointerMove(e) {
+        if (!view.dragging) return;
+        const dx = e.clientX - view.lastX;
+        const dy = e.clientY - view.lastY;
+        view.lastX = e.clientX;
+        view.lastY = e.clientY;
+        view.tx += dx;
+        view.ty += dy;
+        applyTransform();
+      }
+
+      function onPointerUp(e) {
+        view.dragging = false;
+        viewerStage?.releasePointerCapture?.(e.pointerId);
+      }
+
+      function onWheel(e) {
+        // Zoom with wheel
+        e.preventDefault();
+        const delta = e.deltaY || 0;
+        const factor = delta > 0 ? 0.92 : 1.08;
+        zoomBy(factor, e.clientX, e.clientY);
+      }
+
+      // ---------- wire events ----------
+      chatSend.addEventListener("click", sendChat);
+      chatInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") sendChat();
+      });
+
+      btnRender.addEventListener("click", renderNow);
+      btnConfirm.addEventListener("click", confirmLayout);
+      btnPdf.addEventListener("click", downloadPdf);
+
+      zoomInBtn?.addEventListener("click", () => zoomBy(1.15));
+      zoomOutBtn?.addEventListener("click", () => zoomBy(0.87));
+      rotLBtn?.addEventListener("click", () => rotateBy(-15));
+      rotRBtn?.addEventListener("click", () => rotateBy(15));
+      resetBtn?.addEventListener("click", () => resetView(false));
+
+      viewerStage?.addEventListener("pointerdown", onPointerDown);
+      viewerStage?.addEventListener("pointermove", onPointerMove);
+      viewerStage?.addEventListener("pointerup", onPointerUp);
+      viewerStage?.addEventListener("pointercancel", onPointerUp);
+      viewerStage?.addEventListener("wheel", onWheel, { passive: false });
+
+      // ---------- boot ----------
+      addMessage("assistant",
+        "Hi! Tell me your plot size (e.g., 30x40), number of rooms, and any direction preferences (North/East/West/South, NE/NW/SE/SW). " +
+        "When you're ready, click Render Layout."
+      );
+
+      // Enable confirm only after first render
+      btnConfirm.disabled = true;
+      btnPdf.disabled = true;
+
+      // Keep a working default even before chat
+      draftPlan = null;
+      applyTransform();
     })();
   </script>
 
