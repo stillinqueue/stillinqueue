@@ -899,6 +899,7 @@
       const previewIframe = document.getElementById("inventory-modal-iframe");
       const previewEmpty = document.getElementById("inventory-modal-empty");
       const previewCloseButtons = document.querySelectorAll("[data-close-preview]");
+      const backendBaseUrl = "http://127.0.0.1:8000";
 
       const setPreviewState = (isLive) => {
         if (!previewIframe || !previewEmpty) return;
@@ -907,12 +908,41 @@
         previewIframe.src = isLive ? "http://127.0.0.1:3000" : "about:blank";
       };
 
+      const updateStatus = (isLive, label) => {
+        if (!inventoryStatus) return;
+        inventoryStatus.classList.toggle("live", isLive);
+        inventoryStatus.textContent = label;
+      };
+
       if (previewTrigger && previewModal) {
-        previewTrigger.addEventListener("click", () => {
+        previewTrigger.addEventListener("click", async () => {
           previewModal.hidden = false;
-          if (inventoryStatus && inventoryStatus.textContent === "Live locally") {
-            setPreviewState(true);
-          } else {
+          updateStatus(false, "Starting…");
+
+          try {
+            const response = await fetch(`${backendBaseUrl}/api/inventorypulse/start`, { method: "POST" });
+            if (response.ok) {
+              updateStatus(false, "Starting…");
+              setPreviewState(false);
+              window.setTimeout(() => {
+                const probeUrl = "http://127.0.0.1:3000/favicon.ico?ts=" + Date.now();
+                const probe = new Image();
+                probe.onload = () => {
+                  updateStatus(true, "Live locally");
+                  setPreviewState(true);
+                };
+                probe.onerror = () => {
+                  updateStatus(false, "Starting…");
+                  setPreviewState(false);
+                };
+                probe.src = probeUrl;
+              }, 4000);
+            } else {
+              updateStatus(false, "Start locally");
+              setPreviewState(false);
+            }
+          } catch (error) {
+            updateStatus(false, "Start locally");
             setPreviewState(false);
           }
         });
@@ -925,29 +955,26 @@
         });
       });
 
-      if (inventoryStatus) {
-        const probeUrl = "http://127.0.0.1:3000/favicon.ico?ts=" + Date.now();
-        const probe = new Image();
-        let settled = false;
+      const probeUrl = "http://127.0.0.1:3000/favicon.ico?ts=" + Date.now();
+      const probe = new Image();
+      let settled = false;
 
-        const setStatus = (isLive, label) => {
-          if (settled) return;
-          settled = true;
-          inventoryStatus.classList.toggle("live", isLive);
-          inventoryStatus.textContent = label;
-          if (previewModal && previewTrigger && previewModal.hidden === false) {
-            setPreviewState(isLive);
-          }
-        };
+      const setStatus = (isLive, label) => {
+        if (settled) return;
+        settled = true;
+        updateStatus(isLive, label);
+        if (previewModal && previewTrigger && previewModal.hidden === false) {
+          setPreviewState(isLive);
+        }
+      };
 
-        probe.onload = () => setStatus(true, "Live locally");
-        probe.onerror = () => setStatus(false, "Start locally");
-        probe.src = probeUrl;
+      probe.onload = () => setStatus(true, "Live locally");
+      probe.onerror = () => setStatus(false, "Start locally");
+      probe.src = probeUrl;
 
-        window.setTimeout(() => {
-          if (!settled) setStatus(false, "Start locally");
-        }, 1500);
-      }
+      window.setTimeout(() => {
+        if (!settled) setStatus(false, "Start locally");
+      }, 1500);
     });
   </script>
 
