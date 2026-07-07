@@ -612,14 +612,14 @@
         <div class="agent-meta">Triggers: <span>reorder points · stockouts · demand shifts</span></div>
         <div class="agent-action-row">
           <button class="agent-action secondary" type="button" data-inventory-preview>
-            Preview inside
+            Preview live app
           </button>
           <a class="agent-action" href="https://inventorypulse-stillinqueue.loca.lt" target="_blank" rel="noopener noreferrer">
             Open live app
           </a>
-          <span class="agent-status" id="inventorypulse-status">Local app ready</span>
+          <span class="agent-status" id="inventorypulse-status">Live preview ready</span>
         </div>
-        <div class="agent-meta" style="margin-top:.5rem;">Local app: <span>run `docker compose up --build` in <code>inventorypulse-ai</code></span></div>
+        <div class="agent-meta" style="margin-top:.5rem;">Live app: <span>available via public tunnel</span></div>
       </article>
 
       <article class="agent-card">
@@ -839,7 +839,7 @@
       </div>
       <div class="inventory-modal__body" id="inventory-modal-body">
         <strong>InventoryPulse AI is ready to launch</strong>
-        The live public preview is available through the tunnel URL below.
+        This opens the live InventoryPulse frontend through the public tunnel.
         <br /><br />
         <a href="https://inventorypulse-stillinqueue.loca.lt" target="_blank" rel="noopener noreferrer">Open InventoryPulse AI now</a>
       </div>
@@ -885,7 +885,6 @@
       const previewTrigger = document.querySelector("[data-inventory-preview]");
       const previewModal = document.getElementById("inventory-modal");
       const previewCloseButtons = document.querySelectorAll("[data-close-preview]");
-      const backendBaseUrl = "https://inventorypulse-backend-stillinqueue.loca.lt";
       const frontendUrl = "https://inventorypulse-stillinqueue.loca.lt";
 
       const updateStatus = (isLive, label) => {
@@ -895,21 +894,9 @@
       };
 
       if (previewTrigger && previewModal) {
-        previewTrigger.addEventListener("click", async () => {
+        previewTrigger.addEventListener("click", () => {
           previewModal.hidden = false;
-          updateStatus(false, "Starting…");
-
-          try {
-            const response = await fetch(`${backendBaseUrl}/api/inventorypulse/start`, { method: "POST" });
-            if (response.ok) {
-              updateStatus(true, "Launching…");
-            } else {
-              updateStatus(false, "Local backend unreachable");
-            }
-          } catch (error) {
-            updateStatus(false, "Local backend unavailable");
-          }
-
+          updateStatus(true, "Opening live preview…");
           window.open(frontendUrl, "_blank", "noopener,noreferrer");
         });
       }
