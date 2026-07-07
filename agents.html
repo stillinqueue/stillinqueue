@@ -885,7 +885,6 @@
       const previewTrigger = document.querySelector("[data-inventory-preview]");
       const previewModal = document.getElementById("inventory-modal");
       const previewCloseButtons = document.querySelectorAll("[data-close-preview]");
-      const backendBaseUrl = "https://stillinqueue-backend-2.loca.lt";
       const frontendUrl = "https://inventorypulse-demo.vercel.app";
 
       const updateStatus = (isLive, label) => {
@@ -895,21 +894,10 @@
       };
 
       if (previewTrigger && previewModal) {
-        previewTrigger.addEventListener("click", async () => {
+        previewTrigger.addEventListener("click", () => {
           previewModal.hidden = false;
-          updateStatus(false, "Starting…");
-
-          try {
-            const response = await fetch(`${backendBaseUrl}/api/inventorypulse/start`, { method: "POST" });
-            if (response.ok) {
-              updateStatus(true, "Launching…");
-              window.open(frontendUrl, "_blank", "noopener,noreferrer");
-            } else {
-              updateStatus(false, "Start locally");
-            }
-          } catch (error) {
-            updateStatus(false, "Start locally");
-          }
+          updateStatus(true, "Opening…");
+          window.open(frontendUrl, "_blank", "noopener,noreferrer");
         });
       }
 
