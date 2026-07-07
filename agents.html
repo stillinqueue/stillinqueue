@@ -614,12 +614,12 @@
           <button class="agent-action secondary" type="button" data-inventory-preview>
             Preview inside
           </button>
-          <a class="agent-action" href="https://inventorypulse-demo.vercel.app" target="_blank" rel="noopener noreferrer">
-            Open full app
+          <a class="agent-action" href="http://127.0.0.1:3000" target="_blank" rel="noopener noreferrer">
+            Open local app
           </a>
-          <span class="agent-status" id="inventorypulse-status">Checking locally…</span>
+          <span class="agent-status" id="inventorypulse-status">Local app ready</span>
         </div>
-        <div class="agent-meta" style="margin-top:.5rem;">Local app: <span>start it from the companion repo with docker compose up</span></div>
+        <div class="agent-meta" style="margin-top:.5rem;">Local app: <span>run `docker compose up --build` in <code>inventorypulse-ai</code></span></div>
       </article>
 
       <article class="agent-card">
@@ -839,9 +839,9 @@
       </div>
       <div class="inventory-modal__body" id="inventory-modal-body">
         <strong>InventoryPulse AI is ready to launch</strong>
-        The preview is now opening the app directly in a new tab so you can use the full experience without the iframe tunnel issue.
+        This opens the local InventoryPulse frontend on port 3000. Start the companion app from the repo if it is not already running.
         <br /><br />
-        <a href="https://inventorypulse-demo.vercel.app" target="_blank" rel="noopener noreferrer">Open InventoryPulse AI now</a>
+        <a href="http://127.0.0.1:3000" target="_blank" rel="noopener noreferrer">Open InventoryPulse AI now</a>
       </div>
     </div>
   </div>
@@ -885,7 +885,8 @@
       const previewTrigger = document.querySelector("[data-inventory-preview]");
       const previewModal = document.getElementById("inventory-modal");
       const previewCloseButtons = document.querySelectorAll("[data-close-preview]");
-      const frontendUrl = "https://inventorypulse-demo.vercel.app";
+      const backendBaseUrl = "http://127.0.0.1:8000";
+      const frontendUrl = "http://127.0.0.1:3000";
 
       const updateStatus = (isLive, label) => {
         if (!inventoryStatus) return;
@@ -894,9 +895,21 @@
       };
 
       if (previewTrigger && previewModal) {
-        previewTrigger.addEventListener("click", () => {
+        previewTrigger.addEventListener("click", async () => {
           previewModal.hidden = false;
-          updateStatus(true, "Opening…");
+          updateStatus(false, "Starting…");
+
+          try {
+            const response = await fetch(`${backendBaseUrl}/api/inventorypulse/start`, { method: "POST" });
+            if (response.ok) {
+              updateStatus(true, "Launching…");
+            } else {
+              updateStatus(false, "Local backend unreachable");
+            }
+          } catch (error) {
+            updateStatus(false, "Local backend unavailable");
+          }
+
           window.open(frontendUrl, "_blank", "noopener,noreferrer");
         });
       }
