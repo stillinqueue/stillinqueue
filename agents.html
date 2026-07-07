@@ -317,24 +317,20 @@
 
     .inventory-modal__panel {
       position: relative;
-      width: min(96vw, 1220px);
-      height: min(86vh, 860px);
+      width: min(96vw, 720px);
       border-radius: 1.25rem;
       border: 1px solid rgba(148,163,184,.4);
       overflow: hidden;
       box-shadow: 0 28px 80px rgba(2,6,23,.9);
-      background: #020617;
+      background: radial-gradient(circle at top, #020617, #020617 45%, #02091c 100%);
     }
 
     .inventory-modal__topbar {
-      position: absolute;
-      inset: 0 0 auto 0;
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: .85rem 1rem;
       background: linear-gradient(180deg, rgba(2,6,23,.95), rgba(2,6,23,.7));
-      z-index: 2;
       border-bottom: 1px solid rgba(148,163,184,.2);
     }
 
@@ -354,25 +350,18 @@
       cursor: pointer;
     }
 
-    .inventory-modal__iframe {
-      width: 100%;
-      height: 100%;
-      border: 0;
-      background: white;
-    }
-
-    .inventory-modal__empty {
-      width: 100%;
-      height: 100%;
-      display: grid;
-      place-items: center;
-      padding: 2rem;
-      text-align: center;
+    .inventory-modal__body {
+      padding: 1.4rem 1.3rem 1.5rem;
       color: #e2e8f0;
-      background: radial-gradient(circle at top, #020617, #020617 45%, #02091c 100%);
+      line-height: 1.7;
     }
 
-    .inventory-modal__empty strong { display:block; margin-bottom:.5rem; color:#f8fafc; }
+    .inventory-modal__body strong { display:block; margin-bottom:.5rem; color:#f8fafc; }
+    .inventory-modal__body a {
+      color: #93c5fd;
+      text-decoration: none;
+      font-weight: 600;
+    }
 
     .workflow-layout { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(0,1fr); gap: 1.6rem; margin-top: .8rem; }
     .workflow-canvas { border-radius: var(--radius-xl); background: radial-gradient(circle at top left, #020617, #020617 55%, #030816 100%); border: 1px dashed rgba(148,163,184,.55); padding: 1.6rem 1.4rem; box-shadow: 0 20px 50px rgba(15,23,42,.9); position: relative; overflow: hidden; }
@@ -848,13 +837,12 @@
         <div class="inventory-modal__title">InventoryPulse AI · Live Preview</div>
         <button class="inventory-modal__close" type="button" data-close-preview>Close</button>
       </div>
-      <div class="inventory-modal__empty" id="inventory-modal-empty">
-        <div>
-          <strong>Local preview ready</strong>
-          Start the companion app with Docker, then open the preview again.
-        </div>
+      <div class="inventory-modal__body" id="inventory-modal-body">
+        <strong>InventoryPulse AI is ready to launch</strong>
+        The preview is now opening the app directly in a new tab so you can use the full experience without the iframe tunnel issue.
+        <br /><br />
+        <a href="https://stillinqueue-frontend.loca.lt" target="_blank" rel="noopener noreferrer">Open InventoryPulse AI now</a>
       </div>
-      <iframe class="inventory-modal__iframe" id="inventory-modal-iframe" title="InventoryPulse AI preview" src="about:blank"></iframe>
     </div>
   </div>
 
@@ -896,18 +884,9 @@
       const inventoryStatus = document.getElementById("inventorypulse-status");
       const previewTrigger = document.querySelector("[data-inventory-preview]");
       const previewModal = document.getElementById("inventory-modal");
-      const previewIframe = document.getElementById("inventory-modal-iframe");
-      const previewEmpty = document.getElementById("inventory-modal-empty");
       const previewCloseButtons = document.querySelectorAll("[data-close-preview]");
       const backendBaseUrl = "https://stillinqueue-backend-2.loca.lt";
-      const frontendBaseUrl = "https://stillinqueue-frontend.loca.lt";
-
-      const setPreviewState = (isLive) => {
-        if (!previewIframe || !previewEmpty) return;
-        previewEmpty.hidden = isLive;
-        previewIframe.style.display = isLive ? "block" : "none";
-        previewIframe.src = isLive ? frontendBaseUrl : "about:blank";
-      };
+      const frontendUrl = "https://stillinqueue-frontend.loca.lt";
 
       const updateStatus = (isLive, label) => {
         if (!inventoryStatus) return;
@@ -923,28 +902,13 @@
           try {
             const response = await fetch(`${backendBaseUrl}/api/inventorypulse/start`, { method: "POST" });
             if (response.ok) {
-              updateStatus(false, "Starting…");
-              setPreviewState(false);
-              window.setTimeout(() => {
-                const probeUrl = `${frontendBaseUrl}/favicon.ico?ts=` + Date.now();
-                const probe = new Image();
-                probe.onload = () => {
-                  updateStatus(true, "Live locally");
-                  setPreviewState(true);
-                };
-                probe.onerror = () => {
-                  updateStatus(false, "Starting…");
-                  setPreviewState(false);
-                };
-                probe.src = probeUrl;
-              }, 4000);
+              updateStatus(true, "Launching…");
+              window.open(frontendUrl, "_blank", "noopener,noreferrer");
             } else {
               updateStatus(false, "Start locally");
-              setPreviewState(false);
             }
           } catch (error) {
             updateStatus(false, "Start locally");
-            setPreviewState(false);
           }
         });
       }
@@ -952,30 +916,10 @@
       previewCloseButtons.forEach((button) => {
         button.addEventListener("click", () => {
           if (previewModal) previewModal.hidden = true;
-          if (previewIframe) previewIframe.src = "about:blank";
         });
       });
 
-      const probeUrl = `${frontendBaseUrl}/favicon.ico?ts=` + Date.now();
-      const probe = new Image();
-      let settled = false;
-
-      const setStatus = (isLive, label) => {
-        if (settled) return;
-        settled = true;
-        updateStatus(isLive, label);
-        if (previewModal && previewTrigger && previewModal.hidden === false) {
-          setPreviewState(isLive);
-        }
-      };
-
-      probe.onload = () => setStatus(true, "Live locally");
-      probe.onerror = () => setStatus(false, "Start locally");
-      probe.src = probeUrl;
-
-      window.setTimeout(() => {
-        if (!settled) setStatus(false, "Start locally");
-      }, 1500);
+      updateStatus(false, "Start locally");
     });
   </script>
 
