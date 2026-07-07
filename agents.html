@@ -614,8 +614,8 @@
           <button class="agent-action secondary" type="button" data-inventory-preview>
             Preview inside
           </button>
-          <a class="agent-action" href="http://127.0.0.1:3000" target="_blank" rel="noopener noreferrer">
-            Open local app
+          <a class="agent-action" href="https://inventorypulse-stillinqueue.loca.lt" target="_blank" rel="noopener noreferrer">
+            Open live app
           </a>
           <span class="agent-status" id="inventorypulse-status">Local app ready</span>
         </div>
@@ -885,8 +885,8 @@
       const previewTrigger = document.querySelector("[data-inventory-preview]");
       const previewModal = document.getElementById("inventory-modal");
       const previewCloseButtons = document.querySelectorAll("[data-close-preview]");
-      const backendBaseUrl = "http://127.0.0.1:8000";
-      const frontendUrl = "http://127.0.0.1:3000";
+      const backendBaseUrl = "https://inventorypulse-backend-stillinqueue.loca.lt";
+      const frontendUrl = "https://inventorypulse-stillinqueue.loca.lt";
 
       const updateStatus = (isLive, label) => {
         if (!inventoryStatus) return;
