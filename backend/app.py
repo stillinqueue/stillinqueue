@@ -1,7 +1,6 @@
 import os
 import secrets
 import shlex
-import sqlite3
 import hashlib
 import subprocess
 from datetime import datetime
@@ -11,6 +10,8 @@ from typing import Any, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 
 app = FastAPI(title="Still In Queue Backend", version="0.1.0")
 
@@ -25,33 +26,29 @@ app.add_middleware(
 DEFAULT_REPO_PATH = os.getenv("INVENTORYPULSE_REPO_PATH", "/workspaces/inventorypulse-ai")
 DEFAULT_COMPOSE_COMMAND = os.getenv("INVENTORYPULSE_COMPOSE_COMMAND", "docker compose up --build -d")
 LOG_PATH = Path(os.getenv("INVENTORYPULSE_LOG_PATH", "/tmp/inventorypulse-start.log"))
-DB_PATH = Path(__file__).parent / "users.db"
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg2://inventorypulse:inventorypulse@127.0.0.1:5432/inventorypulse",
+)
 
-
-def get_db_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 
 def init_db() -> None:
-    conn = get_db_connection()
-    try:
+    with engine.begin() as conn:
         conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                email TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                password_hash TEXT NOT NULL,
-                token TEXT NOT NULL,
-                created_at TEXT NOT NULL
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    email TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    token TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
             )
-            """
         )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 init_db()
@@ -69,24 +66,29 @@ def create_token() -> str:
     return secrets.token_urlsafe(24)
 
 
-def get_user(email: str) -> Optional[sqlite3.Row]:
-    conn = get_db_connection()
-    try:
-        return conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-    finally:
-        conn.close()
+def get_user(email: str) -> Optional[dict[str, Any]]:
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT * FROM users WHERE email = :email"), {"email": email}).mappings().fetchone()
+        return dict(row) if row is not None else None
 
 
 def create_user(email: str, name: str, password_hash: str, token: str) -> None:
-    conn = get_db_connection()
     try:
-        conn.execute(
-            "INSERT INTO users (email, name, password_hash, token, created_at) VALUES (?, ?, ?, ?, ?)",
-            (email, name, password_hash, token, datetime.utcnow().isoformat() + "Z"),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO users (email, name, password_hash, token, created_at) VALUES (:email, :name, :password_hash, :token, :created_at)"
+                ),
+                {
+                    "email": email,
+                    "name": name,
+                    "password_hash": password_hash,
+                    "token": token,
+                    "created_at": datetime.utcnow().isoformat() + "Z",
+                },
+            )
+    except IntegrityError as exc:
+        raise HTTPException(status_code=400, detail="An account already exists for this email.") from exc
 
 
 class AuthRequest(BaseModel):
@@ -137,6 +139,14 @@ def login(request: AuthRequest) -> AuthResponse:
 @app.get("/api/auth/health")
 def auth_health() -> dict[str, Any]:
     return {"status": "ok", "service": "stillinqueue-auth", "timestamp": datetime.utcnow().isoformat() + "Z"}
+
+
+@app.get("/api/auth/users/count")
+def get_user_count() -> dict[str, int]:
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT COUNT(*) AS count FROM users"))
+        count = result.scalar_one()
+    return {"count": count}
 
 
 @app.post("/api/inventorypulse/start")
