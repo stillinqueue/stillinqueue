@@ -625,7 +625,7 @@
           <button class="agent-action secondary" type="button" data-inventory-preview>
             Preview inside
           </button>
-          <a class="agent-action" href="http://127.0.0.1:3000" target="_blank" rel="noopener noreferrer">
+          <a class="agent-action" href="https://stillinqueue-frontend.loca.lt" target="_blank" rel="noopener noreferrer">
             Open full app
           </a>
           <span class="agent-status" id="inventorypulse-status">Checking locally…</span>
@@ -899,13 +899,14 @@
       const previewIframe = document.getElementById("inventory-modal-iframe");
       const previewEmpty = document.getElementById("inventory-modal-empty");
       const previewCloseButtons = document.querySelectorAll("[data-close-preview]");
-      const backendBaseUrl = "https://stillinqueue-backend.loca.lt";
+      const backendBaseUrl = "https://stillinqueue-backend-2.loca.lt";
+      const frontendBaseUrl = "https://stillinqueue-frontend.loca.lt";
 
       const setPreviewState = (isLive) => {
         if (!previewIframe || !previewEmpty) return;
         previewEmpty.hidden = isLive;
         previewIframe.style.display = isLive ? "block" : "none";
-        previewIframe.src = isLive ? "http://127.0.0.1:3000" : "about:blank";
+        previewIframe.src = isLive ? frontendBaseUrl : "about:blank";
       };
 
       const updateStatus = (isLive, label) => {
@@ -925,7 +926,7 @@
               updateStatus(false, "Starting…");
               setPreviewState(false);
               window.setTimeout(() => {
-                const probeUrl = "http://127.0.0.1:3000/favicon.ico?ts=" + Date.now();
+                const probeUrl = `${frontendBaseUrl}/favicon.ico?ts=` + Date.now();
                 const probe = new Image();
                 probe.onload = () => {
                   updateStatus(true, "Live locally");
@@ -955,7 +956,7 @@
         });
       });
 
-      const probeUrl = "http://127.0.0.1:3000/favicon.ico?ts=" + Date.now();
+      const probeUrl = `${frontendBaseUrl}/favicon.ico?ts=` + Date.now();
       const probe = new Image();
       let settled = false;
 
