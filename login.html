@@ -634,6 +634,7 @@
             <a href="#" id="forgotLink">Forgot password?</a>
           </div>
 
+          <div id="authMessage" class="help-text" style="min-height:1.4rem; color:#a7afc9;"></div>
           <button type="submit" class="btn-primary">Continue</button>
 
           <p class="help-text">
@@ -695,7 +696,10 @@
   <!-- Nav JS (mobile) -->
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      const toggle = document.querySelector(".nav-toggle");
+        window.SQAuth = {
+          backendUrl: "https://light-dodo-75.loca.lt"
+        };
+
       const nav = document.querySelector(".site-nav");
       const navLinks = document.querySelectorAll(".site-nav a");
 
@@ -888,15 +892,48 @@
         }
       });
 
-      document.getElementById("authForm").addEventListener("submit", function (e) {
+      document.getElementById("authForm").addEventListener("submit", async function (e) {
         e.preventDefault();
         const btn = this.querySelector(".btn-primary");
-        btn.textContent = "Queued ✔";
+        const message = document.getElementById("authMessage");
+        const name = document.getElementById("name").value.trim();
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+        const isSignup = document.getElementById("nameGroup").style.display !== "none";
+
+        message.textContent = "Connecting to auth service...";
+        btn.textContent = isSignup ? "Creating account…" : "Signing in…";
         window.SQCharacters.setMouth("none");
-        setTimeout(() => {
-          window.SQCharacters.setMouth("smile");
+
+        try {
+          const route = isSignup ? "/api/auth/signup" : "/api/auth/login";
+          const response = await fetch(`${window.SQAuth.backendUrl}${route}`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ name: isSignup ? name : undefined, email, password }),
+          });
+
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.detail || payload.message || "Auth failed.");
+          }
+
+          message.style.color = "#22c55e";
+          message.textContent = payload.message || "Success.";
+          window.SQCharacters.setMouth("happy");
           btn.textContent = "Continue";
-        }, 1200);
+
+          if (!isSignup) {
+            setTimeout(() => {
+              window.location.href = "agents.html";
+            }, 600);
+          }
+        } catch (err) {
+          message.style.color = "#fb923c";
+          message.textContent = err.message || "Unable to connect to auth service.";
+          btn.textContent = "Continue";
+          window.SQCharacters.setMouth("surprised");
+        }
       });
     })();
   </script>
