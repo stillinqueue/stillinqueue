@@ -37,6 +37,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", 1025))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 RESET_CODE_TTL_MINUTES = int(os.getenv("RESET_CODE_TTL_MINUTES", 10))
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
@@ -178,6 +179,24 @@ class UserSummaryResponse(BaseModel):
     name: str
     email_verified: bool
     created_at: str
+
+
+class UserDetailResponse(BaseModel):
+    email: str
+    name: str
+    email_verified: bool
+    created_at: str
+    has_pending_verification: bool
+    has_pending_reset: bool
+
+
+def enforce_admin_access(x_admin_key: Optional[str]) -> None:
+    # If ADMIN_API_KEY is not set, endpoints remain open for local development.
+    if not ADMIN_API_KEY:
+        return
+
+    if not x_admin_key or x_admin_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Missing or invalid admin key.")
 
 
 @app.get("/health")
@@ -350,7 +369,8 @@ def auth_me(authorization: Optional[str] = Header(default=None)) -> UserProfileR
 
 
 @app.get("/api/auth/users/count")
-def get_user_count() -> dict[str, int]:
+def get_user_count(x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key")) -> dict[str, int]:
+    enforce_admin_access(x_admin_key)
     with engine.connect() as conn:
         result = conn.execute(text("SELECT COUNT(*) AS count FROM users"))
         count = result.scalar_one()
@@ -358,7 +378,8 @@ def get_user_count() -> dict[str, int]:
 
 
 @app.get("/api/auth/users", response_model=list[UserSummaryResponse])
-def list_users() -> list[UserSummaryResponse]:
+def list_users(x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key")) -> list[UserSummaryResponse]:
+    enforce_admin_access(x_admin_key)
     with engine.connect() as conn:
         rows = conn.execute(
             text(
@@ -375,6 +396,24 @@ def list_users() -> list[UserSummaryResponse]:
         )
         for row in rows
     ]
+
+
+@app.get("/api/auth/users/{email}", response_model=UserDetailResponse)
+def get_user_detail(email: str, x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key")) -> UserDetailResponse:
+    enforce_admin_access(x_admin_key)
+
+    user = get_user(email)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    return UserDetailResponse(
+        email=str(user["email"]),
+        name=str(user["name"]),
+        email_verified=bool(user["email_verified"]),
+        created_at=str(user["created_at"]),
+        has_pending_verification=bool(user.get("verification_code")),
+        has_pending_reset=bool(user.get("reset_code")),
+    )
 
 
 @app.post("/api/inventorypulse/start")
