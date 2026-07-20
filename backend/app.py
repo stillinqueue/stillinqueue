@@ -38,6 +38,12 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 RESET_CODE_TTL_MINUTES = int(os.getenv("RESET_CODE_TTL_MINUTES", 10))
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
+AUTH_ALLOW_CODE_FALLBACK = os.getenv("AUTH_ALLOW_CODE_FALLBACK", "false").lower() == "true"
+ADMIN_EMAILS = {
+    email.strip().lower()
+    for email in os.getenv("ADMIN_EMAILS", "").split(",")
+    if email.strip()
+}
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
@@ -61,6 +67,12 @@ def init_db() -> None:
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code TEXT"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code_created_at TEXT"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS membership_type TEXT NOT NULL DEFAULT 'Paid'"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'active'"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_provider TEXT"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_last4 TEXT"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_renewal_at TEXT"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
 
 
 init_db()
@@ -88,6 +100,10 @@ def get_user_by_token(token: str) -> Optional[dict[str, Any]]:
     with engine.connect() as conn:
         row = conn.execute(text("SELECT * FROM users WHERE token = :token"), {"token": token}).mappings().fetchone()
         return dict(row) if row is not None else None
+
+
+def is_admin_email(email: str) -> bool:
+    return email.strip().lower() in ADMIN_EMAILS
 
 
 def send_verification_email(email: str, code: str) -> None:
@@ -120,12 +136,12 @@ def send_reset_email(email: str, code: str) -> None:
         smtp.send_message(message)
 
 
-def create_user(email: str, name: str, password_hash: str, token: str, verification_code: str) -> None:
+def create_user(email: str, name: str, password_hash: str, token: str, verification_code: str, is_admin: bool) -> None:
     try:
         with engine.begin() as conn:
             conn.execute(
                 text(
-                    "INSERT INTO users (email, name, password_hash, token, verification_code, email_verified, created_at) VALUES (:email, :name, :password_hash, :token, :verification_code, :email_verified, :created_at)"
+                    "INSERT INTO users (email, name, password_hash, token, verification_code, email_verified, created_at, membership_type, payment_status, is_admin) VALUES (:email, :name, :password_hash, :token, :verification_code, :email_verified, :created_at, :membership_type, :payment_status, :is_admin)"
                 ),
                 {
                     "email": email,
@@ -135,6 +151,9 @@ def create_user(email: str, name: str, password_hash: str, token: str, verificat
                     "verification_code": verification_code,
                     "email_verified": False,
                     "created_at": datetime.utcnow().isoformat() + "Z",
+                    "membership_type": "Paid",
+                    "payment_status": "active",
+                    "is_admin": is_admin,
                 },
             )
     except IntegrityError as exc:
@@ -155,6 +174,7 @@ class AuthResponse(BaseModel):
     email_verified: Optional[bool] = None
     verification_code: Optional[str] = None
     reset_code: Optional[str] = None
+    is_admin: Optional[bool] = None
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -172,6 +192,12 @@ class UserProfileResponse(BaseModel):
     name: str
     email_verified: bool
     created_at: str
+    membership_type: str
+    payment_status: str
+    payment_provider: Optional[str] = None
+    payment_last4: Optional[str] = None
+    payment_renewal_at: Optional[str] = None
+    is_admin: bool
 
 
 class UserSummaryResponse(BaseModel):
@@ -179,6 +205,9 @@ class UserSummaryResponse(BaseModel):
     name: str
     email_verified: bool
     created_at: str
+    membership_type: str
+    payment_status: str
+    is_admin: bool
 
 
 class UserDetailResponse(BaseModel):
@@ -186,6 +215,12 @@ class UserDetailResponse(BaseModel):
     name: str
     email_verified: bool
     created_at: str
+    membership_type: str
+    payment_status: str
+    payment_provider: Optional[str] = None
+    payment_last4: Optional[str] = None
+    payment_renewal_at: Optional[str] = None
+    is_admin: bool
     has_pending_verification: bool
     has_pending_reset: bool
 
@@ -197,6 +232,31 @@ def enforce_admin_access(x_admin_key: Optional[str]) -> None:
 
     if not x_admin_key or x_admin_key != ADMIN_API_KEY:
         raise HTTPException(status_code=401, detail="Missing or invalid admin key.")
+
+
+def get_user_from_authorization(authorization: Optional[str]) -> dict[str, Any]:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization token.")
+
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization token.")
+
+    user = get_user_by_token(token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+
+    return user
+
+
+def enforce_admin_user(authorization: Optional[str], x_admin_key: Optional[str]) -> dict[str, Any]:
+    if ADMIN_API_KEY and x_admin_key == ADMIN_API_KEY:
+        return {"is_admin": True}
+
+    user = get_user_from_authorization(authorization)
+    if not bool(user.get("is_admin")):
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
+    return user
 
 
 @app.get("/health")
@@ -214,20 +274,24 @@ def signup(request: AuthRequest) -> AuthResponse:
 
     token = create_token()
     verification_code = secrets.token_hex(3).upper()
+    user_is_admin = is_admin_email(request.email)
+
+    code_to_return = None
+    try:
+        send_verification_email(request.email, verification_code)
+    except Exception:
+        if not AUTH_ALLOW_CODE_FALLBACK:
+            raise HTTPException(status_code=503, detail="Unable to send verification email right now. Please try again later.")
+        code_to_return = verification_code
+
     create_user(
         request.email,
         request.name,
         hash_password(request.password),
         token,
         verification_code,
+        user_is_admin,
     )
-
-    code_to_return = None
-    try:
-        send_verification_email(request.email, verification_code)
-    except Exception:
-        # Fallback for environments without SMTP. Return the code for manual testing.
-        code_to_return = verification_code
 
     return AuthResponse(
         success=True,
@@ -235,6 +299,7 @@ def signup(request: AuthRequest) -> AuthResponse:
         token=token,
         email_verified=False,
         verification_code=code_to_return,
+        is_admin=user_is_admin,
     )
 
 
@@ -262,6 +327,7 @@ def login(request: AuthRequest) -> AuthResponse:
         message="Login successful.",
         token=user["token"],
         email_verified=True,
+        is_admin=bool(user.get("is_admin")),
     )
 
 
@@ -287,7 +353,13 @@ def forgot_password_request(request: ForgotPasswordRequest) -> AuthResponse:
     try:
         send_reset_email(request.email, reset_code)
     except Exception:
-        # Fallback for environments without SMTP. Return the code for manual testing.
+        if not AUTH_ALLOW_CODE_FALLBACK:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("UPDATE users SET reset_code = NULL, reset_code_created_at = NULL WHERE email = :email"),
+                    {"email": request.email},
+                )
+            raise HTTPException(status_code=503, detail="Unable to send reset code email right now. Please try again later.")
         code_to_return = reset_code
 
     return AuthResponse(
@@ -349,28 +421,28 @@ def auth_health() -> dict[str, Any]:
 
 @app.get("/api/auth/me", response_model=UserProfileResponse)
 def auth_me(authorization: Optional[str] = Header(default=None)) -> UserProfileResponse:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid authorization token.")
-
-    token = authorization.split(" ", 1)[1].strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Missing or invalid authorization token.")
-
-    user = get_user_by_token(token)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid session token.")
+    user = get_user_from_authorization(authorization)
 
     return UserProfileResponse(
         email=user["email"],
         name=user["name"],
         email_verified=bool(user["email_verified"]),
         created_at=user["created_at"],
+        membership_type=str(user.get("membership_type") or "Paid"),
+        payment_status=str(user.get("payment_status") or "active"),
+        payment_provider=user.get("payment_provider"),
+        payment_last4=user.get("payment_last4"),
+        payment_renewal_at=user.get("payment_renewal_at"),
+        is_admin=bool(user.get("is_admin")),
     )
 
 
 @app.get("/api/auth/users/count")
-def get_user_count(x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key")) -> dict[str, int]:
-    enforce_admin_access(x_admin_key)
+def get_user_count(
+    authorization: Optional[str] = Header(default=None),
+    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
+) -> dict[str, int]:
+    enforce_admin_user(authorization, x_admin_key)
     with engine.connect() as conn:
         result = conn.execute(text("SELECT COUNT(*) AS count FROM users"))
         count = result.scalar_one()
@@ -378,12 +450,15 @@ def get_user_count(x_admin_key: Optional[str] = Header(default=None, alias="X-Ad
 
 
 @app.get("/api/auth/users", response_model=list[UserSummaryResponse])
-def list_users(x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key")) -> list[UserSummaryResponse]:
-    enforce_admin_access(x_admin_key)
+def list_users(
+    authorization: Optional[str] = Header(default=None),
+    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
+) -> list[UserSummaryResponse]:
+    enforce_admin_user(authorization, x_admin_key)
     with engine.connect() as conn:
         rows = conn.execute(
             text(
-                "SELECT email, name, email_verified, created_at FROM users ORDER BY created_at DESC"
+                "SELECT email, name, email_verified, created_at, membership_type, payment_status, is_admin FROM users ORDER BY created_at DESC"
             )
         ).mappings().fetchall()
 
@@ -393,14 +468,21 @@ def list_users(x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-
             name=str(row["name"]),
             email_verified=bool(row["email_verified"]),
             created_at=str(row["created_at"]),
+            membership_type=str(row.get("membership_type") or "Paid"),
+            payment_status=str(row.get("payment_status") or "active"),
+            is_admin=bool(row.get("is_admin")),
         )
         for row in rows
     ]
 
 
 @app.get("/api/auth/users/{email}", response_model=UserDetailResponse)
-def get_user_detail(email: str, x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key")) -> UserDetailResponse:
-    enforce_admin_access(x_admin_key)
+def get_user_detail(
+    email: str,
+    authorization: Optional[str] = Header(default=None),
+    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
+) -> UserDetailResponse:
+    enforce_admin_user(authorization, x_admin_key)
 
     user = get_user(email)
     if user is None:
@@ -411,6 +493,12 @@ def get_user_detail(email: str, x_admin_key: Optional[str] = Header(default=None
         name=str(user["name"]),
         email_verified=bool(user["email_verified"]),
         created_at=str(user["created_at"]),
+        membership_type=str(user.get("membership_type") or "Paid"),
+        payment_status=str(user.get("payment_status") or "active"),
+        payment_provider=user.get("payment_provider"),
+        payment_last4=user.get("payment_last4"),
+        payment_renewal_at=user.get("payment_renewal_at"),
+        is_admin=bool(user.get("is_admin")),
         has_pending_verification=bool(user.get("verification_code")),
         has_pending_reset=bool(user.get("reset_code")),
     )

@@ -110,17 +110,15 @@
 <body>
   <main class="panel">
     <h1>Users Admin</h1>
-    <p class="sub">View accounts created from the website. Use an admin key if your backend requires it.</p>
+    <p class="sub">View accounts created from the website. This page is available only to admin users.</p>
 
     <div class="row">
       <input id="backendUrl" class="field" type="text" placeholder="Backend URL" />
-      <input id="adminKey" class="field" type="password" placeholder="Admin key (optional unless protected)" />
     </div>
 
     <div class="actions">
       <button id="loadBtn" type="button">Load Users</button>
       <button id="saveBtn" type="button" class="secondary">Save Settings</button>
-      <button id="clearBtn" type="button" class="secondary">Clear Admin Key</button>
     </div>
 
     <div id="apiStatus" class="status">
@@ -137,11 +135,14 @@
             <th>Email</th>
             <th>Name</th>
             <th>Verified</th>
+            <th>Membership</th>
+            <th>Payment</th>
+            <th>Admin</th>
             <th>Created At</th>
           </tr>
         </thead>
         <tbody id="usersBody">
-          <tr><td colspan="4">No data loaded yet.</td></tr>
+          <tr><td colspan="7">No data loaded yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -150,7 +151,6 @@
   <script>
     (function () {
       const backendInput = document.getElementById("backendUrl");
-      const adminKeyInput = document.getElementById("adminKey");
       const statusEl = document.getElementById("apiStatus");
       const statusText = document.getElementById("apiStatusText");
       const metaEl = document.getElementById("meta");
@@ -161,10 +161,9 @@
       const backendFromStorage = localStorage.getItem("sq_backend_url");
       const defaultBackend = "https://sweet-teeth-beam.loca.lt";
       const backend = backendFromQuery || backendFromStorage || defaultBackend;
-      const adminKey = localStorage.getItem("sq_admin_key") || "";
+      const authToken = localStorage.getItem("sq_auth_token") || "";
 
       backendInput.value = backend;
-      adminKeyInput.value = adminKey;
 
       function setStatus(online, text) {
         statusEl.classList.remove("online", "offline");
@@ -174,12 +173,6 @@
 
       function saveSettings() {
         localStorage.setItem("sq_backend_url", backendInput.value.trim());
-        localStorage.setItem("sq_admin_key", adminKeyInput.value);
-      }
-
-      function clearAdminKey() {
-        localStorage.removeItem("sq_admin_key");
-        adminKeyInput.value = "";
       }
 
       function formatDate(value) {
@@ -190,20 +183,41 @@
 
       async function loadUsers() {
         const backendUrl = backendInput.value.trim();
-        const adminKeyValue = adminKeyInput.value;
         if (!backendUrl) {
           setStatus(false, "Backend URL required");
           return;
         }
 
-        saveSettings();
-
-        const headers = { "Content-Type": "application/json" };
-        if (adminKeyValue) {
-          headers["X-Admin-Key"] = adminKeyValue;
+        if (!authToken) {
+          setStatus(false, "Not signed in");
+          metaEl.textContent = "Please sign in with an admin account.";
+          window.location.href = `login.html?backend=${encodeURIComponent(backendUrl)}`;
+          return;
         }
 
+        saveSettings();
+
+        const headers = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        };
+
         try {
+          const meRes = await fetch(`${backendUrl}/api/auth/me`, { headers });
+          if (!meRes.ok) {
+            metaEl.textContent = "Session expired. Please sign in again.";
+            window.location.href = `login.html?backend=${encodeURIComponent(backendUrl)}`;
+            return;
+          }
+
+          const me = await meRes.json();
+          if (!me.is_admin) {
+            metaEl.textContent = "This page is only for admin users.";
+            usersBody.innerHTML = '<tr><td colspan="7">Admin access required.</td></tr>';
+            window.location.href = `profile.html?backend=${encodeURIComponent(backendUrl)}`;
+            return;
+          }
+
           const healthRes = await fetch(`${backendUrl}/api/auth/health`, { headers });
           setStatus(healthRes.ok, healthRes.ok ? "Auth API online" : "Auth API unreachable");
 
@@ -214,8 +228,8 @@
 
           if (!countRes.ok || !usersRes.ok) {
             const errPayload = await usersRes.json().catch(() => ({}));
-            metaEl.textContent = errPayload.detail || "Unable to fetch users. Check backend URL and admin key.";
-            usersBody.innerHTML = '<tr><td colspan="4">Failed to load users.</td></tr>';
+            metaEl.textContent = errPayload.detail || "Unable to fetch users. Admin privileges required.";
+            usersBody.innerHTML = '<tr><td colspan="7">Failed to load users.</td></tr>';
             return;
           }
 
@@ -224,20 +238,21 @@
 
           metaEl.textContent = `Total users: ${countData.count}`;
           if (!Array.isArray(usersData) || usersData.length === 0) {
-            usersBody.innerHTML = '<tr><td colspan="4">No users yet.</td></tr>';
+            usersBody.innerHTML = '<tr><td colspan="7">No users yet.</td></tr>';
             return;
           }
 
           usersBody.innerHTML = usersData
             .map((user) => {
               const verified = user.email_verified ? "Yes" : "No";
-              return `\n<tr>\n<td><code>${user.email}</code></td>\n<td>${user.name || "-"}</td>\n<td>${verified}</td>\n<td>${formatDate(user.created_at)}</td>\n</tr>`;
+              const admin = user.is_admin ? "Yes" : "No";
+              return `\n<tr>\n<td><code>${user.email}</code></td>\n<td>${user.name || "-"}</td>\n<td>${verified}</td>\n<td>${user.membership_type || "Paid"}</td>\n<td>${user.payment_status || "active"}</td>\n<td>${admin}</td>\n<td>${formatDate(user.created_at)}</td>\n</tr>`;
             })
             .join("");
         } catch (_err) {
           setStatus(false, "Auth API offline");
           metaEl.textContent = "Network error while loading users.";
-          usersBody.innerHTML = '<tr><td colspan="4">Network error.</td></tr>';
+          usersBody.innerHTML = '<tr><td colspan="7">Network error.</td></tr>';
         }
       }
 
@@ -245,10 +260,6 @@
       document.getElementById("saveBtn").addEventListener("click", () => {
         saveSettings();
         metaEl.textContent = "Settings saved.";
-      });
-      document.getElementById("clearBtn").addEventListener("click", () => {
-        clearAdminKey();
-        metaEl.textContent = "Admin key cleared.";
       });
 
       loadUsers();

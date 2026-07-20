@@ -40,9 +40,14 @@ Optional admin protection env var:
 
 ```bash
 export ADMIN_API_KEY="set-a-strong-random-key"
+export ADMIN_EMAILS="admin1@example.com,admin2@example.com"
+export AUTH_ALLOW_CODE_FALLBACK="false"
 ```
 
-When `ADMIN_API_KEY` is set, user-list endpoints require header `X-Admin-Key`.
+Behavior:
+1. `ADMIN_EMAILS`: accounts created with these emails are marked as admin.
+2. `AUTH_ALLOW_CODE_FALLBACK=false`: if SMTP fails, signup/reset returns an error instead of exposing OTP on UI/API.
+3. `ADMIN_API_KEY`: optional emergency override header for admin endpoints.
 
 ### Required DNS for good deliverability
 
@@ -86,3 +91,5 @@ If `ADMIN_API_KEY` is set, include:
 ```bash
 -H "X-Admin-Key: your-key"
 ```
+
+Admin users can also access these endpoints with normal login bearer token.

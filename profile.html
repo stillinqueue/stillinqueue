@@ -183,6 +183,22 @@
         <p id="profileMembershipType" class="value">Paid</p>
       </article>
       <article class="item">
+        <p class="label">Payment Status</p>
+        <p id="profilePaymentStatus" class="value">Loading...</p>
+      </article>
+      <article class="item">
+        <p class="label">Payment Provider</p>
+        <p id="profilePaymentProvider" class="value">Loading...</p>
+      </article>
+      <article class="item">
+        <p class="label">Card (Last 4)</p>
+        <p id="profilePaymentLast4" class="value">Loading...</p>
+      </article>
+      <article class="item">
+        <p class="label">Next Renewal</p>
+        <p id="profilePaymentRenewalAt" class="value">Loading...</p>
+      </article>
+      <article class="item">
         <p class="label">Active Session Since</p>
         <p id="profileSessionSince" class="value">Loading...</p>
       </article>
@@ -192,6 +208,7 @@
 
     <div class="actions">
       <a class="btn" href="agents.html">Go To AI Agents</a>
+      <a id="adminUsersBtn" class="btn secondary" href="users.html" style="display:none;">Open Users Admin</a>
       <button id="logoutBtn" class="btn secondary" type="button">Log Out</button>
     </div>
   </main>
@@ -462,7 +479,12 @@
       const verifiedEl = document.getElementById("profileVerified");
       const createdAtEl = document.getElementById("profileCreatedAt");
       const membershipTypeEl = document.getElementById("profileMembershipType");
+      const paymentStatusEl = document.getElementById("profilePaymentStatus");
+      const paymentProviderEl = document.getElementById("profilePaymentProvider");
+      const paymentLast4El = document.getElementById("profilePaymentLast4");
+      const paymentRenewalAtEl = document.getElementById("profilePaymentRenewalAt");
       const sessionSinceEl = document.getElementById("profileSessionSince");
+      const adminUsersBtn = document.getElementById("adminUsersBtn");
 
       function formatDate(value) {
         if (!value) return "-";
@@ -513,6 +535,15 @@
           emailEl.textContent = profile.email || "-";
           verifiedEl.textContent = profile.email_verified ? "Verified" : "Not verified";
           createdAtEl.textContent = formatDate(profile.created_at);
+          membershipTypeEl.textContent = profile.membership_type || "Paid";
+          paymentStatusEl.textContent = profile.payment_status || "Active";
+          paymentProviderEl.textContent = profile.payment_provider || "Not set";
+          paymentLast4El.textContent = profile.payment_last4 ? `**** ${profile.payment_last4}` : "Not set";
+          paymentRenewalAtEl.textContent = formatDate(profile.payment_renewal_at);
+          if (profile.is_admin) {
+            adminUsersBtn.style.display = "inline-flex";
+            adminUsersBtn.href = `users.html?backend=${encodeURIComponent(backendUrl)}`;
+          }
           messageEl.style.color = "#9fb0d9";
           messageEl.textContent = "Profile loaded from backend.";
         } catch (_err) {
