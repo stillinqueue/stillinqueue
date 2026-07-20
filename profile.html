@@ -65,10 +65,6 @@
     }
 
     .topbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 0.8rem;
       margin-bottom: 1rem;
     }
 
@@ -78,27 +74,6 @@
       font-size: clamp(1.35rem, 3.8vw, 2rem);
       line-height: 1.2;
     }
-
-    .status {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      border-radius: var(--pill);
-      border: 1px solid var(--line);
-      padding: 0.35rem 0.7rem;
-      color: var(--muted);
-      font-size: 0.78rem;
-    }
-
-    .dot {
-      width: 0.55rem;
-      height: 0.55rem;
-      border-radius: 50%;
-      background: #94a3b8;
-    }
-
-    .status.online .dot { background: var(--ok); box-shadow: 0 0 10px rgba(34, 197, 94, 0.6); }
-    .status.offline .dot { background: var(--warn); box-shadow: 0 0 10px rgba(251, 146, 60, 0.6); }
 
     .intro {
       margin: 0 0 1rem;
@@ -171,7 +146,6 @@
 
     @media (max-width: 640px) {
       .card { padding: 1rem; }
-      .topbar { align-items: flex-start; flex-direction: column; }
       .actions { flex-direction: column; }
       .btn, .btn.secondary { width: 100%; text-align: center; }
     }
@@ -183,10 +157,6 @@
   <main class="card">
     <div class="topbar">
       <h1 class="title">Your Still In Queue Profile</h1>
-      <div id="backendStatus" class="status" role="status" aria-live="polite">
-        <span class="dot" aria-hidden="true"></span>
-        <span id="backendStatusText">Checking API...</span>
-      </div>
     </div>
 
     <p class="intro">You are now signed in. This page is personalized from your backend account record.</p>
@@ -208,13 +178,20 @@
         <p class="label">Member Since</p>
         <p id="profileCreatedAt" class="value">Loading...</p>
       </article>
+      <article class="item">
+        <p class="label">Membership Type</p>
+        <p id="profileMembershipType" class="value">Paid</p>
+      </article>
+      <article class="item">
+        <p class="label">Active Session Since</p>
+        <p id="profileSessionSince" class="value">Loading...</p>
+      </article>
     </section>
 
     <p id="profileMessage"></p>
 
     <div class="actions">
       <a class="btn" href="agents.html">Go To AI Agents</a>
-      <a class="btn secondary" href="users.html">Open Users Admin</a>
       <button id="logoutBtn" class="btn secondary" type="button">Log Out</button>
     </div>
   </main>
@@ -480,24 +457,23 @@
 
       const token = window.localStorage.getItem("sq_auth_token");
       const messageEl = document.getElementById("profileMessage");
-      const statusEl = document.getElementById("backendStatus");
-      const statusTextEl = document.getElementById("backendStatusText");
       const nameEl = document.getElementById("profileName");
       const emailEl = document.getElementById("profileEmail");
       const verifiedEl = document.getElementById("profileVerified");
       const createdAtEl = document.getElementById("profileCreatedAt");
+      const membershipTypeEl = document.getElementById("profileMembershipType");
+      const sessionSinceEl = document.getElementById("profileSessionSince");
 
-      function setStatus(online, detail) {
-        statusEl.classList.remove("online", "offline");
-        statusEl.classList.add(online ? "online" : "offline");
-        statusTextEl.textContent = online
-          ? `Auth API online${detail ? ` (${detail})` : ""}`
-          : "Auth API offline";
+      function formatDate(value) {
+        if (!value) return "-";
+        const dateValue = new Date(value);
+        return Number.isNaN(dateValue.getTime()) ? "-" : dateValue.toLocaleString();
       }
 
       function logout() {
         window.localStorage.removeItem("sq_auth_token");
         window.localStorage.removeItem("sq_auth_email");
+        window.localStorage.removeItem("sq_auth_session_started_at");
         const backend = encodeURIComponent(backendUrl);
         window.location.href = `login.html?backend=${backend}`;
       }
@@ -509,14 +485,14 @@
         return;
       }
 
-      async function loadProfile() {
-        try {
-          const healthRes = await fetch(`${backendUrl}/api/auth/health`);
-          setStatus(healthRes.ok, healthRes.ok ? "reachable" : "unavailable");
-        } catch (_err) {
-          setStatus(false);
-        }
+      const existingSessionStart = window.localStorage.getItem("sq_auth_session_started_at");
+      if (!existingSessionStart) {
+        window.localStorage.setItem("sq_auth_session_started_at", new Date().toISOString());
+      }
+      sessionSinceEl.textContent = formatDate(window.localStorage.getItem("sq_auth_session_started_at"));
+      membershipTypeEl.textContent = "Paid";
 
+      async function loadProfile() {
         try {
           const response = await fetch(`${backendUrl}/api/auth/me`, {
             method: "GET",
@@ -536,7 +512,7 @@
           nameEl.textContent = profile.name || "-";
           emailEl.textContent = profile.email || "-";
           verifiedEl.textContent = profile.email_verified ? "Verified" : "Not verified";
-          createdAtEl.textContent = profile.created_at ? new Date(profile.created_at).toLocaleString() : "-";
+          createdAtEl.textContent = formatDate(profile.created_at);
           messageEl.style.color = "#9fb0d9";
           messageEl.textContent = "Profile loaded from backend.";
         } catch (_err) {

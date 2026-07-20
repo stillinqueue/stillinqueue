@@ -933,11 +933,13 @@
         if (!token) return;
         window.localStorage.setItem("sq_auth_token", token);
         window.localStorage.setItem("sq_auth_email", email || "");
+        window.localStorage.setItem("sq_auth_session_started_at", new Date().toISOString());
       }
 
       function clearSession() {
         window.localStorage.removeItem("sq_auth_token");
         window.localStorage.removeItem("sq_auth_email");
+        window.localStorage.removeItem("sq_auth_session_started_at");
       }
 
       async function tryAutoRedirectToProfile() {
