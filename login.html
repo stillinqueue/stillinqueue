@@ -379,6 +379,37 @@
       color: rgba(182, 196, 236, 0.9);
     }
 
+    .backend-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      background: rgba(8, 13, 32, 0.85);
+      font-size: 0.73rem;
+      color: rgba(214, 226, 255, 0.9);
+      margin-bottom: 0.8rem;
+    }
+
+    .backend-status-dot {
+      width: 0.52rem;
+      height: 0.52rem;
+      border-radius: 50%;
+      background: #94a3b8;
+      box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.2);
+    }
+
+    .backend-status.online .backend-status-dot {
+      background: #22c55e;
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.65);
+    }
+
+    .backend-status.offline .backend-status-dot {
+      background: #fb923c;
+      box-shadow: 0 0 10px rgba(251, 146, 60, 0.55);
+    }
+
     /* ===== Companions image + overlays ===== */
     .characters-wrapper {
       display: flex;
@@ -619,10 +650,17 @@
             </div>
           </div>
 
-          <div class="form-group">
+          <div class="form-group" id="passwordGroup">
             <label for="password">Password</label>
             <div class="input-wrapper">
               <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="off" required />
+            </div>
+          </div>
+
+          <div class="form-group" id="verificationGroup" style="display:none;">
+            <label for="verificationCode">Verification code</label>
+            <div class="input-wrapper">
+              <input type="text" id="verificationCode" name="verificationCode" placeholder="Enter your code" autocomplete="off" />
             </div>
           </div>
 
@@ -632,6 +670,11 @@
               Remember me on this device
             </label>
             <a href="#" id="forgotLink">Forgot password?</a>
+          </div>
+
+          <div id="backendStatus" class="backend-status" role="status" aria-live="polite">
+            <span class="backend-status-dot" aria-hidden="true"></span>
+            <span id="backendStatusText">Auth API status: checking...</span>
           </div>
 
           <div id="authMessage" class="help-text" style="min-height:1.4rem; color:#a7afc9;"></div>
@@ -696,10 +739,49 @@
   <!-- Nav JS (mobile) -->
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-        window.SQAuth = {
-          backendUrl: "https://light-dodo-75.loca.lt"
-        };
+      const backendFromQuery = new URLSearchParams(window.location.search).get("backend");
+      window.SQAuth = {
+        backendUrl: backendFromQuery || "http://127.0.0.1:8000"
+      };
 
+      const backendStatus = document.getElementById("backendStatus");
+      const backendStatusText = document.getElementById("backendStatusText");
+
+      function setBackendStatus(online, detail) {
+        if (!backendStatus || !backendStatusText) return;
+        backendStatus.classList.remove("online", "offline");
+        backendStatus.classList.add(online ? "online" : "offline");
+        backendStatusText.textContent = online
+          ? `Auth API status: online${detail ? ` (${detail})` : ""}`
+          : "Auth API status: offline";
+      }
+
+      async function checkBackendHealth() {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3500);
+        try {
+          const response = await fetch(`${window.SQAuth.backendUrl}/api/auth/health`, {
+            method: "GET",
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            setBackendStatus(false);
+            return;
+          }
+
+          const payload = await response.json();
+          setBackendStatus(true, payload.service || "auth");
+        } catch (_err) {
+          setBackendStatus(false);
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+
+      checkBackendHealth();
+      setInterval(checkBackendHealth, 20000);
+
+      const toggle = document.querySelector(".nav-toggle");
       const nav = document.querySelector(".site-nav");
       const navLinks = document.querySelectorAll(".site-nav a");
 
@@ -819,13 +901,88 @@
     (function () {
       const emailInput = document.getElementById("email");
       const passwordInput = document.getElementById("password");
+      const passwordGroup = document.getElementById("passwordGroup");
+      const passwordLabel = document.querySelector('label[for="password"]');
       const toggleBtn = document.getElementById("toggleModeBtn");
       const formTitle = document.getElementById("formTitle");
       const toggleLabel = document.getElementById("toggleLabel");
       const nameGroup = document.getElementById("nameGroup");
       const forgotLink = document.getElementById("forgotLink");
+      const verificationGroup = document.getElementById("verificationGroup");
+      const verificationLabel = document.querySelector('label[for="verificationCode"]');
+      const verificationInput = document.getElementById("verificationCode");
+      const nameInput = document.getElementById("name");
+      const message = document.getElementById("authMessage");
+      const form = document.getElementById("authForm");
+      const submitBtn = form.querySelector(".btn-primary");
 
-      let isSignup = false;
+      let mode = "login";
+      let loginNeedsVerification = false;
+
+      function getSubmitLabel() {
+        if (mode === "forgot-request") return "Send reset code";
+        if (mode === "forgot-confirm") return "Reset password";
+        return "Continue";
+      }
+
+      function setMode(nextMode) {
+        mode = nextMode;
+
+        if (mode === "signup") {
+          formTitle.textContent = "Create account";
+          toggleLabel.textContent = "Already have an account?";
+          toggleBtn.textContent = "Log in";
+          nameGroup.style.display = "block";
+          passwordGroup.style.display = "block";
+          verificationGroup.style.display = "none";
+          passwordInput.required = true;
+          verificationInput.required = false;
+          passwordLabel.textContent = "Password";
+          forgotLink.textContent = "Forgot password?";
+          window.SQCharacters.setSignupGlow(true);
+        } else if (mode === "forgot-request") {
+          formTitle.textContent = "Reset password";
+          toggleLabel.textContent = "Remembered it?";
+          toggleBtn.textContent = "Back to log in";
+          nameGroup.style.display = "none";
+          passwordGroup.style.display = "none";
+          verificationGroup.style.display = "none";
+          passwordInput.required = false;
+          verificationInput.required = false;
+          passwordLabel.textContent = "New password";
+          verificationLabel.textContent = "Reset code";
+          forgotLink.textContent = "Cancel reset";
+          window.SQCharacters.setSignupGlow(false);
+        } else if (mode === "forgot-confirm") {
+          formTitle.textContent = "Reset password";
+          toggleLabel.textContent = "Remembered it?";
+          toggleBtn.textContent = "Back to log in";
+          nameGroup.style.display = "none";
+          passwordGroup.style.display = "block";
+          verificationGroup.style.display = "block";
+          passwordInput.required = true;
+          verificationInput.required = true;
+          passwordLabel.textContent = "New password";
+          verificationLabel.textContent = "Reset code";
+          forgotLink.textContent = "Cancel reset";
+          window.SQCharacters.setSignupGlow(false);
+        } else {
+          formTitle.textContent = "Log in";
+          toggleLabel.textContent = "New here?";
+          toggleBtn.textContent = "Create account";
+          nameGroup.style.display = "none";
+          passwordGroup.style.display = "block";
+          verificationGroup.style.display = loginNeedsVerification ? "block" : "none";
+          passwordInput.required = true;
+          verificationInput.required = loginNeedsVerification;
+          passwordLabel.textContent = "Password";
+          verificationLabel.textContent = "Verification code";
+          forgotLink.textContent = "Forgot password?";
+          window.SQCharacters.setSignupGlow(false);
+        }
+
+        submitBtn.textContent = getSubmitLabel();
+      }
 
       emailInput.addEventListener("focus", () => {
         window.SQCharacters.setReverseGaze(false);
@@ -875,42 +1032,112 @@
         }
       });
 
-      toggleBtn.addEventListener("click", () => {
-        isSignup = !isSignup;
-        if (isSignup) {
-          formTitle.textContent = "Create account";
-          toggleLabel.textContent = "Already have an account?";
-          toggleBtn.textContent = "Log in";
-          nameGroup.style.display = "block";
-          window.SQCharacters.setSignupGlow(true);
-        } else {
-          formTitle.textContent = "Log in";
-          toggleLabel.textContent = "New here?";
-          toggleBtn.textContent = "Create account";
-          nameGroup.style.display = "none";
-          window.SQCharacters.setSignupGlow(false);
+      forgotLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        message.style.color = "#a7afc9";
+
+        if (mode === "forgot-request" || mode === "forgot-confirm") {
+          loginNeedsVerification = false;
+          setMode("login");
+          message.textContent = "";
+          verificationInput.value = "";
+          passwordInput.value = "";
+          return;
         }
+
+        setMode("forgot-request");
+        message.textContent = "Enter your email to receive a password reset code.";
       });
 
-      document.getElementById("authForm").addEventListener("submit", async function (e) {
+      toggleBtn.addEventListener("click", () => {
+        if (mode === "signup") {
+          loginNeedsVerification = false;
+          setMode("login");
+        } else if (mode === "forgot-request" || mode === "forgot-confirm") {
+          loginNeedsVerification = false;
+          setMode("login");
+        } else {
+          setMode("signup");
+        }
+
+        message.style.color = "#a7afc9";
+        message.textContent = "";
+        verificationInput.value = "";
+      });
+
+      form.addEventListener("submit", async function (e) {
         e.preventDefault();
-        const btn = this.querySelector(".btn-primary");
-        const message = document.getElementById("authMessage");
-        const name = document.getElementById("name").value.trim();
-        const email = document.getElementById("email").value.trim();
-        const password = document.getElementById("password").value;
-        const isSignup = document.getElementById("nameGroup").style.display !== "none";
+        const name = nameInput.value.trim();
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+        const verificationCode = verificationInput.value.trim();
+
+        if (!email) {
+          message.style.color = "#fb923c";
+          message.textContent = "Email is required.";
+          return;
+        }
+
+        if ((mode === "login" || mode === "signup") && !password) {
+          message.style.color = "#fb923c";
+          message.textContent = "Password is required.";
+          return;
+        }
+
+        if (mode === "signup" && !name) {
+          message.style.color = "#fb923c";
+          message.textContent = "Full name is required to create an account.";
+          return;
+        }
+
+        if (mode === "forgot-confirm" && (!verificationCode || !password)) {
+          message.style.color = "#fb923c";
+          message.textContent = "Reset code and new password are required.";
+          return;
+        }
 
         message.textContent = "Connecting to auth service...";
-        btn.textContent = isSignup ? "Creating account…" : "Signing in…";
+        submitBtn.textContent =
+          mode === "signup"
+            ? "Creating account..."
+            : mode === "forgot-request"
+              ? "Sending code..."
+              : mode === "forgot-confirm"
+                ? "Resetting password..."
+                : "Signing in...";
         window.SQCharacters.setMouth("none");
 
         try {
-          const route = isSignup ? "/api/auth/signup" : "/api/auth/login";
+          let route = "/api/auth/login";
+          let body = {
+            email,
+            password,
+            verification_code: verificationCode || undefined,
+          };
+
+          if (mode === "signup") {
+            route = "/api/auth/signup";
+            body = {
+              name,
+              email,
+              password,
+            };
+          } else if (mode === "forgot-request") {
+            route = "/api/auth/forgot-password/request";
+            body = { email };
+          } else if (mode === "forgot-confirm") {
+            route = "/api/auth/forgot-password/confirm";
+            body = {
+              email,
+              code: verificationCode,
+              new_password: password,
+            };
+          }
+
           const response = await fetch(`${window.SQAuth.backendUrl}${route}`, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ name: isSignup ? name : undefined, email, password }),
+            body: JSON.stringify(body),
           });
 
           const payload = await response.json();
@@ -920,10 +1147,34 @@
 
           message.style.color = "#22c55e";
           message.textContent = payload.message || "Success.";
+          if (payload.verification_code) {
+            message.textContent += ` Code: ${payload.verification_code}`;
+          }
+          if (payload.reset_code) {
+            message.textContent += ` Reset code: ${payload.reset_code}`;
+          }
           window.SQCharacters.setMouth("happy");
-          btn.textContent = "Continue";
+          submitBtn.textContent = getSubmitLabel();
 
-          if (!isSignup) {
+          if (mode === "signup") {
+            loginNeedsVerification = true;
+            setMode("login");
+            verificationInput.value = "";
+            message.textContent += " Enter your verification code, then sign in.";
+          } else if (mode === "forgot-request") {
+            setMode("forgot-confirm");
+          } else if (mode === "forgot-confirm") {
+            loginNeedsVerification = false;
+            setMode("login");
+            verificationInput.value = "";
+            passwordInput.value = "";
+            message.textContent = "Password reset successful. Sign in with your new password.";
+          } else if (payload.email_verified === false) {
+            loginNeedsVerification = true;
+            setMode("login");
+          }
+
+          if (mode === "login" && payload.email_verified === true) {
             setTimeout(() => {
               window.location.href = "agents.html";
             }, 600);
@@ -931,10 +1182,16 @@
         } catch (err) {
           message.style.color = "#fb923c";
           message.textContent = err.message || "Unable to connect to auth service.";
-          btn.textContent = "Continue";
+          if (err.message && err.message.includes("Email not verified")) {
+            loginNeedsVerification = true;
+            setMode("login");
+          }
+          submitBtn.textContent = getSubmitLabel();
           window.SQCharacters.setMouth("surprised");
         }
       });
+
+      setMode("login");
     })();
   </script>
 
