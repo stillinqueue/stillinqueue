@@ -923,9 +923,45 @@
       const message = document.getElementById("authMessage");
       const form = document.getElementById("authForm");
       const submitBtn = form.querySelector(".btn-primary");
+      const searchParams = new URLSearchParams(window.location.search);
+      const debugCodes = searchParams.get("debugCodes") === "1";
 
       let mode = "login";
       let loginNeedsVerification = false;
+
+      function saveSession(token, email) {
+        if (!token) return;
+        window.localStorage.setItem("sq_auth_token", token);
+        window.localStorage.setItem("sq_auth_email", email || "");
+      }
+
+      function clearSession() {
+        window.localStorage.removeItem("sq_auth_token");
+        window.localStorage.removeItem("sq_auth_email");
+      }
+
+      async function tryAutoRedirectToProfile() {
+        const token = window.localStorage.getItem("sq_auth_token");
+        if (!token) return;
+
+        try {
+          const response = await fetch(`${window.SQAuth.backendUrl}/api/auth/me`, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (!response.ok) {
+            clearSession();
+            return;
+          }
+
+          window.location.href = "profile.html";
+        } catch (_err) {
+          // Keep user on login page when backend is unreachable.
+        }
+      }
 
       function getSubmitLabel() {
         if (mode === "forgot-request") return "Send reset code";
@@ -1155,11 +1191,15 @@
 
           message.style.color = "#22c55e";
           message.textContent = payload.message || "Success.";
-          if (payload.verification_code) {
+          if (debugCodes && payload.verification_code) {
             message.textContent += ` Code: ${payload.verification_code}`;
           }
-          if (payload.reset_code) {
+          if (debugCodes && payload.reset_code) {
             message.textContent += ` Reset code: ${payload.reset_code}`;
+          }
+
+          if (!debugCodes && (payload.verification_code || payload.reset_code)) {
+            message.textContent += " If email does not arrive, ask support to configure SMTP credentials on the backend.";
           }
           window.SQCharacters.setMouth("happy");
           submitBtn.textContent = getSubmitLabel();
@@ -1183,8 +1223,9 @@
           }
 
           if (mode === "login" && payload.email_verified === true) {
+            saveSession(payload.token, email);
             setTimeout(() => {
-              window.location.href = "agents.html";
+              window.location.href = "profile.html";
             }, 600);
           }
         } catch (err) {
@@ -1200,6 +1241,7 @@
       });
 
       setMode("login");
+      tryAutoRedirectToProfile();
     })();
   </script>
 

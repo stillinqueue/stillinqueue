@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Still In Queue · Profile</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-1: #020617;
+      --bg-2: #0b132a;
+      --card: rgba(15, 23, 42, 0.85);
+      --line: rgba(148, 163, 184, 0.35);
+      --text: #f8fbff;
+      --muted: #9fb0d9;
+      --ok: #22c55e;
+      --warn: #fb923c;
+      --blue: #38bdf8;
+      --yellow: #facc15;
+      --radius: 1.1rem;
+      --pill: 999px;
+      --font-sans: "Inter", system-ui, sans-serif;
+      --font-serif: "Playfair Display", "Times New Roman", serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: var(--font-sans);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(59, 130, 246, 0.22), transparent 42%),
+        radial-gradient(circle at 90% 90%, rgba(34, 197, 94, 0.2), transparent 45%),
+        linear-gradient(140deg, var(--bg-2), var(--bg-1));
+      display: grid;
+      place-items: center;
+      padding: 1.2rem;
+    }
+
+    .card {
+      width: min(760px, 100%);
+      border-radius: 1.4rem;
+      border: 1px solid var(--line);
+      background: var(--card);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 24px 64px rgba(2, 6, 23, 0.7);
+      padding: 1.4rem;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.8rem;
+      margin-bottom: 1rem;
+    }
+
+    .title {
+      margin: 0;
+      font-family: var(--font-serif);
+      font-size: clamp(1.35rem, 3.8vw, 2rem);
+      line-height: 1.2;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      border-radius: var(--pill);
+      border: 1px solid var(--line);
+      padding: 0.35rem 0.7rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .dot {
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+
+    .status.online .dot { background: var(--ok); box-shadow: 0 0 10px rgba(34, 197, 94, 0.6); }
+    .status.offline .dot { background: var(--warn); box-shadow: 0 0 10px rgba(251, 146, 60, 0.6); }
+
+    .intro {
+      margin: 0 0 1rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.8rem;
+      margin-bottom: 1.1rem;
+    }
+
+    .item {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 0.8rem 0.9rem;
+      background: rgba(10, 16, 34, 0.7);
+    }
+
+    .label {
+      margin: 0 0 0.35rem;
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.11em;
+      color: var(--muted);
+    }
+
+    .value {
+      margin: 0;
+      font-weight: 600;
+      word-break: break-word;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-top: 1.1rem;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      border-radius: var(--pill);
+      text-decoration: none;
+      color: #09111f;
+      background: linear-gradient(90deg, var(--blue), #4ade80, var(--yellow));
+      padding: 0.6rem 1rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .btn.secondary {
+      background: rgba(10, 16, 34, 0.8);
+      color: var(--text);
+      border: 1px solid var(--line);
+      letter-spacing: 0.04em;
+    }
+
+    #profileMessage {
+      min-height: 1.2rem;
+      color: var(--muted);
+      margin: 0;
+      font-size: 0.84rem;
+    }
+
+    @media (max-width: 640px) {
+      .card { padding: 1rem; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .actions { flex-direction: column; }
+      .btn, .btn.secondary { width: 100%; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="topbar">
+      <h1 class="title">Your Still In Queue Profile</h1>
+      <div id="backendStatus" class="status" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="backendStatusText">Checking API...</span>
+      </div>
+    </div>
+
+    <p class="intro">You are now signed in. This page is personalized from your backend account record.</p>
+
+    <section class="grid">
+      <article class="item">
+        <p class="label">Full Name</p>
+        <p id="profileName" class="value">Loading...</p>
+      </article>
+      <article class="item">
+        <p class="label">Email</p>
+        <p id="profileEmail" class="value">Loading...</p>
+      </article>
+      <article class="item">
+        <p class="label">Email Verification</p>
+        <p id="profileVerified" class="value">Loading...</p>
+      </article>
+      <article class="item">
+        <p class="label">Member Since</p>
+        <p id="profileCreatedAt" class="value">Loading...</p>
+      </article>
+    </section>
+
+    <p id="profileMessage"></p>
+
+    <div class="actions">
+      <a class="btn" href="agents.html">Go To AI Agents</a>
+      <button id="logoutBtn" class="btn secondary" type="button">Log Out</button>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const backendFromQuery = params.get("backend");
+      const backendFromStorage = window.localStorage.getItem("sq_backend_url");
+      const defaultPublicBackend = "https://sweet-teeth-beam.loca.lt";
+      const backendUrl = backendFromQuery || backendFromStorage || defaultPublicBackend;
+
+      if (backendFromQuery) {
+        window.localStorage.setItem("sq_backend_url", backendFromQuery);
+      }
+
+      const token = window.localStorage.getItem("sq_auth_token");
+      const messageEl = document.getElementById("profileMessage");
+      const statusEl = document.getElementById("backendStatus");
+      const statusTextEl = document.getElementById("backendStatusText");
+      const nameEl = document.getElementById("profileName");
+      const emailEl = document.getElementById("profileEmail");
+      const verifiedEl = document.getElementById("profileVerified");
+      const createdAtEl = document.getElementById("profileCreatedAt");
+
+      function setStatus(online, detail) {
+        statusEl.classList.remove("online", "offline");
+        statusEl.classList.add(online ? "online" : "offline");
+        statusTextEl.textContent = online
+          ? `Auth API online${detail ? ` (${detail})` : ""}`
+          : "Auth API offline";
+      }
+
+      function logout() {
+        window.localStorage.removeItem("sq_auth_token");
+        window.localStorage.removeItem("sq_auth_email");
+        const backend = encodeURIComponent(backendUrl);
+        window.location.href = `login.html?backend=${backend}`;
+      }
+
+      document.getElementById("logoutBtn").addEventListener("click", logout);
+
+      if (!token) {
+        logout();
+        return;
+      }
+
+      async function loadProfile() {
+        try {
+          const healthRes = await fetch(`${backendUrl}/api/auth/health`);
+          setStatus(healthRes.ok, healthRes.ok ? "reachable" : "unavailable");
+        } catch (_err) {
+          setStatus(false);
+        }
+
+        try {
+          const response = await fetch(`${backendUrl}/api/auth/me`, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (!response.ok) {
+            messageEl.style.color = "#fb923c";
+            messageEl.textContent = "Session expired. Please sign in again.";
+            logout();
+            return;
+          }
+
+          const profile = await response.json();
+          nameEl.textContent = profile.name || "-";
+          emailEl.textContent = profile.email || "-";
+          verifiedEl.textContent = profile.email_verified ? "Verified" : "Not verified";
+          createdAtEl.textContent = profile.created_at ? new Date(profile.created_at).toLocaleString() : "-";
+          messageEl.style.color = "#9fb0d9";
+          messageEl.textContent = "Profile loaded from backend.";
+        } catch (_err) {
+          messageEl.style.color = "#fb923c";
+          messageEl.textContent = "Unable to load profile right now.";
+        }
+      }
+
+      loadProfile();
+    })();
+  </script>
+</body>
+</html>

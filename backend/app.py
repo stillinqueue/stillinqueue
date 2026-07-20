@@ -9,7 +9,7 @@ from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
@@ -80,6 +80,12 @@ def create_token() -> str:
 def get_user(email: str) -> Optional[dict[str, Any]]:
     with engine.connect() as conn:
         row = conn.execute(text("SELECT * FROM users WHERE email = :email"), {"email": email}).mappings().fetchone()
+        return dict(row) if row is not None else None
+
+
+def get_user_by_token(token: str) -> Optional[dict[str, Any]]:
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT * FROM users WHERE token = :token"), {"token": token}).mappings().fetchone()
         return dict(row) if row is not None else None
 
 
@@ -158,6 +164,13 @@ class ForgotPasswordConfirmRequest(BaseModel):
     email: str
     code: str
     new_password: str
+
+
+class UserProfileResponse(BaseModel):
+    email: str
+    name: str
+    email_verified: bool
+    created_at: str
 
 
 @app.get("/health")
@@ -306,6 +319,27 @@ def forgot_password_confirm(request: ForgotPasswordConfirmRequest) -> AuthRespon
 @app.get("/api/auth/health")
 def auth_health() -> dict[str, Any]:
     return {"status": "ok", "service": "stillinqueue-auth", "timestamp": datetime.utcnow().isoformat() + "Z"}
+
+
+@app.get("/api/auth/me", response_model=UserProfileResponse)
+def auth_me(authorization: Optional[str] = Header(default=None)) -> UserProfileResponse:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization token.")
+
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization token.")
+
+    user = get_user_by_token(token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+
+    return UserProfileResponse(
+        email=user["email"],
+        name=user["name"],
+        email_verified=bool(user["email_verified"]),
+        created_at=user["created_at"],
+    )
 
 
 @app.get("/api/auth/users/count")
