@@ -15,11 +15,18 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 
+
+def get_cors_origins() -> list[str]:
+    raw_origins = os.getenv("CORS_ORIGINS", "*")
+    origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    return origins or ["*"]
+
+
 app = FastAPI(title="Still In Queue Backend", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,6 +43,9 @@ SMTP_HOST = os.getenv("SMTP_HOST", "localhost")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 1025))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
+SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "no-reply@stillinqueue.com")
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
 RESET_CODE_TTL_MINUTES = int(os.getenv("RESET_CODE_TTL_MINUTES", 10))
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
 AUTH_ALLOW_CODE_FALLBACK = os.getenv("AUTH_ALLOW_CODE_FALLBACK", "false").lower() == "true"
@@ -106,34 +116,38 @@ def is_admin_email(email: str) -> bool:
     return email.strip().lower() in ADMIN_EMAILS
 
 
-def send_verification_email(email: str, code: str) -> None:
+def send_email(recipient: str, subject: str, body: str) -> None:
     message = EmailMessage()
-    message["Subject"] = "Your Still In Queue verification code"
-    message["From"] = SMTP_USER or "no-reply@stillinqueue.com"
-    message["To"] = email
-    message.set_content(
+    message["Subject"] = subject
+    message["From"] = SMTP_FROM
+    message["To"] = recipient
+    message.set_content(body)
+
+    smtp_class = smtplib.SMTP_SSL if SMTP_USE_SSL else smtplib.SMTP
+    with smtp_class(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
+        if not SMTP_USE_SSL and SMTP_USE_TLS:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.ehlo()
+        if SMTP_USER and SMTP_PASS:
+            smtp.login(SMTP_USER, SMTP_PASS)
+        smtp.send_message(message)
+
+
+def send_verification_email(email: str, code: str) -> None:
+    send_email(
+        email,
+        "Your Still In Queue verification code",
         f"Welcome to Still In Queue!\n\nYour verification code is: {code}\n\nEnter this code on the login page to confirm your email."
     )
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
-        if SMTP_USER and SMTP_PASS:
-            smtp.login(SMTP_USER, SMTP_PASS)
-        smtp.send_message(message)
-
 
 def send_reset_email(email: str, code: str) -> None:
-    message = EmailMessage()
-    message["Subject"] = "Your Still In Queue password reset code"
-    message["From"] = SMTP_USER or "no-reply@stillinqueue.com"
-    message["To"] = email
-    message.set_content(
+    send_email(
+        email,
+        "Your Still In Queue password reset code",
         f"Use this reset code to update your password: {code}\n\nEnter this code on the login page and submit your new password."
     )
-
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
-        if SMTP_USER and SMTP_PASS:
-            smtp.login(SMTP_USER, SMTP_PASS)
-        smtp.send_message(message)
 
 
 def create_user(email: str, name: str, password_hash: str, token: str, verification_code: str, is_admin: bool) -> None:

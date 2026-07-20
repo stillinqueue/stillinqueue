@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+backend/users.db
+backend/users.json
+inventorypulse-ai/
+.env
+.env.*

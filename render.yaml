@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: stillinqueue-backend
+    runtime: docker
+    rootDir: backend
+    healthCheckPath: /api/auth/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://stillinqueue.com,https://www.stillinqueue.com
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_USE_TLS
+        value: "true"
+      - key: SMTP_USE_SSL
+        value: "false"
+      - key: RESET_CODE_TTL_MINUTES
+        value: "10"
+      - key: AUTH_ALLOW_CODE_FALLBACK
+        value: "false"
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: ADMIN_API_KEY
+        sync: false
