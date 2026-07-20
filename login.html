@@ -957,7 +957,8 @@
             return;
           }
 
-          window.location.href = "profile.html";
+          const backend = encodeURIComponent(window.SQAuth.backendUrl);
+          window.location.href = `agents.html?backend=${backend}`;
         } catch (_err) {
           // Keep user on login page when backend is unreachable.
         }
@@ -1225,7 +1226,8 @@
           if (mode === "login" && payload.email_verified === true) {
             saveSession(payload.token, email);
             setTimeout(() => {
-              window.location.href = "profile.html";
+              const backend = encodeURIComponent(window.SQAuth.backendUrl);
+              window.location.href = `agents.html?backend=${backend}`;
             }, 600);
           }
         } catch (err) {

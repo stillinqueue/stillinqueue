@@ -111,6 +111,12 @@
                   box-shadow var(--transition-fast), transform var(--transition-fast);
     }
     .auth-primary:hover { background: linear-gradient(135deg, #60a5fa, #4ade80); border-color: #fff; box-shadow: 0 18px 40px rgba(15,23,42,.9); transform: translateY(-1px); }
+    .auth-primary.user-chip {
+      text-transform: none;
+      letter-spacing: .04em;
+      padding-inline: 1.1rem;
+      background: linear-gradient(135deg, #0ea5e9, #22c55e);
+    }
 
     .nav-toggle { display: none; flex-direction: column; gap: .2rem; background: none; border: none; cursor: pointer; }
     .nav-toggle span { width: 1.5rem; height: 2px; border-radius: 999px; background: #e5e7eb; }
@@ -534,7 +540,7 @@
       </nav>
 
       <div class="auth-buttons">
-        <a href="login.html" class="auth-primary">Login / Sign Up</a>
+        <a href="login.html" class="auth-primary" id="authLink">Login / Sign Up</a>
       </div>
     </div>
   </header>
@@ -851,6 +857,61 @@
       const toggle = document.querySelector(".nav-toggle");
       const nav = document.querySelector(".site-nav");
       const navLinks = document.querySelectorAll(".site-nav a");
+      const authLink = document.getElementById("authLink");
+
+      const params = new URLSearchParams(window.location.search);
+      const backendFromQuery = params.get("backend");
+      const backendFromStorage = localStorage.getItem("sq_backend_url");
+      const backendUrl = backendFromQuery || backendFromStorage || "https://sweet-teeth-beam.loca.lt";
+
+      if (backendFromQuery) {
+        localStorage.setItem("sq_backend_url", backendFromQuery);
+      }
+
+      const setLoggedOutNav = () => {
+        if (!authLink) return;
+        authLink.classList.remove("user-chip");
+        authLink.textContent = "Login / Sign Up";
+        authLink.href = `login.html?backend=${encodeURIComponent(backendUrl)}`;
+      };
+
+      const setLoggedInNav = (name) => {
+        if (!authLink) return;
+        authLink.classList.add("user-chip");
+        authLink.textContent = name || "Profile";
+        authLink.href = `profile.html?backend=${encodeURIComponent(backendUrl)}`;
+      };
+
+      const hydrateAuthNav = async () => {
+        const token = localStorage.getItem("sq_auth_token");
+        if (!token) {
+          setLoggedOutNav();
+          return;
+        }
+
+        try {
+          const response = await fetch(`${backendUrl}/api/auth/me`, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (!response.ok) {
+            localStorage.removeItem("sq_auth_token");
+            localStorage.removeItem("sq_auth_email");
+            setLoggedOutNav();
+            return;
+          }
+
+          const profile = await response.json();
+          setLoggedInNav(profile.name);
+        } catch (_err) {
+          setLoggedOutNav();
+        }
+      };
+
+      hydrateAuthNav();
 
       if (toggle && nav) {
         toggle.addEventListener("click", () => { nav.classList.toggle("nav-open"); });
