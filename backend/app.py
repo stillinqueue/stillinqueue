@@ -173,6 +173,13 @@ class UserProfileResponse(BaseModel):
     created_at: str
 
 
+class UserSummaryResponse(BaseModel):
+    email: str
+    name: str
+    email_verified: bool
+    created_at: str
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", "service": "stillinqueue-backend", "timestamp": datetime.utcnow().isoformat() + "Z"}
@@ -348,6 +355,26 @@ def get_user_count() -> dict[str, int]:
         result = conn.execute(text("SELECT COUNT(*) AS count FROM users"))
         count = result.scalar_one()
     return {"count": count}
+
+
+@app.get("/api/auth/users", response_model=list[UserSummaryResponse])
+def list_users() -> list[UserSummaryResponse]:
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT email, name, email_verified, created_at FROM users ORDER BY created_at DESC"
+            )
+        ).mappings().fetchall()
+
+    return [
+        UserSummaryResponse(
+            email=str(row["email"]),
+            name=str(row["name"]),
+            email_verified=bool(row["email_verified"]),
+            created_at=str(row["created_at"]),
+        )
+        for row in rows
+    ]
 
 
 @app.post("/api/inventorypulse/start")
