@@ -740,8 +740,16 @@
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const backendFromQuery = new URLSearchParams(window.location.search).get("backend");
+      const backendFromStorage = window.localStorage.getItem("sq_backend_url");
+      const defaultPublicBackend = "https://sweet-teeth-beam.loca.lt";
+      const selectedBackend = backendFromQuery || backendFromStorage || defaultPublicBackend;
+
+      if (backendFromQuery) {
+        window.localStorage.setItem("sq_backend_url", backendFromQuery);
+      }
+
       window.SQAuth = {
-        backendUrl: backendFromQuery || "http://127.0.0.1:8000"
+        backendUrl: selectedBackend
       };
 
       const backendStatus = document.getElementById("backendStatus");
