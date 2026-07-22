@@ -1189,15 +1189,15 @@
 
           message.style.color = "#22c55e";
           message.textContent = payload.message || "Success.";
-          if (debugCodes && payload.verification_code) {
-            message.textContent += ` Code: ${payload.verification_code}`;
+          if (payload.verification_code) {
+            message.textContent += ` Verification code: ${payload.verification_code}`;
           }
-          if (debugCodes && payload.reset_code) {
+          if (payload.reset_code) {
             message.textContent += ` Reset code: ${payload.reset_code}`;
           }
 
           if (!debugCodes && (payload.verification_code || payload.reset_code)) {
-            message.textContent += " If email does not arrive, ask support to configure SMTP credentials on the backend.";
+            message.textContent += " You can use this code now, and email delivery will need to be fixed separately.";
           }
           window.SQCharacters.setMouth("happy");
           submitBtn.textContent = getSubmitLabel();

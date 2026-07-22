@@ -291,11 +291,11 @@ def signup(request: AuthRequest) -> AuthResponse:
     user_is_admin = is_admin_email(request.email)
 
     code_to_return = None
+    email_failed = False
     try:
         send_verification_email(request.email, verification_code)
     except Exception:
-        if not AUTH_ALLOW_CODE_FALLBACK:
-            raise HTTPException(status_code=503, detail="Unable to send verification email right now. Please try again later.")
+        email_failed = True
         code_to_return = verification_code
 
     create_user(
@@ -309,7 +309,11 @@ def signup(request: AuthRequest) -> AuthResponse:
 
     return AuthResponse(
         success=True,
-        message="Account created. Check your email for the verification code.",
+        message=(
+            "Account created. Check your email for the verification code."
+            if not email_failed
+            else "Account created, but email delivery failed. Use the verification code shown below to sign in."
+        ),
         token=token,
         email_verified=False,
         verification_code=code_to_return,
@@ -364,21 +368,20 @@ def forgot_password_request(request: ForgotPasswordRequest) -> AuthResponse:
         )
 
     code_to_return = None
+    email_failed = False
     try:
         send_reset_email(request.email, reset_code)
     except Exception:
-        if not AUTH_ALLOW_CODE_FALLBACK:
-            with engine.begin() as conn:
-                conn.execute(
-                    text("UPDATE users SET reset_code = NULL, reset_code_created_at = NULL WHERE email = :email"),
-                    {"email": request.email},
-                )
-            raise HTTPException(status_code=503, detail="Unable to send reset code email right now. Please try again later.")
+        email_failed = True
         code_to_return = reset_code
 
     return AuthResponse(
         success=True,
-        message="If the email exists, a reset code has been sent.",
+        message=(
+            "If the email exists, a reset code has been sent."
+            if not email_failed
+            else "Reset code email delivery failed. Use the code shown below to continue."
+        ),
         reset_code=code_to_return,
     )
 
