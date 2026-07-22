@@ -464,13 +464,8 @@
     (function () {
       const params = new URLSearchParams(window.location.search);
       const backendFromQuery = params.get("backend");
-      const backendFromStorage = window.localStorage.getItem("sq_backend_url");
-      const defaultPublicBackend = "https://sweet-teeth-beam.loca.lt";
-      const backendUrl = backendFromQuery || backendFromStorage || defaultPublicBackend;
-
-      if (backendFromQuery) {
-        window.localStorage.setItem("sq_backend_url", backendFromQuery);
-      }
+      const defaultPublicBackend = "https://sq-ai-renderer.onrender.com";
+      const backendUrl = backendFromQuery || defaultPublicBackend;
 
       const token = window.localStorage.getItem("sq_auth_token");
       const messageEl = document.getElementById("profileMessage");

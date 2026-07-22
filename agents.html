@@ -861,12 +861,7 @@
 
       const params = new URLSearchParams(window.location.search);
       const backendFromQuery = params.get("backend");
-      const backendFromStorage = localStorage.getItem("sq_backend_url");
-      const backendUrl = backendFromQuery || backendFromStorage || "https://sweet-teeth-beam.loca.lt";
-
-      if (backendFromQuery) {
-        localStorage.setItem("sq_backend_url", backendFromQuery);
-      }
+      const backendUrl = backendFromQuery || "https://sq-ai-renderer.onrender.com";
 
       const setLoggedOutNav = () => {
         if (!authLink) return;

@@ -740,13 +740,8 @@
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const backendFromQuery = new URLSearchParams(window.location.search).get("backend");
-      const backendFromStorage = window.localStorage.getItem("sq_backend_url");
-      const defaultPublicBackend = "https://sweet-teeth-beam.loca.lt";
-      const selectedBackend = backendFromQuery || backendFromStorage || defaultPublicBackend;
-
-      if (backendFromQuery) {
-        window.localStorage.setItem("sq_backend_url", backendFromQuery);
-      }
+      const defaultPublicBackend = "https://sq-ai-renderer.onrender.com";
+      const selectedBackend = backendFromQuery || defaultPublicBackend;
 
       window.SQAuth = {
         backendUrl: selectedBackend
