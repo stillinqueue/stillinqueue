@@ -49,6 +49,8 @@ SMTP_PASS="your-brevo-smtp-key"
 SMTP_FROM="no-reply@your-verified-domain.com"
 SMTP_USE_TLS="true"
 SMTP_USE_SSL="false"
+SMTP_TIMEOUT_SECONDS="15"
+SMTP_FALLBACK_PORTS="465,2525"
 AUTH_ALLOW_CODE_FALLBACK="false"
 ADMIN_EMAILS="you@example.com"
 ADMIN_API_KEY="set-a-long-random-secret"
@@ -99,6 +101,8 @@ export SMTP_PASS="your-brevo-smtp-key"
 export SMTP_FROM="no-reply@your-verified-domain.com"
 export SMTP_USE_TLS="true"
 export SMTP_USE_SSL="false"
+export SMTP_TIMEOUT_SECONDS="15"
+export SMTP_FALLBACK_PORTS="465,2525"
 ```
 
 Optional admin protection env var:

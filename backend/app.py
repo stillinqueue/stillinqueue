@@ -46,6 +46,12 @@ SMTP_PASS = os.getenv("SMTP_PASS", "")
 SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "no-reply@stillinqueue.com")
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
+SMTP_TIMEOUT_SECONDS = float(os.getenv("SMTP_TIMEOUT_SECONDS", 15))
+SMTP_FALLBACK_PORTS = [
+    int(port.strip())
+    for port in os.getenv("SMTP_FALLBACK_PORTS", "").split(",")
+    if port.strip().isdigit()
+]
 RESET_CODE_TTL_MINUTES = int(os.getenv("RESET_CODE_TTL_MINUTES", 10))
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
 AUTH_ALLOW_CODE_FALLBACK = os.getenv("AUTH_ALLOW_CODE_FALLBACK", "false").lower() == "true"
@@ -123,15 +129,28 @@ def send_email(recipient: str, subject: str, body: str) -> None:
     message["To"] = recipient
     message.set_content(body)
 
-    smtp_class = smtplib.SMTP_SSL if SMTP_USE_SSL else smtplib.SMTP
-    with smtp_class(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
-        if not SMTP_USE_SSL and SMTP_USE_TLS:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.ehlo()
-        if SMTP_USER and SMTP_PASS:
-            smtp.login(SMTP_USER, SMTP_PASS)
-        smtp.send_message(message)
+    attempts: list[tuple[int, bool]] = [(SMTP_PORT, SMTP_USE_SSL)]
+    attempts.extend((port, False) for port in SMTP_FALLBACK_PORTS if port != SMTP_PORT)
+    attempts.extend((port, True) for port in SMTP_FALLBACK_PORTS if port != SMTP_PORT)
+
+    last_error: Exception | None = None
+    for port, use_ssl in attempts:
+        try:
+            smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+            with smtp_class(SMTP_HOST, port, timeout=SMTP_TIMEOUT_SECONDS) as smtp:
+                if not use_ssl and SMTP_USE_TLS:
+                    smtp.ehlo()
+                    smtp.starttls()
+                    smtp.ehlo()
+                if SMTP_USER and SMTP_PASS:
+                    smtp.login(SMTP_USER, SMTP_PASS)
+                smtp.send_message(message)
+                return
+        except Exception as exc:
+            last_error = exc
+
+    if last_error is not None:
+        raise last_error
 
 
 def get_smtp_error_message(exc: Exception) -> str:
