@@ -1206,9 +1206,18 @@
             loginNeedsVerification = true;
             setMode("login");
             verificationInput.value = "";
-            message.textContent += " Enter your verification code, then sign in.";
+            if (payload.verification_code) {
+              message.textContent += " Enter your verification code, then sign in.";
+            } else {
+              message.textContent += " Your verification code should arrive by email shortly, though it can sometimes take 2 to 3 minutes. Once it arrives, enter it here and sign in.";
+            }
           } else if (mode === "forgot-request") {
             setMode("forgot-confirm");
+            if (payload.reset_code) {
+              message.textContent += " Enter the reset code and your new password to finish resetting your account.";
+            } else {
+              message.textContent += " A reset code should arrive by email shortly, though it can sometimes take 2 to 3 minutes. Once it arrives, enter the code here with your new password to finish resetting your account.";
+            }
           } else if (mode === "forgot-confirm") {
             loginNeedsVerification = false;
             setMode("login");
