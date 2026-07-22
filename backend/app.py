@@ -9,7 +9,7 @@ from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
@@ -303,7 +303,7 @@ def health() -> dict[str, Any]:
 
 
 @app.post("/api/auth/signup", response_model=AuthResponse)
-def signup(request: AuthRequest) -> AuthResponse:
+def signup(request: AuthRequest, background_tasks: BackgroundTasks) -> AuthResponse:
     if not request.name:
         raise HTTPException(status_code=400, detail="Name is required to create an account.")
 
@@ -314,16 +314,6 @@ def signup(request: AuthRequest) -> AuthResponse:
     verification_code = secrets.token_hex(3).upper()
     user_is_admin = is_admin_email(request.email)
 
-    code_to_return = None
-    email_failed = False
-    email_error = None
-    try:
-        send_verification_email(request.email, verification_code)
-    except Exception as exc:
-        email_failed = True
-        code_to_return = verification_code
-        email_error = get_smtp_error_message(exc)
-
     create_user(
         request.email,
         request.name,
@@ -333,16 +323,13 @@ def signup(request: AuthRequest) -> AuthResponse:
         user_is_admin,
     )
 
+    background_tasks.add_task(send_verification_email, request.email, verification_code)
+
     return AuthResponse(
         success=True,
-        message=(
-            "Account created. Check your email for the verification code."
-            if not email_failed
-            else f"Account created, but email delivery failed. {email_error or 'Use the verification code shown below to sign in.'}"
-        ),
+        message="Account created. Check your email for the verification code.",
         token=token,
         email_verified=False,
-        verification_code=code_to_return,
         is_admin=user_is_admin,
     )
 
@@ -376,7 +363,7 @@ def login(request: AuthRequest) -> AuthResponse:
 
 
 @app.post("/api/auth/forgot-password/request", response_model=AuthResponse)
-def forgot_password_request(request: ForgotPasswordRequest) -> AuthResponse:
+def forgot_password_request(request: ForgotPasswordRequest, background_tasks: BackgroundTasks) -> AuthResponse:
     user = get_user(request.email)
     if user is None:
         # Avoid user enumeration by returning a success response either way.
@@ -393,24 +380,11 @@ def forgot_password_request(request: ForgotPasswordRequest) -> AuthResponse:
             },
         )
 
-    code_to_return = None
-    email_failed = False
-    email_error = None
-    try:
-        send_reset_email(request.email, reset_code)
-    except Exception as exc:
-        email_failed = True
-        code_to_return = reset_code
-        email_error = get_smtp_error_message(exc)
+    background_tasks.add_task(send_reset_email, request.email, reset_code)
 
     return AuthResponse(
         success=True,
-        message=(
-            "If the email exists, a reset code has been sent."
-            if not email_failed
-            else f"Reset code email delivery failed. {email_error or 'Use the code shown below to continue.'}"
-        ),
-        reset_code=code_to_return,
+        message="If the email exists, a reset code has been sent.",
     )
 
 
