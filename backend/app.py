@@ -134,6 +134,11 @@ def send_email(recipient: str, subject: str, body: str) -> None:
         smtp.send_message(message)
 
 
+def get_smtp_error_message(exc: Exception) -> str:
+    message = str(exc).strip() or exc.__class__.__name__
+    return f"SMTP send failed: {message}"
+
+
 def send_verification_email(email: str, code: str) -> None:
     send_email(
         email,
@@ -292,11 +297,13 @@ def signup(request: AuthRequest) -> AuthResponse:
 
     code_to_return = None
     email_failed = False
+    email_error = None
     try:
         send_verification_email(request.email, verification_code)
-    except Exception:
+    except Exception as exc:
         email_failed = True
         code_to_return = verification_code
+        email_error = get_smtp_error_message(exc)
 
     create_user(
         request.email,
@@ -312,7 +319,7 @@ def signup(request: AuthRequest) -> AuthResponse:
         message=(
             "Account created. Check your email for the verification code."
             if not email_failed
-            else "Account created, but email delivery failed. Use the verification code shown below to sign in."
+            else f"Account created, but email delivery failed. {email_error or 'Use the verification code shown below to sign in.'}"
         ),
         token=token,
         email_verified=False,
@@ -369,18 +376,20 @@ def forgot_password_request(request: ForgotPasswordRequest) -> AuthResponse:
 
     code_to_return = None
     email_failed = False
+    email_error = None
     try:
         send_reset_email(request.email, reset_code)
-    except Exception:
+    except Exception as exc:
         email_failed = True
         code_to_return = reset_code
+        email_error = get_smtp_error_message(exc)
 
     return AuthResponse(
         success=True,
         message=(
             "If the email exists, a reset code has been sent."
             if not email_failed
-            else "Reset code email delivery failed. Use the code shown below to continue."
+            else f"Reset code email delivery failed. {email_error or 'Use the code shown below to continue.'}"
         ),
         reset_code=code_to_return,
     )
