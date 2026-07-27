@@ -325,7 +325,7 @@
 
     .inventory-modal__panel {
       position: relative;
-      width: min(96vw, 720px);
+      width: min(96vw, 1100px);
       border-radius: 1.25rem;
       border: 1px solid rgba(148,163,184,.4);
       overflow: hidden;
@@ -362,6 +362,15 @@
       padding: 1.4rem 1.3rem 1.5rem;
       color: #e2e8f0;
       line-height: 1.7;
+    }
+
+    .inventory-embed {
+      width: 100%;
+      height: min(72vh, 760px);
+      border: 1px solid rgba(148,163,184,.35);
+      border-radius: .9rem;
+      background: #020617;
+      margin-top: .9rem;
     }
 
     .inventory-modal__body strong { display:block; margin-bottom:.5rem; color:#f8fafc; }
@@ -601,7 +610,7 @@
       </article>
 
       
-      <article id="inventory-card" class="agent-card is-clickable" data-requires-auth="true" data-target="#" data-external="true">
+      <article id="inventory-card" class="agent-card is-clickable" data-requires-auth="true" data-target="#" data-external="false">
         <div class="agent-tag">Operations · Retail</div>
         <h3 class="agent-title">InventoryPulse AI</h3>
         <p class="agent-text">
@@ -613,8 +622,8 @@
           <button class="agent-action secondary" type="button" data-inventory-preview data-requires-auth="true">
             Preview live app
           </button>
-          <a id="inventory-open-card-link" class="agent-action" href="#" target="_blank" rel="noopener noreferrer" data-requires-auth="true">
-            Open live app
+          <a id="inventory-open-card-link" class="agent-action" href="#" data-requires-auth="true">
+            Open in Still In Queue
           </a>
           <span class="agent-status" id="inventorypulse-status">Live preview ready</span>
         </div>
@@ -703,11 +712,12 @@
       </div>
       <div class="inventory-modal__body" id="inventory-modal-body">
         <strong>InventoryPulse AI connection</strong>
-        Launch InventoryPulse from the configured app URL.
+        InventoryPulse runs below inside Still In Queue.
         <br /><br />
         <a id="inventory-open-link" href="#" target="_blank" rel="noopener noreferrer">Open InventoryPulse AI now</a>
         <br /><br />
         <button id="inventory-start-btn" class="agent-action secondary" type="button">Start service</button>
+        <iframe id="inventory-embed" class="inventory-embed" title="InventoryPulse AI" loading="lazy" referrerpolicy="no-referrer"></iframe>
       </div>
     </div>
   </div>
@@ -812,6 +822,12 @@
           const isExternal = card.getAttribute("data-external") === "true";
           const comingSoon = card.getAttribute("data-coming-soon") === "true";
 
+          if (card.id === "inventory-card") {
+            event.preventDefault();
+            openInventoryInsideSite();
+            return;
+          }
+
           if (comingSoon) {
             setAgentStatus("This agent is in build mode and will be available soon.");
             return;
@@ -866,6 +882,7 @@
       const inventoryOpenCardLink = document.getElementById("inventory-open-card-link");
       const inventoryOpenLink = document.getElementById("inventory-open-link");
       const inventoryStartBtn = document.getElementById("inventory-start-btn");
+      const inventoryEmbed = document.getElementById("inventory-embed");
       let frontendUrl = "";
 
       const isLocalOnlyUrl = (urlValue) => {
@@ -906,6 +923,25 @@
         if (inventoryCard) {
           inventoryCard.setAttribute("data-target", safeUrl);
         }
+        if (inventoryEmbed) {
+          if (safeUrl && safeUrl !== "#") {
+            inventoryEmbed.src = safeUrl;
+          } else {
+            inventoryEmbed.removeAttribute("src");
+          }
+        }
+      };
+
+      const openInventoryInsideSite = async () => {
+        if (!previewModal) return;
+        previewModal.hidden = false;
+        updateStatus(false, "Checking service...");
+        await fetchInventoryStatus();
+        if (!canOpenInventoryUrl()) {
+          updateStatus(false, "InventoryPulse URL is not publicly reachable");
+          return;
+        }
+        renderInventoryModal();
       };
 
       const fetchInventoryConfig = async () => {
@@ -972,14 +1008,7 @@
       if (previewTrigger && previewModal) {
         previewTrigger.addEventListener("click", () => {
           if (!requireAuth()) return;
-          previewModal.hidden = false;
-          updateStatus(false, "Checking service...");
-          fetchInventoryStatus();
-          if (!canOpenInventoryUrl()) {
-            updateStatus(false, "InventoryPulse URL is not publicly reachable");
-            return;
-          }
-          window.open(frontendUrl, "_blank", "noopener,noreferrer");
+          openInventoryInsideSite();
         });
       }
 
@@ -996,7 +1025,12 @@
             event.preventDefault();
             return;
           }
-          if (actionEl.getAttribute("id") === "inventory-open-card-link" && !canOpenInventoryUrl()) {
+          if (actionEl.getAttribute("id") === "inventory-open-card-link") {
+            event.preventDefault();
+            openInventoryInsideSite();
+            return;
+          }
+          if (actionEl.getAttribute("id") === "inventory-open-link" && !canOpenInventoryUrl()) {
             event.preventDefault();
             updateStatus(false, "InventoryPulse URL is not publicly reachable");
           }
@@ -1006,6 +1040,7 @@
       previewCloseButtons.forEach((button) => {
         button.addEventListener("click", () => {
           if (previewModal) previewModal.hidden = true;
+          if (inventoryEmbed) inventoryEmbed.removeAttribute("src");
         });
       });
 
