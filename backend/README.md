@@ -54,6 +54,8 @@ SMTP_FALLBACK_PORTS="465,2525"
 AUTH_ALLOW_CODE_FALLBACK="false"
 ADMIN_EMAILS="you@example.com"
 ADMIN_API_KEY="set-a-long-random-secret"
+INVENTORYPULSE_FRONTEND_URL="https://your-inventorypulse-frontend-domain"
+INVENTORYPULSE_BACKEND_URL="https://your-inventorypulse-backend-domain"
 ```
 
 Notes:
@@ -62,6 +64,21 @@ Notes:
 2. `CORS_ORIGINS` should list your real frontend origins, comma-separated.
 3. The Docker container now listens on Render's assigned `PORT` automatically.
 4. The `/api/inventorypulse/start` endpoint is not suitable for Render, because Render web services do not provide sibling repo access or host-level Docker control.
+5. `INVENTORYPULSE_FRONTEND_URL` and `INVENTORYPULSE_BACKEND_URL` allow SQ-AI pages to discover InventoryPulse URLs and health from the main backend.
+
+## InventoryPulse integration endpoints
+
+The backend now provides simple integration endpoints used by `agents.html`:
+
+```bash
+GET /api/inventorypulse/config
+GET /api/inventorypulse/status
+POST /api/inventorypulse/start
+```
+
+`/api/inventorypulse/config` returns configured frontend/backend URLs.
+
+`/api/inventorypulse/status` probes frontend availability and backend `/health`.
 
 ## Recommended Open-Source Email Stack
 

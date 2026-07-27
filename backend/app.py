@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Optional
+from urllib.error import URLError
+from urllib.request import urlopen
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,9 +34,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DEFAULT_REPO_PATH = os.getenv("INVENTORYPULSE_REPO_PATH", "/workspaces/inventorypulse-ai")
+DEFAULT_REPO_PATH = os.getenv("INVENTORYPULSE_REPO_PATH", "/workspaces/stillinqueue/inventorypulse-ai")
 DEFAULT_COMPOSE_COMMAND = os.getenv("INVENTORYPULSE_COMPOSE_COMMAND", "docker compose up --build -d")
 LOG_PATH = Path(os.getenv("INVENTORYPULSE_LOG_PATH", "/tmp/inventorypulse-start.log"))
+INVENTORYPULSE_FRONTEND_URL = os.getenv("INVENTORYPULSE_FRONTEND_URL", "http://127.0.0.1:3000")
+INVENTORYPULSE_BACKEND_URL = os.getenv("INVENTORYPULSE_BACKEND_URL", "http://127.0.0.1:8001")
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg2://inventorypulse:inventorypulse@127.0.0.1:5432/inventorypulse",
@@ -656,4 +660,36 @@ def start_inventorypulse() -> dict[str, Any]:
         "repo_path": str(repo_path),
         "command": DEFAULT_COMPOSE_COMMAND,
         "pid": process.pid,
+    }
+
+
+def _url_is_healthy(url: str, timeout_seconds: float = 2.5) -> bool:
+    try:
+        with urlopen(url, timeout=timeout_seconds):
+            return True
+    except (URLError, TimeoutError, ValueError):
+        return False
+
+
+@app.get("/api/inventorypulse/config")
+def get_inventorypulse_config() -> dict[str, Any]:
+    return {
+        "frontend_url": INVENTORYPULSE_FRONTEND_URL,
+        "backend_url": INVENTORYPULSE_BACKEND_URL,
+        "repo_path": str(Path(DEFAULT_REPO_PATH).expanduser().resolve()),
+    }
+
+
+@app.get("/api/inventorypulse/status")
+def get_inventorypulse_status() -> dict[str, Any]:
+    frontend_health_url = INVENTORYPULSE_FRONTEND_URL
+    backend_health_url = f"{INVENTORYPULSE_BACKEND_URL.rstrip('/')}/health"
+    frontend_online = _url_is_healthy(frontend_health_url)
+    backend_online = _url_is_healthy(backend_health_url)
+    return {
+        "frontend_url": INVENTORYPULSE_FRONTEND_URL,
+        "backend_health_url": backend_health_url,
+        "frontend_online": frontend_online,
+        "backend_online": backend_online,
+        "is_ready": frontend_online and backend_online,
     }

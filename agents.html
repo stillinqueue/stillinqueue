@@ -601,7 +601,7 @@
       </article>
 
       
-      <article class="agent-card is-clickable" data-requires-auth="true" data-target="https://inventorypulse-stillinqueue.loca.lt" data-external="true">
+      <article id="inventory-card" class="agent-card is-clickable" data-requires-auth="true" data-target="#" data-external="true">
         <div class="agent-tag">Operations · Retail</div>
         <h3 class="agent-title">InventoryPulse AI</h3>
         <p class="agent-text">
@@ -613,12 +613,12 @@
           <button class="agent-action secondary" type="button" data-inventory-preview data-requires-auth="true">
             Preview live app
           </button>
-          <a class="agent-action" href="https://inventorypulse-stillinqueue.loca.lt" target="_blank" rel="noopener noreferrer" data-requires-auth="true">
+          <a id="inventory-open-card-link" class="agent-action" href="#" target="_blank" rel="noopener noreferrer" data-requires-auth="true">
             Open live app
           </a>
           <span class="agent-status" id="inventorypulse-status">Live preview ready</span>
         </div>
-        <div class="agent-meta" style="margin-top:.5rem;">Live app: <span>available via public tunnel</span></div>
+        <div class="agent-meta" style="margin-top:.5rem;">Live app: <span>uses configured service URL</span></div>
       </article>
 
       <article class="agent-card is-clickable" data-requires-auth="true" data-coming-soon="true">
@@ -702,10 +702,12 @@
         <button class="inventory-modal__close" type="button" data-close-preview>Close</button>
       </div>
       <div class="inventory-modal__body" id="inventory-modal-body">
-        <strong>InventoryPulse AI is ready to launch</strong>
-        This opens the live InventoryPulse frontend through the public tunnel.
+        <strong>InventoryPulse AI connection</strong>
+        Launch InventoryPulse from the configured app URL.
         <br /><br />
-        <a href="https://inventorypulse-stillinqueue.loca.lt" target="_blank" rel="noopener noreferrer">Open InventoryPulse AI now</a>
+        <a id="inventory-open-link" href="#" target="_blank" rel="noopener noreferrer">Open InventoryPulse AI now</a>
+        <br /><br />
+        <button id="inventory-start-btn" class="agent-action secondary" type="button">Start service</button>
       </div>
     </div>
   </div>
@@ -815,7 +817,10 @@
             return;
           }
 
-          if (!target) return;
+          if (!target || target === "#") {
+            setAgentStatus("InventoryPulse URL not configured.");
+            return;
+          }
           if (isExternal) {
             window.open(target, "_blank", "noopener,noreferrer");
             return;
@@ -857,7 +862,11 @@
       const previewTrigger = document.querySelector("[data-inventory-preview]");
       const previewModal = document.getElementById("inventory-modal");
       const previewCloseButtons = document.querySelectorAll("[data-close-preview]");
-      const frontendUrl = "https://inventorypulse-stillinqueue.loca.lt";
+      const inventoryCard = document.getElementById("inventory-card");
+      const inventoryOpenCardLink = document.getElementById("inventory-open-card-link");
+      const inventoryOpenLink = document.getElementById("inventory-open-link");
+      const inventoryStartBtn = document.getElementById("inventory-start-btn");
+      let frontendUrl = "";
 
       const updateStatus = (isLive, label) => {
         if (!inventoryStatus) return;
@@ -865,12 +874,93 @@
         inventoryStatus.textContent = label;
       };
 
+      const renderInventoryModal = () => {
+        if (inventoryOpenLink) {
+          inventoryOpenLink.href = frontendUrl || "#";
+        }
+        if (inventoryOpenCardLink) {
+          inventoryOpenCardLink.href = frontendUrl || "#";
+        }
+        if (inventoryCard) {
+          inventoryCard.setAttribute("data-target", frontendUrl || "#");
+        }
+      };
+
+      const fetchInventoryConfig = async () => {
+        try {
+          const response = await fetch(`${backendUrl}/api/inventorypulse/config`);
+          if (!response.ok) return;
+          const config = await response.json();
+          if (config.frontend_url) frontendUrl = config.frontend_url;
+          renderInventoryModal();
+        } catch (_err) {
+          // keep fallback URL
+        }
+      };
+
+      const fetchInventoryStatus = async () => {
+        try {
+          const response = await fetch(`${backendUrl}/api/inventorypulse/status`);
+          if (!response.ok) {
+            updateStatus(false, "Service status unavailable");
+            return null;
+          }
+          const data = await response.json();
+          if (data.frontend_url) frontendUrl = data.frontend_url;
+          renderInventoryModal();
+          if (data.is_ready) {
+            updateStatus(true, "Live app online");
+          } else if (data.backend_online) {
+            updateStatus(false, "Frontend offline");
+          } else {
+            updateStatus(false, "Service offline");
+          }
+          return data;
+        } catch (_err) {
+          updateStatus(false, "Service offline");
+          return null;
+        }
+      };
+
+      const startInventoryPulse = async () => {
+        if (!inventoryStartBtn) return;
+        inventoryStartBtn.disabled = true;
+        inventoryStartBtn.textContent = "Starting...";
+        try {
+          const response = await fetch(`${backendUrl}/api/inventorypulse/start`, { method: "POST" });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            updateStatus(false, payload.detail || "Unable to start service");
+            return;
+          }
+          updateStatus(false, "Starting service...");
+          setTimeout(fetchInventoryStatus, 2500);
+        } catch (_err) {
+          updateStatus(false, "Unable to start service");
+        } finally {
+          inventoryStartBtn.disabled = false;
+          inventoryStartBtn.textContent = "Start service";
+        }
+      };
+
       if (previewTrigger && previewModal) {
         previewTrigger.addEventListener("click", () => {
           if (!requireAuth()) return;
           previewModal.hidden = false;
-          updateStatus(true, "Opening live preview…");
+          updateStatus(false, "Checking service...");
+          fetchInventoryStatus();
+          if (!frontendUrl) {
+            updateStatus(false, "InventoryPulse URL not configured");
+            return;
+          }
           window.open(frontendUrl, "_blank", "noopener,noreferrer");
+        });
+      }
+
+      if (inventoryStartBtn) {
+        inventoryStartBtn.addEventListener("click", () => {
+          if (!requireAuth()) return;
+          startInventoryPulse();
         });
       }
 
@@ -878,6 +968,11 @@
         actionEl.addEventListener("click", (event) => {
           if (!requireAuth()) {
             event.preventDefault();
+            return;
+          }
+          if (actionEl.getAttribute("id") === "inventory-open-card-link" && !frontendUrl) {
+            event.preventDefault();
+            updateStatus(false, "InventoryPulse URL not configured");
           }
         });
       });
@@ -888,7 +983,8 @@
         });
       });
 
-      updateStatus(false, "Start locally");
+      fetchInventoryConfig().then(() => fetchInventoryStatus());
+      setInterval(fetchInventoryStatus, 20000);
     });
   </script>
 
