@@ -868,6 +868,27 @@
       const inventoryStartBtn = document.getElementById("inventory-start-btn");
       let frontendUrl = "";
 
+      const isLocalOnlyUrl = (urlValue) => {
+        if (!urlValue) return true;
+        try {
+          const parsed = new URL(urlValue);
+          const host = parsed.hostname.toLowerCase();
+          return host === "127.0.0.1" || host === "localhost" || host === "0.0.0.0";
+        } catch (_err) {
+          return true;
+        }
+      };
+
+      const canOpenInventoryUrl = () => {
+        if (!frontendUrl) return false;
+        const currentHost = window.location.hostname.toLowerCase();
+        const isCurrentLocal = currentHost === "127.0.0.1" || currentHost === "localhost" || currentHost === "0.0.0.0" || currentHost.includes("github.dev");
+        if (!isCurrentLocal && isLocalOnlyUrl(frontendUrl)) {
+          return false;
+        }
+        return true;
+      };
+
       const updateStatus = (isLive, label) => {
         if (!inventoryStatus) return;
         inventoryStatus.classList.toggle("live", isLive);
@@ -875,14 +896,15 @@
       };
 
       const renderInventoryModal = () => {
+        const safeUrl = canOpenInventoryUrl() ? frontendUrl : "#";
         if (inventoryOpenLink) {
-          inventoryOpenLink.href = frontendUrl || "#";
+          inventoryOpenLink.href = safeUrl;
         }
         if (inventoryOpenCardLink) {
-          inventoryOpenCardLink.href = frontendUrl || "#";
+          inventoryOpenCardLink.href = safeUrl;
         }
         if (inventoryCard) {
-          inventoryCard.setAttribute("data-target", frontendUrl || "#");
+          inventoryCard.setAttribute("data-target", safeUrl);
         }
       };
 
@@ -908,7 +930,11 @@
           const data = await response.json();
           if (data.frontend_url) frontendUrl = data.frontend_url;
           renderInventoryModal();
-          if (data.is_ready) {
+          if (!frontendUrl) {
+            updateStatus(false, "Configure InventoryPulse URL");
+          } else if (!canOpenInventoryUrl()) {
+            updateStatus(false, "URL is local-only");
+          } else if (data.is_ready) {
             updateStatus(true, "Live app online");
           } else if (data.backend_online) {
             updateStatus(false, "Frontend offline");
@@ -949,8 +975,8 @@
           previewModal.hidden = false;
           updateStatus(false, "Checking service...");
           fetchInventoryStatus();
-          if (!frontendUrl) {
-            updateStatus(false, "InventoryPulse URL not configured");
+          if (!canOpenInventoryUrl()) {
+            updateStatus(false, "InventoryPulse URL is not publicly reachable");
             return;
           }
           window.open(frontendUrl, "_blank", "noopener,noreferrer");
@@ -970,9 +996,9 @@
             event.preventDefault();
             return;
           }
-          if (actionEl.getAttribute("id") === "inventory-open-card-link" && !frontendUrl) {
+          if (actionEl.getAttribute("id") === "inventory-open-card-link" && !canOpenInventoryUrl()) {
             event.preventDefault();
-            updateStatus(false, "InventoryPulse URL not configured");
+            updateStatus(false, "InventoryPulse URL is not publicly reachable");
           }
         });
       });

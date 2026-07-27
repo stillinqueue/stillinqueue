@@ -37,8 +37,8 @@ app.add_middleware(
 DEFAULT_REPO_PATH = os.getenv("INVENTORYPULSE_REPO_PATH", "/workspaces/stillinqueue/inventorypulse-ai")
 DEFAULT_COMPOSE_COMMAND = os.getenv("INVENTORYPULSE_COMPOSE_COMMAND", "docker compose up --build -d")
 LOG_PATH = Path(os.getenv("INVENTORYPULSE_LOG_PATH", "/tmp/inventorypulse-start.log"))
-INVENTORYPULSE_FRONTEND_URL = os.getenv("INVENTORYPULSE_FRONTEND_URL", "http://127.0.0.1:3000")
-INVENTORYPULSE_BACKEND_URL = os.getenv("INVENTORYPULSE_BACKEND_URL", "http://127.0.0.1:8001")
+INVENTORYPULSE_FRONTEND_URL = os.getenv("INVENTORYPULSE_FRONTEND_URL", "")
+INVENTORYPULSE_BACKEND_URL = os.getenv("INVENTORYPULSE_BACKEND_URL", "")
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg2://inventorypulse:inventorypulse@127.0.0.1:5432/inventorypulse",
@@ -683,9 +683,9 @@ def get_inventorypulse_config() -> dict[str, Any]:
 @app.get("/api/inventorypulse/status")
 def get_inventorypulse_status() -> dict[str, Any]:
     frontend_health_url = INVENTORYPULSE_FRONTEND_URL
-    backend_health_url = f"{INVENTORYPULSE_BACKEND_URL.rstrip('/')}/health"
-    frontend_online = _url_is_healthy(frontend_health_url)
-    backend_online = _url_is_healthy(backend_health_url)
+    backend_health_url = f"{INVENTORYPULSE_BACKEND_URL.rstrip('/')}/health" if INVENTORYPULSE_BACKEND_URL else ""
+    frontend_online = _url_is_healthy(frontend_health_url) if frontend_health_url else False
+    backend_online = _url_is_healthy(backend_health_url) if backend_health_url else False
     return {
         "frontend_url": INVENTORYPULSE_FRONTEND_URL,
         "backend_health_url": backend_health_url,
