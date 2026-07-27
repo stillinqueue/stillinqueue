@@ -83,12 +83,25 @@ def init_db() -> None:
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code TEXT"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code_created_at TEXT"))
-        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS membership_type TEXT NOT NULL DEFAULT 'Paid'"))
-        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'active'"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS membership_type TEXT NOT NULL DEFAULT 'Free'"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'not active'"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_provider TEXT"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_last4 TEXT"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_renewal_at TEXT"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
+        conn.execute(
+            text(
+                """
+                UPDATE users
+                SET membership_type = 'Free', payment_status = 'not active'
+                WHERE COALESCE(membership_type, '') IN ('', 'Paid')
+                  AND COALESCE(payment_status, '') IN ('', 'active', 'Active')
+                  AND payment_provider IS NULL
+                  AND payment_last4 IS NULL
+                  AND payment_renewal_at IS NULL
+                """
+            )
+        )
 
 
 init_db()
@@ -189,8 +202,8 @@ def create_user(email: str, name: str, password_hash: str, token: str, verificat
                     "verification_code": verification_code,
                     "email_verified": False,
                     "created_at": datetime.utcnow().isoformat() + "Z",
-                    "membership_type": "Paid",
-                    "payment_status": "active",
+                    "membership_type": "Free",
+                    "payment_status": "not active",
                     "is_admin": is_admin,
                 },
             )
@@ -261,6 +274,17 @@ class UserDetailResponse(BaseModel):
     is_admin: bool
     has_pending_verification: bool
     has_pending_reset: bool
+
+
+class UpdateUserRequest(BaseModel):
+    name: Optional[str] = None
+    email_verified: Optional[bool] = None
+    membership_type: Optional[str] = None
+    payment_status: Optional[str] = None
+    payment_provider: Optional[str] = None
+    payment_last4: Optional[str] = None
+    payment_renewal_at: Optional[str] = None
+    is_admin: Optional[bool] = None
 
 
 def enforce_admin_access(x_admin_key: Optional[str]) -> None:
@@ -447,8 +471,8 @@ def auth_me(authorization: Optional[str] = Header(default=None)) -> UserProfileR
         name=user["name"],
         email_verified=bool(user["email_verified"]),
         created_at=user["created_at"],
-        membership_type=str(user.get("membership_type") or "Paid"),
-        payment_status=str(user.get("payment_status") or "active"),
+        membership_type=str(user.get("membership_type") or "Free"),
+        payment_status=str(user.get("payment_status") or "not active"),
         payment_provider=user.get("payment_provider"),
         payment_last4=user.get("payment_last4"),
         payment_renewal_at=user.get("payment_renewal_at"),
@@ -487,8 +511,8 @@ def list_users(
             name=str(row["name"]),
             email_verified=bool(row["email_verified"]),
             created_at=str(row["created_at"]),
-            membership_type=str(row.get("membership_type") or "Paid"),
-            payment_status=str(row.get("payment_status") or "active"),
+            membership_type=str(row.get("membership_type") or "Free"),
+            payment_status=str(row.get("payment_status") or "not active"),
             is_admin=bool(row.get("is_admin")),
         )
         for row in rows
@@ -512,8 +536,84 @@ def get_user_detail(
         name=str(user["name"]),
         email_verified=bool(user["email_verified"]),
         created_at=str(user["created_at"]),
-        membership_type=str(user.get("membership_type") or "Paid"),
-        payment_status=str(user.get("payment_status") or "active"),
+        membership_type=str(user.get("membership_type") or "Free"),
+        payment_status=str(user.get("payment_status") or "not active"),
+        payment_provider=user.get("payment_provider"),
+        payment_last4=user.get("payment_last4"),
+        payment_renewal_at=user.get("payment_renewal_at"),
+        is_admin=bool(user.get("is_admin")),
+        has_pending_verification=bool(user.get("verification_code")),
+        has_pending_reset=bool(user.get("reset_code")),
+    )
+
+
+@app.patch("/api/auth/users/{email}", response_model=UserDetailResponse)
+def update_user_detail(
+    email: str,
+    payload: UpdateUserRequest,
+    authorization: Optional[str] = Header(default=None),
+    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
+) -> UserDetailResponse:
+    enforce_admin_user(authorization, x_admin_key)
+
+    existing_user = get_user(email)
+    if existing_user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    updates: dict[str, Any] = {}
+    if payload.name is not None:
+        clean_name = payload.name.strip()
+        if not clean_name:
+            raise HTTPException(status_code=400, detail="Name cannot be empty.")
+        updates["name"] = clean_name
+
+    if payload.email_verified is not None:
+        updates["email_verified"] = bool(payload.email_verified)
+        if payload.email_verified:
+            updates["verification_code"] = None
+
+    if payload.membership_type is not None:
+        clean_membership = payload.membership_type.strip()
+        updates["membership_type"] = clean_membership or "Free"
+
+    if payload.payment_status is not None:
+        clean_payment = payload.payment_status.strip()
+        updates["payment_status"] = clean_payment or "not active"
+
+    if payload.payment_provider is not None:
+        clean_provider = payload.payment_provider.strip()
+        updates["payment_provider"] = clean_provider or None
+
+    if payload.payment_last4 is not None:
+        clean_last4 = payload.payment_last4.strip()
+        updates["payment_last4"] = clean_last4 or None
+
+    if payload.payment_renewal_at is not None:
+        clean_renewal = payload.payment_renewal_at.strip()
+        updates["payment_renewal_at"] = clean_renewal or None
+
+    if payload.is_admin is not None:
+        updates["is_admin"] = bool(payload.is_admin)
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields provided for update.")
+
+    set_parts = [f"{field} = :{field}" for field in updates]
+    updates["email"] = email
+    with engine.begin() as conn:
+        conn.execute(text(f"UPDATE users SET {', '.join(set_parts)} WHERE email = :email"), updates)
+
+    user = get_user(email)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    return UserDetailResponse(
+        email=str(user["email"]),
+        name=str(user["name"]),
+        email_verified=bool(user["email_verified"]),
+        created_at=str(user["created_at"]),
+        membership_type=str(user.get("membership_type") or "Free"),
+        payment_status=str(user.get("payment_status") or "not active"),
         payment_provider=user.get("payment_provider"),
         payment_last4=user.get("payment_last4"),
         payment_renewal_at=user.get("payment_renewal_at"),

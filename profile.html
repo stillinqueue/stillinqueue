@@ -180,7 +180,7 @@
       </article>
       <article class="item">
         <p class="label">Membership Type</p>
-        <p id="profileMembershipType" class="value">Paid</p>
+        <p id="profileMembershipType" class="value">Free</p>
       </article>
       <article class="item">
         <p class="label">Payment Status</p>
@@ -507,7 +507,7 @@
         window.localStorage.setItem("sq_auth_session_started_at", new Date().toISOString());
       }
       sessionSinceEl.textContent = formatDate(window.localStorage.getItem("sq_auth_session_started_at"));
-      membershipTypeEl.textContent = "Paid";
+      membershipTypeEl.textContent = "Free";
 
       async function loadProfile() {
         try {
@@ -530,8 +530,8 @@
           emailEl.textContent = profile.email || "-";
           verifiedEl.textContent = profile.email_verified ? "Verified" : "Not verified";
           createdAtEl.textContent = formatDate(profile.created_at);
-          membershipTypeEl.textContent = profile.membership_type || "Paid";
-          paymentStatusEl.textContent = profile.payment_status || "Active";
+          membershipTypeEl.textContent = profile.membership_type || "Free";
+          paymentStatusEl.textContent = profile.payment_status || "not active";
           paymentProviderEl.textContent = profile.payment_provider || "Not set";
           paymentLast4El.textContent = profile.payment_last4 ? `**** ${profile.payment_last4}` : "Not set";
           paymentRenewalAtEl.textContent = formatDate(profile.payment_renewal_at);

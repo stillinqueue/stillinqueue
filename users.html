@@ -139,10 +139,11 @@
             <th>Payment</th>
             <th>Admin</th>
             <th>Created At</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody id="usersBody">
-          <tr><td colspan="7">No data loaded yet.</td></tr>
+          <tr><td colspan="8">No data loaded yet.</td></tr>
         </tbody>
       </table>
     </div>
@@ -180,6 +181,56 @@
         return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
       }
 
+      function escapeHtml(value) {
+        return String(value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      async function updateUser(backendUrl, headers, email, row) {
+        const name = row.querySelector('[data-field="name"]').value.trim();
+        const emailVerified = row.querySelector('[data-field="email_verified"]').value === "true";
+        const membershipType = row.querySelector('[data-field="membership_type"]').value.trim() || "Free";
+        const paymentStatus = row.querySelector('[data-field="payment_status"]').value.trim() || "not active";
+        const isAdmin = row.querySelector('[data-field="is_admin"]').value === "true";
+
+        const payload = {
+          name,
+          email_verified: emailVerified,
+          membership_type: membershipType,
+          payment_status: paymentStatus,
+          is_admin: isAdmin,
+        };
+
+        const saveBtn = row.querySelector("button[data-action=save]");
+        saveBtn.disabled = true;
+        const oldLabel = saveBtn.textContent;
+        saveBtn.textContent = "Saving...";
+
+        try {
+          const response = await fetch(`${backendUrl}/api/auth/users/${encodeURIComponent(email)}`, {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify(payload),
+          });
+
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.detail || "Update failed");
+          }
+
+          metaEl.textContent = `Updated ${email}`;
+        } catch (err) {
+          metaEl.textContent = `Failed to update ${email}: ${err.message || "Unknown error"}`;
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = oldLabel;
+        }
+      }
+
       async function loadUsers() {
         const backendUrl = backendInput.value.trim();
         if (!backendUrl) {
@@ -212,7 +263,7 @@
           const me = await meRes.json();
           if (!me.is_admin) {
             metaEl.textContent = "This page is only for admin users.";
-            usersBody.innerHTML = '<tr><td colspan="7">Admin access required.</td></tr>';
+            usersBody.innerHTML = '<tr><td colspan="8">Admin access required.</td></tr>';
             window.location.href = `profile.html?backend=${encodeURIComponent(backendUrl)}`;
             return;
           }
@@ -228,7 +279,7 @@
           if (!countRes.ok || !usersRes.ok) {
             const errPayload = await usersRes.json().catch(() => ({}));
             metaEl.textContent = errPayload.detail || "Unable to fetch users. Admin privileges required.";
-            usersBody.innerHTML = '<tr><td colspan="7">Failed to load users.</td></tr>';
+            usersBody.innerHTML = '<tr><td colspan="8">Failed to load users.</td></tr>';
             return;
           }
 
@@ -237,21 +288,32 @@
 
           metaEl.textContent = `Total users: ${countData.count}`;
           if (!Array.isArray(usersData) || usersData.length === 0) {
-            usersBody.innerHTML = '<tr><td colspan="7">No users yet.</td></tr>';
+            usersBody.innerHTML = '<tr><td colspan="8">No users yet.</td></tr>';
             return;
           }
 
           usersBody.innerHTML = usersData
             .map((user) => {
-              const verified = user.email_verified ? "Yes" : "No";
-              const admin = user.is_admin ? "Yes" : "No";
-              return `\n<tr>\n<td><code>${user.email}</code></td>\n<td>${user.name || "-"}</td>\n<td>${verified}</td>\n<td>${user.membership_type || "Paid"}</td>\n<td>${user.payment_status || "active"}</td>\n<td>${admin}</td>\n<td>${formatDate(user.created_at)}</td>\n</tr>`;
+              const safeEmail = escapeHtml(user.email || "");
+              const safeName = escapeHtml(user.name || "");
+              const membership = escapeHtml(user.membership_type || "Free");
+              const payment = escapeHtml(user.payment_status || "not active");
+              const verifiedSelected = user.email_verified ? "true" : "false";
+              const adminSelected = user.is_admin ? "true" : "false";
+
+              return `\n<tr data-email="${safeEmail}">\n<td><code>${safeEmail}</code></td>\n<td><input class="field" data-field="name" value="${safeName}" /></td>\n<td><select class="field" data-field="email_verified"><option value="true" ${verifiedSelected === "true" ? "selected" : ""}>Yes</option><option value="false" ${verifiedSelected === "false" ? "selected" : ""}>No</option></select></td>\n<td><input class="field" data-field="membership_type" value="${membership}" /></td>\n<td><input class="field" data-field="payment_status" value="${payment}" /></td>\n<td><select class="field" data-field="is_admin"><option value="true" ${adminSelected === "true" ? "selected" : ""}>Yes</option><option value="false" ${adminSelected === "false" ? "selected" : ""}>No</option></select></td>\n<td>${formatDate(user.created_at)}</td>\n<td><button type="button" data-action="save">Update</button></td>\n</tr>`;
             })
             .join("");
+
+          usersBody.querySelectorAll("tr[data-email]").forEach((row) => {
+            const email = row.getAttribute("data-email") || "";
+            const saveBtn = row.querySelector("button[data-action=save]");
+            saveBtn.addEventListener("click", () => updateUser(backendUrl, headers, email, row));
+          });
         } catch (_err) {
           setStatus(false, "Auth API offline");
           metaEl.textContent = "Network error while loading users.";
-          usersBody.innerHTML = '<tr><td colspan="7">Network error.</td></tr>';
+          usersBody.innerHTML = '<tr><td colspan="8">Network error.</td></tr>';
         }
       }
 
