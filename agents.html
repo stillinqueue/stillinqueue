@@ -192,6 +192,7 @@
     .section-kicker { font-size: .78rem; text-transform: uppercase; letter-spacing: .18em; color: #93c5fd; margin-bottom: .4rem; }
     .section-title { font-family: var(--font-serif); font-size: 1.4rem; letter-spacing: .08em; text-transform: uppercase; }
     .section-desc { font-size: .9rem; color: var(--text-muted); max-width: 440px; line-height: 1.7; }
+    .section-note { margin-top: .45rem; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; }
 
     .section-chip { text-align: center; margin-bottom: 1.6rem; }
     .section-chip span {
@@ -219,6 +220,7 @@
     }
     .agent-card:hover { transform: translateY(-4px); box-shadow: 0 28px 70px rgba(15,23,42,.9); border-color: rgba(129,140,248,.9); background: radial-gradient(circle at top right, #020617, #020617 40%, #02091c 100%); }
     .agent-card:hover::before { opacity: 1; }
+    .agent-card.is-clickable { cursor: pointer; }
     .agent-tag { font-size: .7rem; text-transform: uppercase; letter-spacing: .18em; color: #93c5fd; margin-bottom: .65rem; }
     .agent-title { font-weight: 600; margin-bottom: .35rem; }
     .agent-text { font-size: .9rem; color: var(--text-muted); line-height: 1.6; margin-bottom: .75rem; }
@@ -564,7 +566,7 @@
 
       <div class="hero-cta">
         <a href="#agents" class="btn-primary">Explore the Platform</a>
-        <a href="#realestate" class="btn-ghost">View Live Preview</a>
+        <a href="realestate.html" class="btn-ghost" id="heroLivePreviewBtn">View Live Preview</a>
       </div>
     </div>
 
@@ -577,18 +579,18 @@
 
     <div class="section-header">
       <div>
-        <div class="section-kicker">Agent Library</div>
-        <h2 class="section-title">Pre-built SQ-AI Agents</h2>
+        <div class="section-kicker">Agent Directory</div>
+        <h2 class="section-title">Choose an Agent to Start</h2>
       </div>
       <p class="section-desc">
-        These cards represent the first generation of SQ-AI agents. Later,
-        each card becomes its own interactive chat window with settings,
-        notifications, and connections into your workflows.
+        Focused on practical AI tools first. Open any agent to continue,
+        and sign in to unlock access.
       </p>
     </div>
+    <p id="agentSectionStatus" class="section-desc section-note">Sign in required to open agent tools.</p>
 
     <div class="agents-grid">
-      <article class="agent-card" onclick="window.location.href='realestate.html'" style="cursor:pointer;">
+      <article class="agent-card is-clickable" data-requires-auth="true" data-target="realestate.html">
         <div class="agent-tag">Design · Real Estate</div>
         <h3 class="agent-title">Real Estate Intelligence</h3>
         <p class="agent-text">
@@ -599,7 +601,7 @@
       </article>
 
       
-      <article class="agent-card">
+      <article class="agent-card is-clickable" data-requires-auth="true" data-target="https://inventorypulse-stillinqueue.loca.lt" data-external="true">
         <div class="agent-tag">Operations · Retail</div>
         <h3 class="agent-title">InventoryPulse AI</h3>
         <p class="agent-text">
@@ -608,10 +610,10 @@
         </p>
         <div class="agent-meta">Triggers: <span>reorder points · stockouts · demand shifts</span></div>
         <div class="agent-action-row">
-          <button class="agent-action secondary" type="button" data-inventory-preview>
+          <button class="agent-action secondary" type="button" data-inventory-preview data-requires-auth="true">
             Preview live app
           </button>
-          <a class="agent-action" href="https://inventorypulse-stillinqueue.loca.lt" target="_blank" rel="noopener noreferrer">
+          <a class="agent-action" href="https://inventorypulse-stillinqueue.loca.lt" target="_blank" rel="noopener noreferrer" data-requires-auth="true">
             Open live app
           </a>
           <span class="agent-status" id="inventorypulse-status">Live preview ready</span>
@@ -619,7 +621,7 @@
         <div class="agent-meta" style="margin-top:.5rem;">Live app: <span>available via public tunnel</span></div>
       </article>
 
-      <article class="agent-card">
+      <article class="agent-card is-clickable" data-requires-auth="true" data-coming-soon="true">
         <div class="agent-tag">Markets · Money</div>
         <h3 class="agent-title">Stock Watch &amp; Money Map</h3>
         <p class="agent-text">
@@ -630,7 +632,7 @@
         <div class="agent-meta">Triggers: <span>price · volume · news · custom rules</span></div>
       </article>
 
-      <article class="agent-card">
+      <article class="agent-card is-clickable" data-requires-auth="true" data-coming-soon="true">
         <div class="agent-tag">Travel · Logistics</div>
         <h3 class="agent-title">Flight Scout &amp; Vacation Planner</h3>
         <p class="agent-text">
@@ -641,7 +643,7 @@
         <div class="agent-meta">Triggers: <span>price drops · route changes · date windows</span></div>
       </article>
 
-      <article class="agent-card">
+      <article class="agent-card is-clickable" data-requires-auth="true" data-coming-soon="true">
         <div class="agent-tag">Environment · Daily Life</div>
         <h3 class="agent-title">Weather Guard &amp; Appointments</h3>
         <p class="agent-text">
@@ -651,7 +653,7 @@
         <div class="agent-meta">Triggers: <span>severe alerts · rain chances · time windows</span></div>
       </article>
 
-      <article class="agent-card">
+      <article class="agent-card is-clickable" data-requires-auth="true" data-coming-soon="true">
         <div class="agent-tag">Career · Content</div>
         <h3 class="agent-title">Job Radar &amp; Social Desk</h3>
         <p class="agent-text">
@@ -662,7 +664,7 @@
         <div class="agent-meta">Triggers: <span>new roles · keyword matches · post performance</span></div>
       </article>
 
-      <article class="agent-card">
+      <article class="agent-card is-clickable" data-requires-auth="true" data-coming-soon="true">
         <div class="agent-tag">Health · Routine</div>
         <h3 class="agent-title">Diet, Workout &amp; Spiritual Coach</h3>
         <p class="agent-text">
@@ -672,7 +674,7 @@
         <div class="agent-meta">Triggers: <span>time of day · completion · streaks</span></div>
       </article>
 
-      <article class="agent-card">
+      <article class="agent-card is-clickable" data-requires-auth="true" data-coming-soon="true">
         <div class="agent-tag">Sports · Signals</div>
         <h3 class="agent-title">Sports Alerts</h3>
         <p class="agent-text">
@@ -714,16 +716,36 @@
       const nav = document.querySelector(".site-nav");
       const navLinks = document.querySelectorAll(".site-nav a");
       const authLink = document.getElementById("authLink");
+      const heroLivePreviewBtn = document.getElementById("heroLivePreviewBtn");
+      const agentCards = document.querySelectorAll(".agent-card[data-requires-auth]");
+      const agentSectionStatus = document.getElementById("agentSectionStatus");
 
       const params = new URLSearchParams(window.location.search);
       const backendFromQuery = params.get("backend");
       const backendUrl = backendFromQuery || "https://sq-ai-renderer.onrender.com";
+
+      const isLoggedIn = () => Boolean(localStorage.getItem("sq_auth_token"));
+      const setAgentStatus = (message) => {
+        if (!agentSectionStatus) return;
+        agentSectionStatus.textContent = message;
+      };
+      const redirectToLogin = () => {
+        const loginUrl = `login.html?backend=${encodeURIComponent(backendUrl)}`;
+        window.location.href = loginUrl;
+      };
+      const requireAuth = () => {
+        if (isLoggedIn()) return true;
+        setAgentStatus("Please sign in to open this agent.");
+        redirectToLogin();
+        return false;
+      };
 
       const setLoggedOutNav = () => {
         if (!authLink) return;
         authLink.classList.remove("user-chip");
         authLink.textContent = "Login / Sign Up";
         authLink.href = `login.html?backend=${encodeURIComponent(backendUrl)}`;
+        setAgentStatus("Sign in required to open agent tools.");
       };
 
       const setLoggedInNav = (name) => {
@@ -731,6 +753,7 @@
         authLink.classList.add("user-chip");
         authLink.textContent = name || "Profile";
         authLink.href = `profile.html?backend=${encodeURIComponent(backendUrl)}`;
+        setAgentStatus("Select any agent to continue.");
       };
 
       const hydrateAuthNav = async () => {
@@ -763,6 +786,43 @@
       };
 
       hydrateAuthNav();
+
+      if (heroLivePreviewBtn) {
+        heroLivePreviewBtn.addEventListener("click", (event) => {
+          if (!requireAuth()) {
+            event.preventDefault();
+          }
+        });
+      }
+
+      agentCards.forEach((card) => {
+        card.addEventListener("click", (event) => {
+          if (event.target.closest(".agent-action")) {
+            return;
+          }
+
+          if (!requireAuth()) {
+            event.preventDefault();
+            return;
+          }
+
+          const target = card.getAttribute("data-target");
+          const isExternal = card.getAttribute("data-external") === "true";
+          const comingSoon = card.getAttribute("data-coming-soon") === "true";
+
+          if (comingSoon) {
+            setAgentStatus("This agent is in build mode and will be available soon.");
+            return;
+          }
+
+          if (!target) return;
+          if (isExternal) {
+            window.open(target, "_blank", "noopener,noreferrer");
+            return;
+          }
+          window.location.href = target;
+        });
+      });
 
       if (toggle && nav) {
         toggle.addEventListener("click", () => { nav.classList.toggle("nav-open"); });
@@ -807,11 +867,20 @@
 
       if (previewTrigger && previewModal) {
         previewTrigger.addEventListener("click", () => {
+          if (!requireAuth()) return;
           previewModal.hidden = false;
           updateStatus(true, "Opening live preview…");
           window.open(frontendUrl, "_blank", "noopener,noreferrer");
         });
       }
+
+      document.querySelectorAll(".agent-action[data-requires-auth='true']").forEach((actionEl) => {
+        actionEl.addEventListener("click", (event) => {
+          if (!requireAuth()) {
+            event.preventDefault();
+          }
+        });
+      });
 
       previewCloseButtons.forEach((button) => {
         button.addEventListener("click", () => {
