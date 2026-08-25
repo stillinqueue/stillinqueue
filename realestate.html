@@ -239,6 +239,16 @@
       box-shadow: 0 0 0 3px rgba(59,130,246,.25);
     }
 
+    .chat-textarea {
+      min-height: 76px;
+      max-height: 180px;
+      resize: vertical;
+      border-radius: 1rem;
+      line-height: 1.5;
+      font-family: var(--font-sans);
+      overflow-y: auto;
+    }
+
     .chat-send {
       padding: .78rem 1.1rem;
       border-radius: var(--radius-pill);
@@ -658,8 +668,9 @@
           <div class="chat-thread" id="chatThread" aria-live="polite"></div>
 
           <div class="chat-input-row">
-            <input id="chatInput" class="chat-input" type="text"
-              placeholder="Ex: 58x72 plot, 3BHK, east-facing, ground floor">
+            <textarea id="chatInput" class="chat-input chat-textarea"
+              rows="3"
+              placeholder="Describe your requirements or changes...&#10;Example: Move the common bathroom near Bedroom 2 and add a utility beside the kitchen."></textarea>
             <button id="chatSend" class="chat-send">Send</button>
           </div>
 
@@ -767,7 +778,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "openai-planner-v5";
+      const REAL_ESTATE_VERSION = "openai-planner-v6-dynamic";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -1183,6 +1194,9 @@ Click “Accept Proposal” to generate the architectural layout, or describe ch
 
       function acceptProposal() {
         if (!layoutState.proposalReady) return;
+
+        // Always rebuild from the latest AI proposal/state.
+        draftPlan = null;
         layoutState.proposalAccepted = true;
         layoutState.rendered = false;
         layoutState.confirmed = false;
@@ -1386,6 +1400,9 @@ Click “Render Concept 1” to generate the technical blueprint.`;
 
 
       function syncLayoutStateFromAI(state, proposal) {
+        const previousState = JSON.stringify(aiState || {});
+        const previousProposal = JSON.stringify(aiProposal || {});
+
         aiState = state || aiState;
         aiProposal = proposal ?? aiProposal;
 
@@ -1402,20 +1419,40 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         layoutState.bathrooms = s.bathrooms ?? layoutState.bathrooms;
         layoutState.parking = s.parking_spaces ?? layoutState.parking;
 
+        const nextState = JSON.stringify(aiState || {});
+        const nextProposal = JSON.stringify(aiProposal || {});
+        const requirementsChanged =
+          previousState !== nextState ||
+          previousProposal !== nextProposal;
+
         if (proposal) {
           layoutState.proposalReady = true;
-          layoutState.proposalAccepted = false;
           layoutState.proposal = convertAIProposalToPlannerProposal(proposal, s);
         } else if (!isConceptReady()) {
           layoutState.proposalReady = false;
-          layoutState.proposalAccepted = false;
           layoutState.proposal = null;
         }
 
-        layoutState.rendered = false;
-        layoutState.confirmed = false;
-        isConfirmed = false;
-        lastPdfBase64 = null;
+        // Any AI-understood requirement change invalidates the previously accepted/rendered plan.
+        // This guarantees the next render is built from the latest state and proposal.
+        if (requirementsChanged) {
+          layoutState.proposalAccepted = false;
+          layoutState.rendered = false;
+          layoutState.confirmed = false;
+          draftPlan = null;
+          isConfirmed = false;
+          lastPdfBase64 = null;
+
+          if (preview) {
+            preview.innerHTML =
+              '<div class="preview-placeholder">Requirements changed. Accept the updated proposal and render again.</div>';
+          }
+          if (buyerPreview) {
+            buyerPreview.innerHTML =
+              '<div class="preview-placeholder">Requirements changed. Buyer plan will regenerate after the updated proposal is accepted.</div>';
+          }
+        }
+
         updateLayoutButtons();
       }
 
@@ -2098,263 +2135,385 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         const p = layoutState.proposal;
         const plotWft = Number(layoutState.plot.width);
         const plotDft = Number(layoutState.plot.depth);
+        const facing = layoutState.facing || "N";
 
-        const s = p.setbacks;
-        const bx = s.left;
-        const by = s.front;
-        const bw = plotWft - s.left - s.right;
-        const bd = plotDft - s.front - s.rear;
+        const s = p.setbacks || defaultSetbacksFt(plotWft, plotDft);
+        const bx = Number(s.left || 0);
+        const by = Number(s.front || 0);
+        const bw = Math.max(20, plotWft - Number(s.left || 0) - Number(s.right || 0));
+        const bd = Math.max(24, plotDft - Number(s.front || 0) - Number(s.rear || 0));
 
-        const corridor = clamp(p.preferred.corridor, 3.5, 4.5);
-        const gap = 0.35; // conceptual wall allowance in ft
+        const gap = 0.35;
+        const circulation = clamp(
+          Number(p?.preferred?.corridor || 4),
+          3.5,
+          5
+        );
 
-        const frontD = p.bands.front;
-        const middleD = p.bands.middle;
-        const rearD = Math.max(12, bd - frontD - middleD);
+        const proposalSpaces = Array.isArray(p.spaces) ? p.spaces : [];
 
-        // Central corridor creates understandable circulation.
-        const leftW = Math.max(10, (bw - corridor) * 0.52);
-        const rightW = bw - corridor - leftW;
-        const corridorX = bx + leftW;
+        const normalizeType = (name) => {
+          const n = String(name || "").toLowerCase();
+          if (/parking|car porch|garage/.test(n)) return "parking";
+          if (/living|hall|family/.test(n)) return "living";
+          if (/dining/.test(n)) return "dining";
+          if (/kitchen/.test(n)) return "kitchen";
+          if (/utility|laundry|store/.test(n)) return "utility";
+          if (/pooja|puja|prayer/.test(n)) return "pooja";
+          if (/bath|toilet|wc|wash/.test(n)) return "bath";
+          if (/bed/.test(n)) return "bedroom";
+          if (/foyer|sit-out|sit out|verandah|porch/.test(n)) return "foyer";
+          if (/passage|corridor/.test(n)) return "circulation";
+          if (/office|study/.test(n)) return "study";
+          return "other";
+        };
+
+        const defaultDims = (type) => {
+          const map = {
+            living: [16, 18],
+            dining: [12, 14],
+            kitchen: [12, 14],
+            utility: [7, 9],
+            pooja: [6, 7],
+            bath: [7, 8],
+            bedroom: [12, 14],
+            foyer: [8, 10],
+            circulation: [circulation, 12],
+            study: [10, 12],
+            other: [10, 10]
+          };
+          return map[type] || map.other;
+        };
+
+        // Build a room program directly from the OpenAI proposal.
+        let program = proposalSpaces
+          .map((sp, i) => {
+            const type = normalizeType(sp?.name);
+            if (type === "parking") return null;
+
+            const fallback = defaultDims(type);
+            const w = clamp(Number(sp?.width_ft || fallback[0]), 5, Math.max(6, bw));
+            const d = clamp(Number(sp?.depth_ft || fallback[1]), 5, Math.max(6, bd));
+
+            return {
+              id: `ai_room_${i + 1}`,
+              name: String(sp?.name || `Room ${i + 1}`),
+              type,
+              targetW: w,
+              targetD: d,
+              preferredZone: String(sp?.preferred_zone || "").toLowerCase(),
+              notes: String(sp?.notes || "")
+            };
+          })
+          .filter(Boolean);
+
+        // Safety fallback if an older proposal has no spaces.
+        if (!program.length) {
+          program = [
+            { id:"living", name:"Living Room", type:"living", targetW:16, targetD:18, preferredZone:"front" },
+            { id:"dining", name:"Dining", type:"dining", targetW:12, targetD:14, preferredZone:"central" },
+            { id:"kitchen", name:"Kitchen", type:"kitchen", targetW:12, targetD:14, preferredZone:"east" }
+          ];
+          for (let i = 1; i <= Number(layoutState.bedrooms || 3); i++) {
+            program.push({
+              id:`bed_${i}`,
+              name:i === 1 ? "Master Bedroom" : `Bedroom ${i}`,
+              type:"bedroom",
+              targetW:i === 1 ? 14 : 12,
+              targetD:i === 1 ? 16 : 14,
+              preferredZone:i === 1 ? "rear southwest" : "private"
+            });
+          }
+        }
+
+        // Ensure bathroom count follows current AI state, not a hard-coded two-bath layout.
+        const requestedBaths = Number(
+          aiState?.bathrooms ??
+          layoutState.bathrooms ??
+          program.filter(r => r.type === "bath").length ??
+          0
+        );
+
+        let bathRooms = program.filter(r => r.type === "bath");
+        if (requestedBaths > bathRooms.length) {
+          for (let i = bathRooms.length; i < requestedBaths; i++) {
+            program.push({
+              id:`generated_bath_${i + 1}`,
+              name:i === 0 ? "Common Bathroom" : `Bathroom ${i + 1}`,
+              type:"bath",
+              targetW:7,
+              targetD:8,
+              // Alternate preferred zones so bathrooms do not automatically cluster.
+              preferredZone:i % 2 === 0 ? "rear private west" : "middle east",
+              notes:"Placed from current bathroom count."
+            });
+          }
+        } else if (requestedBaths > 0 && bathRooms.length > requestedBaths) {
+          let seen = 0;
+          program = program.filter(r => {
+            if (r.type !== "bath") return true;
+            seen += 1;
+            return seen <= requestedBaths;
+          });
+        }
+
+        // Sort by requested zone to create a genuinely different topology when AI
+        // changes preferred locations.
+        const zoneScore = (room) => {
+          const z = room.preferredZone || "";
+          if (/north|front|entry/.test(z)) return 0;
+          if (/east|southeast|middle|central/.test(z)) return 1;
+          if (/west/.test(z)) return 2;
+          if (/south|rear|private|southwest/.test(z)) return 3;
+          return 2;
+        };
+
+        program.sort((a, b) => zoneScore(a) - zoneScore(b));
 
         const roomsFt = [];
         const doorsFt = [];
         const windowsFt = [];
         const outdoorFt = [];
 
-        const addRoom = (id, name, type, x, y, w, d, zone, direction=null) => {
-          const room = {
-            id, name, type,
-            x: round1(x), y: round1(y),
-            w: round1(Math.max(3, w)),
-            h: round1(Math.max(3, d)),
-            zone,
-            direction
+        const addRoom = (room, x, y, w, d) => {
+          const placed = {
+            id: room.id,
+            name: room.name,
+            type: room.type,
+            x: round1(x),
+            y: round1(y),
+            w: round1(Math.max(4, w)),
+            h: round1(Math.max(4, d)),
+            zone: room.preferredZone || "",
+            direction: room.preferredZone || null,
+            notes: room.notes || ""
           };
-          roomsFt.push(room);
-          return room;
+          roomsFt.push(placed);
+          return placed;
         };
 
-        const addDoor = (id, roomId, wall, offset, width=3, swing="in") => {
-          doorsFt.push({ id, roomId, wall, offset: round1(offset), width, swing });
-        };
+        // Dynamic shelf-packing:
+        // place rooms row-by-row using proposal dimensions rather than fixed room slots.
+        let x = bx;
+        let y = by;
+        let rowH = 0;
 
-        const addWindow = (id, roomId, wall, offset, width=4) => {
-          windowsFt.push({ id, roomId, wall, offset: round1(offset), width });
-        };
+        for (const room of program) {
+          let rw = clamp(room.targetW, 5, bw);
+          let rd = clamp(room.targetD, 5, bd);
 
-        // FRONT ZONE
-        const living = addRoom(
-          "living", "Living Room", "living",
-          bx, by,
-          leftW, frontD,
-          "front",
-          layoutState.rooms.living || (layoutState.planningStyle === "vastu" ? "NE" : null)
-        );
+          // Prefer a room width that can fit sensible rows.
+          if (rw > bw * 0.62 && room.type !== "living") {
+            rw = Math.max(8, bw * 0.48);
+          }
 
-        const frontRightRoom = addRoom(
-          layoutState.bedrooms >= 3 ? "bed3" : "dining",
-          layoutState.bedrooms >= 3 ? "Bedroom 3" : "Dining",
-          layoutState.bedrooms >= 3 ? "bedroom" : "dining",
-          corridorX + corridor, by,
-          rightW, frontD,
-          "front",
-          layoutState.rooms.bedroom3 || null
-        );
+          if (x > bx && x + rw > bx + bw) {
+            x = bx;
+            y += rowH + gap;
+            rowH = 0;
+          }
 
-        // MIDDLE ZONE
-        const dining = addRoom(
-          "dining", "Dining", "dining",
-          bx, by + frontD + gap,
-          leftW, middleD - gap,
-          "middle",
-          layoutState.rooms.dining || null
-        );
+          if (y + rd > by + bd) {
+            // Compress depth to remaining space rather than overlap.
+            rd = Math.max(5, by + bd - y);
+          }
 
-        const kitchen = addRoom(
-          "kitchen", "Kitchen", "kitchen",
-          corridorX + corridor, by + frontD + gap,
-          rightW, middleD * 0.68,
-          "middle",
-          layoutState.rooms.kitchen || (layoutState.planningStyle === "vastu" ? "SE" : null)
-        );
+          if (rd < 5) {
+            // If the envelope is full, start a second column pass using compact dimensions.
+            x = bx + bw * 0.52;
+            y = by;
+            rw = Math.min(rw, bw * 0.46);
+            rd = Math.min(room.targetD, bd * 0.28);
+          }
 
-        const utility = addRoom(
-          "utility", "Utility", "utility",
-          corridorX + corridor,
-          by + frontD + gap + middleD * 0.68 + gap,
-          rightW,
-          Math.max(5, middleD * 0.32 - gap * 2),
-          "middle",
-          layoutState.rooms.utility || null
-        );
-
-        // REAR ZONE
-        const rearY = by + frontD + middleD + gap;
-        const master = addRoom(
-          "master", "Master Bedroom", "bedroom",
-          bx, rearY,
-          leftW, Math.max(12, rearD - gap),
-          "rear",
-          layoutState.rooms.masterBedroom || (layoutState.planningStyle === "vastu" ? "SW" : null)
-        );
-
-        const bed2H = Math.max(9, rearD * 0.64);
-        const bed2 = addRoom(
-          "bed2", "Bedroom 2", "bedroom",
-          corridorX + corridor, rearY,
-          rightW, bed2H,
-          "rear",
-          layoutState.rooms.bedroom2 || (layoutState.planningStyle === "vastu" ? "NW" : null)
-        );
-
-        const bathRowY = rearY + bed2H + gap;
-        const bathAvailable = Math.max(5, rearD - bed2H - gap);
-
-        const bathW = rightW / 2 - gap / 2;
-        const bath1 = addRoom(
-          "bath_master", "Master Bath", "bath",
-          corridorX + corridor, bathRowY,
-          bathW, bathAvailable,
-          "rear"
-        );
-
-        const bath2 = addRoom(
-          "bath_common", "Common Bath", "bath",
-          corridorX + corridor + bathW + gap, bathRowY,
-          bathW, bathAvailable,
-          "rear"
-        );
-
-        // Corridor as explicit circulation space.
-        addRoom(
-          "corridor", "Passage", "circulation",
-          corridorX, by,
-          corridor, bd,
-          "circulation"
-        );
-
-        // Optional pooja inside dining edge.
-        if (layoutState.planningStyle === "vastu" || /pooja|puja/i.test(JSON.stringify(layoutState.rooms))) {
-          addRoom(
-            "pooja", "Pooja", "pooja",
-            bx,
-            by + frontD + gap,
-            Math.min(5.5, leftW * 0.28),
-            Math.min(6, middleD * 0.38),
-            "middle",
-            "NE"
-          );
+          addRoom(room, x, y, rw, rd);
+          x += rw + gap;
+          rowH = Math.max(rowH, rd);
         }
 
-        // Parking in the front setback, not inside the building.
-        const parkingW = Math.min(plotWft - 2, (layoutState.parking || p.parking) >= 2 ? 18 : 10);
-        const parkingD = Math.min(Math.max(8, s.front - 1), 18);
-        outdoorFt.push({
-          id: "parking",
-          name: `${layoutState.parking || p.parking}-Car Parking`,
-          type: "parking",
-          x: clamp((plotWft - parkingW) / 2, 1, plotWft - parkingW - 1),
-          y: 0.5,
-          w: parkingW,
-          h: parkingD
+        // Remove obvious overlaps by nudging later rooms vertically.
+        for (let i = 0; i < roomsFt.length; i++) {
+          for (let j = 0; j < i; j++) {
+            const a = roomsFt[i], b = roomsFt[j];
+            const overlaps =
+              a.x < b.x + b.w &&
+              a.x + a.w > b.x &&
+              a.y < b.y + b.h &&
+              a.y + a.h > b.y;
+
+            if (overlaps) {
+              a.y = round1(Math.min(by + bd - a.h, b.y + b.h + gap));
+            }
+          }
+        }
+
+        // Keep bathrooms distributed: attach them near bedrooms where possible
+        // rather than placing every bathroom in one shared block.
+        const bedrooms = roomsFt.filter(r => r.type === "bedroom");
+        const bathrooms = roomsFt.filter(r => r.type === "bath");
+
+        bathrooms.forEach((bath, i) => {
+          const targetBedroom = bedrooms[i % Math.max(1, bedrooms.length)];
+          if (!targetBedroom) return;
+
+          const side = i % 2 === 0 ? "right" : "left";
+          if (side === "right") {
+            bath.x = round1(clamp(
+              targetBedroom.x + targetBedroom.w + gap,
+              bx,
+              bx + bw - bath.w
+            ));
+          } else {
+            bath.x = round1(clamp(
+              targetBedroom.x - bath.w - gap,
+              bx,
+              bx + bw - bath.w
+            ));
+          }
+          bath.y = round1(clamp(
+            targetBedroom.y + Math.max(0, (targetBedroom.h - bath.h) / 2),
+            by,
+            by + bd - bath.h
+          ));
         });
 
-        // Doors: place them toward corridor / circulation, not randomly.
-        addDoor("D1", "living", "east", frontD * 0.45, 4, "in-left");
-        addDoor("D2", frontRightRoom.id, "west", frontD * 0.55, 3, "in-right");
-        addDoor("D3", "dining", "east", (middleD - gap) * 0.45, 3, "in-left");
-        addDoor("D4", "kitchen", "west", (middleD * 0.68) * 0.45, 3, "in-right");
-        addDoor("D5", "master", "east", Math.max(3, rearD * 0.35), 3, "in-left");
-        addDoor("D6", "bed2", "west", Math.max(3, bed2H * 0.35), 3, "in-right");
-        addDoor("D7", "bath_master", "north", bathW * 0.45, 2.5, "in");
-        addDoor("D8", "bath_common", "north", bathW * 0.45, 2.5, "in");
+        // Parking from AI proposal/state.
+        const parkingSpace = proposalSpaces.find(sp =>
+          /parking|car porch|garage/i.test(String(sp?.name || ""))
+        );
+        const parkingCount = Number(aiState?.parking_spaces ?? layoutState.parking ?? p.parking ?? 1);
+        const parkingW = clamp(
+          Number(parkingSpace?.width_ft || (parkingCount >= 2 ? 20 : 11)),
+          9,
+          Math.max(9, plotWft - 2)
+        );
+        const parkingD = clamp(
+          Number(parkingSpace?.depth_ft || 18),
+          8,
+          Math.max(8, Number(s.front || 10))
+        );
 
-        // Windows primarily on exterior walls.
-        addWindow("W1", "living", "north", leftW * 0.32, Math.min(6, leftW * 0.45));
-        addWindow("W2", frontRightRoom.id, "north", rightW * 0.28, Math.min(5, rightW * 0.45));
-        addWindow("W3", "kitchen", "east", (middleD * 0.68) * 0.28, 4);
-        addWindow("W4", "utility", "east", 2, 3);
-        addWindow("W5", "master", "west", Math.max(3, rearD * 0.3), 5);
-        addWindow("W6", "bed2", "east", Math.max(3, bed2H * 0.3), 5);
+        outdoorFt.push({
+          id:"parking",
+          name:`${parkingCount}-Car Parking`,
+          type:"parking",
+          x:round1(clamp((plotWft - parkingW) / 2, 1, plotWft - parkingW - 1)),
+          y:0.5,
+          w:round1(parkingW),
+          h:round1(parkingD)
+        });
 
-        // Convert final plan to meters because existing render/view code expects metric geometry.
+        // Create openings from actual placed rooms.
+        roomsFt.forEach((r, i) => {
+          if (r.type === "circulation") return;
+
+          const doorWall = (i % 2 === 0) ? "south" : "north";
+          const doorOffset = Math.max(2, r.w * 0.35);
+          doorsFt.push({
+            id:`D${i + 1}`,
+            roomId:r.id,
+            wall:doorWall,
+            offset:round1(doorOffset),
+            width:r.type === "living" ? 4 : (r.type === "bath" ? 2.5 : 3),
+            swing:"in"
+          });
+
+          // Exterior-ish window choice based on room location.
+          const centerX = r.x + r.w / 2;
+          const centerY = r.y + r.h / 2;
+          let wall = "north";
+          if (centerX > bx + bw * 0.66) wall = "east";
+          else if (centerX < bx + bw * 0.34) wall = "west";
+          else if (centerY > by + bd * 0.60) wall = "south";
+
+          windowsFt.push({
+            id:`W${i + 1}`,
+            roomId:r.id,
+            wall,
+            offset:round1((wall === "east" || wall === "west") ? r.h * 0.5 : r.w * 0.5),
+            width:r.type === "bath" ? 2.5 : (r.type === "living" ? 6 : 4)
+          });
+        });
+
         const rooms = roomsFt.map(r => ({
           ...r,
           x: ftToM(r.x),
           y: ftToM(r.y),
           w: ftToM(r.w),
           h: ftToM(r.h),
-          dimensions_ft: { w: r.w, h: r.h }
+          dimensions_ft: { w:r.w, h:r.h }
         }));
 
         const doors = doorsFt.map(d => ({
           ...d,
-          offset: ftToM(d.offset),
-          width: ftToM(d.width),
-          width_ft: d.width
+          offset:ftToM(d.offset),
+          width:ftToM(d.width),
+          width_ft:d.width
         }));
 
         const windows = windowsFt.map(w => ({
           ...w,
-          offset: ftToM(w.offset),
-          width: ftToM(w.width),
-          width_ft: w.width
+          offset:ftToM(w.offset),
+          width:ftToM(w.width),
+          width_ft:w.width
         }));
 
         const outdoor = outdoorFt.map(o => ({
           ...o,
-          x: ftToM(o.x),
-          y: ftToM(o.y),
-          w: ftToM(o.w),
-          h: ftToM(o.h),
-          dimensions_ft: { w: round1(o.w), h: round1(o.h) }
+          x:ftToM(o.x),
+          y:ftToM(o.y),
+          w:ftToM(o.w),
+          h:ftToM(o.h),
+          dimensions_ft:{ w:o.w, h:o.h }
         }));
 
         draftPlan = {
-          meta: {
-            title: `${layoutState.plot.width}x${layoutState.plot.depth} ${layoutState.bedrooms}BHK Architectural Concept`,
-            stage: "space-planned-concept",
-            floors: layoutState.floors,
-            source_units: layoutState.plot.unit,
-            disclaimer: "Concept drawing only. Structural design and local approvals require a licensed professional."
+          meta:{
+            title:`${layoutState.plot.width}x${layoutState.plot.depth} ${layoutState.bedrooms}BHK AI-Driven Concept`,
+            stage:"ai-proposal-driven-concept",
+            floors:layoutState.floors,
+            source_units:layoutState.plot.unit,
+            source:"OpenAI requirements + deterministic geometry engine",
+            disclaimer:"Concept drawing only. Structural design and local approvals require a licensed professional."
           },
-          plot: {
-            w: ftToM(plotWft),
-            h: ftToM(plotDft),
-            width_ft: plotWft,
-            depth_ft: plotDft,
-            roadSide: layoutState.facing
+          plot:{
+            w:ftToM(plotWft),
+            h:ftToM(plotDft),
+            width_ft:plotWft,
+            depth_ft:plotDft,
+            roadSide:facing
           },
-          setbacks: {
-            left: ftToM(s.left),
-            right: ftToM(s.right),
-            front: ftToM(s.front),
-            back: ftToM(s.rear),
-            source_ft: s
+          setbacks:{
+            left:ftToM(s.left),
+            right:ftToM(s.right),
+            front:ftToM(s.front),
+            back:ftToM(s.rear),
+            source_ft:s
           },
-          building: {
-            external_wall_ft: 0.75,
-            internal_wall_ft: 0.375,
-            circulation_ft: corridor
+          building:{
+            external_wall_ft:0.75,
+            internal_wall_ft:0.375,
+            circulation_ft:circulation
           },
-          production: {
-            units: "m",
-            display_units: "ft",
-            wall_thickness: 0.23,
-            internal_wall_thickness: 0.115,
-            scale: "1:100",
-            north_arrow: true,
-            facing: layoutState.facing,
-            title_block: {
-              client: "Client",
-              site: "Site",
-              sheet: "Concept Ground Floor"
+          production:{
+            units:"m",
+            display_units:"ft",
+            wall_thickness:0.23,
+            internal_wall_thickness:0.115,
+            scale:"1:100",
+            north_arrow:true,
+            facing,
+            title_block:{
+              client:"Client",
+              site:"Site",
+              sheet:"AI Concept"
             },
-            dimension_lines: { outer_plot: true, inner_rooms: true }
+            dimension_lines:{ outer_plot:true, inner_rooms:true }
           },
+          ai_requirements: aiState,
+          ai_proposal: aiProposal,
           rooms,
-          openings: { doors, windows },
+          openings:{ doors, windows },
           outdoor
         };
 
@@ -2435,7 +2594,7 @@ Click “Render Concept 1” to generate the technical blueprint.`;
                 : "OpenAI · requirements are still being refined."
             );
           } else if (data.proposal_ready && !layoutState.proposalAccepted) {
-            setStatus("OpenAI proposal ready ✅ Review it, then click <strong>Accept Proposal</strong>.");
+            setStatus("Updated OpenAI proposal ready ✅ Review the revised requirements, accept the proposal, then render the new layout.");
           } else {
             setStatus("Requirements understood ✅ Continue refining or accept the proposal.");
           }
@@ -2494,7 +2653,7 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           finishWait(tLocal - t0, true);
 
           addMessage("assistant",
-`Concept 1 is rendered from the accepted structured space plan (${REAL_ESTATE_VERSION}).
+`Concept 1 is rendered from the latest accepted OpenAI requirement state and space proposal (${REAL_ESTATE_VERSION}).
 
 This blueprint now uses:
 • explicit circulation
@@ -2583,7 +2742,10 @@ For this prototype, the current renderer PDF is now available${canDownload ? "" 
       // ---------------------------
       chatSend.addEventListener("click", sendChat);
       chatInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") sendChat();
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          sendChat();
+        }
       });
 
       btnAcceptProposal?.addEventListener("click", acceptProposal);
