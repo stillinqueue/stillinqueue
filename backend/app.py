@@ -21,6 +21,7 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas as pdf_canvas
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
+from openai import OpenAI
 
 
 def get_cors_origins() -> list[str]:
@@ -30,6 +31,20 @@ def get_cors_origins() -> list[str]:
 
 
 app = FastAPI(title="Still In Queue Backend", version="0.1.0")
+
+# OpenAI configuration.
+# Keep OPENAI_API_KEY in the hosting environment; never commit it to GitHub.
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.1")
+
+
+def get_openai_client() -> OpenAI:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="OPENAI_API_KEY is not configured on the backend.",
+        )
+    return OpenAI(api_key=api_key)
 
 app.add_middleware(
     CORSMiddleware,
@@ -347,6 +362,38 @@ def enforce_admin_user(authorization: Optional[str], x_admin_key: Optional[str])
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", "service": "stillinqueue-backend", "timestamp": datetime.utcnow().isoformat() + "Z"}
+
+
+@app.get("/api/openai/test")
+def test_openai() -> dict[str, Any]:
+    """
+    Simple backend-only OpenAI connectivity test.
+
+    The API key is read from the OPENAI_API_KEY environment variable.
+    The key is never returned to the browser.
+    """
+    client = get_openai_client()
+
+    try:
+        response = client.responses.create(
+            model=OPENAI_MODEL,
+            input="Reply with exactly: OpenAI connection works",
+        )
+    except Exception as exc:
+        # Return a useful error without leaking credentials.
+        message = str(exc).strip() or exc.__class__.__name__
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenAI request failed: {message}",
+        ) from exc
+
+    return {
+        "status": "ok",
+        "model": OPENAI_MODEL,
+        "reply": response.output_text,
+    }
+
+
 
 
 @app.post("/api/auth/signup", response_model=AuthResponse)
