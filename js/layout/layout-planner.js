@@ -241,83 +241,115 @@ function generateLayoutAttempt(requirements) {
 
   /*
     ---------------------------------------------------------
-    3. PLACEMENT ORDER
+    3. MULTI-STRATEGY PLACEMENT
+
+    A single greedy room order is too fragile for floor plans.
+    We now try several deterministic room orders and keep the
+    best result.
+
+    Tight layouts also prefer compact/minimum dimensions.
     ---------------------------------------------------------
   */
 
-  const orderedRooms =
-    [...rooms].sort(
-      (a, b) =>
-        getPlacementPriority(a) -
-        getPlacementPriority(b)
-    );
+  const compactMode =
+    feasibility.status === "tight";
 
-  const placedRooms = [];
-  const failedRooms = [];
+  const strategies = [
+    {
+      name: "balanced",
+      rooms: [...rooms].sort(
+        (a, b) =>
+          getPlacementPriority(a) -
+          getPlacementPriority(b)
+      )
+    },
 
-  /*
-    ---------------------------------------------------------
-    4. PLACE ROOMS
-    ---------------------------------------------------------
-  */
+    {
+      name: "large-first",
+      rooms: [...rooms].sort(
+        (a, b) =>
+          preferredArea(b) -
+          preferredArea(a)
+      )
+    },
 
-  for (
-    const room
-    of orderedRooms
-  ) {
-    const candidate =
-      findBestPlacement({
-        room,
-        freeRects,
-        buildable,
-        roadSide,
-        placedRooms
-      });
+    {
+      name: "social-core",
+      rooms: [...rooms].sort(
+        (a, b) =>
+          getSocialCorePriority(a) -
+          getSocialCorePriority(b)
+      )
+    },
 
-    if (!candidate) {
-      failedRooms.push({
-        id: room.id,
-        name: room.name,
-        type: room.type,
-        reason:
-          "No valid rectangle could be found."
-      });
-
-      continue;
+    {
+      name: "wet-core",
+      rooms: [...rooms].sort(
+        (a, b) =>
+          getWetCorePriority(a) -
+          getWetCorePriority(b)
+      )
     }
+  ];
 
-    const placed = {
-      ...room,
+  const placementAttempts =
+    strategies.map(
+      strategy =>
+        runPlacementAttempt({
+          orderedRooms:
+            strategy.rooms,
 
-      x:
-        round(candidate.x),
+          buildable,
+          corridor,
+          roadSide,
+          compactMode,
 
-      y:
-        round(candidate.y),
-
-      width:
-        round(candidate.width),
-
-      height:
-        round(candidate.height),
-
-      area:
-        round(
-          candidate.width *
-          candidate.height
-        )
-    };
-
-    placedRooms.push(
-      placed
+          strategyName:
+            strategy.name
+        })
     );
 
-    freeRects =
-      subtractPlacedRectangle(
-        freeRects,
-        placed
+  placementAttempts.sort(
+    (a, b) => {
+      if (
+        a.failedRooms.length !==
+        b.failedRooms.length
+      ) {
+        return (
+          a.failedRooms.length -
+          b.failedRooms.length
+        );
+      }
+
+      if (
+        a.placedRooms.length !==
+        b.placedRooms.length
+      ) {
+        return (
+          b.placedRooms.length -
+          a.placedRooms.length
+        );
+      }
+
+      return (
+        a.roomArea -
+        b.roomArea
       );
-  }
+    }
+  );
+
+  const bestAttempt =
+    placementAttempts[0];
+
+  const placedRooms =
+    bestAttempt.placedRooms;
+
+  const failedRooms =
+    bestAttempt.failedRooms;
+
+  freeRects =
+    bestAttempt.freeRects;
+
 
   /*
     ---------------------------------------------------------
@@ -356,6 +388,9 @@ function generateLayoutAttempt(requirements) {
       placedRooms,
 
     failedRooms,
+
+    placementStrategy:
+      bestAttempt.strategyName,
 
     statistics: {
       requestedRooms:
@@ -576,6 +611,219 @@ function createInitialFreeRectangles(
 
 /*
   =========================================================
+  MULTI-STRATEGY PLACEMENT HELPERS
+  =========================================================
+*/
+
+function runPlacementAttempt({
+  orderedRooms,
+  buildable,
+  corridor,
+  roadSide,
+  compactMode,
+  strategyName
+}) {
+  let freeRects =
+    createInitialFreeRectangles(
+      buildable,
+      corridor,
+      roadSide
+    );
+
+  const placedRooms = [];
+  const failedRooms = [];
+
+  for (
+    const room
+    of orderedRooms
+  ) {
+    const candidate =
+      findBestPlacement({
+        room,
+        freeRects,
+        buildable,
+        roadSide,
+        placedRooms,
+        compactMode
+      });
+
+    if (!candidate) {
+      failedRooms.push({
+        id: room.id,
+        name: room.name,
+        type: room.type,
+        reason:
+          "No valid rectangle could be found."
+      });
+
+      continue;
+    }
+
+    const placed = {
+      ...room,
+
+      x:
+        round(candidate.x),
+
+      y:
+        round(candidate.y),
+
+      width:
+        round(candidate.width),
+
+      height:
+        round(candidate.height),
+
+      area:
+        round(
+          candidate.width *
+          candidate.height
+        )
+    };
+
+    placedRooms.push(
+      placed
+    );
+
+    freeRects =
+      subtractPlacedRectangle(
+        freeRects,
+        placed
+      );
+  }
+
+  return {
+    strategyName,
+    placedRooms,
+    failedRooms,
+    freeRects,
+
+    roomArea:
+      round(
+        placedRooms.reduce(
+          (sum, room) =>
+            sum + room.area,
+          0
+        )
+      )
+  };
+}
+
+
+function preferredArea(room) {
+  const width =
+    Number(
+      room.preferredWidth ||
+      room.minWidth ||
+      0
+    );
+
+  const height =
+    Number(
+      room.preferredHeight ||
+      room.minHeight ||
+      0
+    );
+
+  return (
+    width *
+    height
+  );
+}
+
+
+function getSocialCorePriority(
+  room
+) {
+  switch (
+    room.type
+  ) {
+    case "living":
+      return 10;
+
+    case "dining":
+      return 15;
+
+    case "kitchen":
+      return 20;
+
+    case "masterBedroom":
+      return 30;
+
+    case "bedroom":
+      return 35;
+
+    case "attachedToilet":
+      return 40;
+
+    case "commonToilet":
+      return 42;
+
+    case "familyLounge":
+      return 50;
+
+    case "utility":
+      return 60;
+
+    case "puja":
+      return 65;
+
+    case "store":
+      return 70;
+
+    default:
+      return 100;
+  }
+}
+
+
+function getWetCorePriority(
+  room
+) {
+  switch (
+    room.type
+  ) {
+    case "masterBedroom":
+      return 10;
+
+    case "bedroom":
+      return 15;
+
+    case "attachedToilet":
+      return 20;
+
+    case "commonToilet":
+      return 22;
+
+    case "kitchen":
+      return 30;
+
+    case "dining":
+      return 35;
+
+    case "living":
+      return 40;
+
+    case "familyLounge":
+      return 50;
+
+    case "utility":
+      return 60;
+
+    case "puja":
+      return 65;
+
+    case "store":
+      return 70;
+
+    default:
+      return 100;
+  }
+}
+
+
+/*
+  =========================================================
   ROOM PRIORITY
   =========================================================
 */
@@ -636,7 +884,8 @@ function findBestPlacement({
   freeRects,
   buildable,
   roadSide,
-  placedRooms
+  placedRooms,
+  compactMode = false
 }) {
   const sizes =
     getPossibleRoomSizes(
@@ -730,7 +979,8 @@ function findBestPlacement({
             roadSide,
             placedRooms,
             sizeType:
-              size.type
+              size.type,
+            compactMode
           });
 
         candidates.push({
@@ -912,22 +1162,41 @@ function scoreCandidate({
   buildable,
   roadSide,
   placedRooms,
-  sizeType
+  sizeType,
+  compactMode = false
 }) {
   let score = 0;
 
-  if (
-    sizeType ===
-    "compact"
-  ) {
-    score += 7;
-  }
+  /*
+    Tight plans should use compact/minimum dimensions before
+    sacrificing required rooms such as dining or bathrooms.
+  */
+  if (compactMode) {
+    if (
+      sizeType ===
+      "preferred"
+    ) {
+      score += 24;
+    } else if (
+      sizeType ===
+      "compact"
+    ) {
+      score += 6;
+    }
+  } else {
+    if (
+      sizeType ===
+      "compact"
+    ) {
+      score += 7;
+    }
 
-  if (
-    sizeType ===
-    "minimum"
-  ) {
-    score += 15;
+    if (
+      sizeType ===
+      "minimum"
+    ) {
+      score += 15;
+    }
   }
 
   const center = {
