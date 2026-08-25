@@ -575,6 +575,7 @@
           </div>
 
           <div class="studio-actions">
+            <button id="btnAcceptProposal" class="studio-btn-secondary" disabled>Accept Proposal</button>
             <button id="btnRender" class="studio-btn" disabled>Render Concept 1</button>
             <button id="btnConfirm" class="studio-btn-secondary" disabled>Confirm Layout</button>
             <button id="btnDownloadPdf" class="studio-btn-secondary" disabled>Download PDF</button>
@@ -668,6 +669,7 @@
 
       const preview    = document.getElementById("preview");
       const statusEl   = document.getElementById("renderStatus");
+      const btnAcceptProposal = document.getElementById("btnAcceptProposal");
       const btnRender  = document.getElementById("btnRender");
       const btnConfirm = document.getElementById("btnConfirm");
       const btnPdf     = document.getElementById("btnDownloadPdf");
@@ -766,6 +768,9 @@
           titleBlock: null
         },
 
+        proposalReady: false,
+        proposalAccepted: false,
+        proposal: null,
         rendered: false,
         confirmed: false
       };
@@ -810,6 +815,8 @@
           layoutState.stage = 5;
         } else if (layoutState.rendered) {
           layoutState.stage = 2;
+        } else if (layoutState.proposalAccepted) {
+          layoutState.stage = 1.5;
         } else {
           layoutState.stage = 1;
         }
@@ -817,7 +824,13 @@
 
       function updateLayoutButtons() {
         updateStage();
-        btnRender.disabled = !isConceptReady();
+
+        if (btnAcceptProposal) {
+          btnAcceptProposal.disabled = !layoutState.proposalReady || layoutState.proposalAccepted;
+          btnAcceptProposal.textContent = layoutState.proposalAccepted ? "Proposal Accepted" : "Accept Proposal";
+        }
+
+        btnRender.disabled = !layoutState.proposalAccepted;
         btnConfirm.disabled = !layoutState.rendered;
         btnPdf.disabled = !layoutState.confirmed || !lastPdfBase64;
         btnRender.textContent = layoutState.rendered ? "Re-render Layout" : "Render Concept 1";
@@ -922,7 +935,166 @@
         return normalizeDirection(match[1] || match[2]);
       }
 
+
+      function round1(value) {
+        return Math.round(value * 10) / 10;
+      }
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function ftToM(value) {
+        return +(Number(value) * 0.3048).toFixed(3);
+      }
+
+      function preferredRoomSizes(bedrooms) {
+        return {
+          living: { w: bedrooms >= 4 ? 18 : 16, d: bedrooms >= 4 ? 18 : 17 },
+          dining: { w: 11, d: 12 },
+          kitchen: { w: 11, d: 12 },
+          master: { w: 14, d: 15 },
+          bedroom: { w: 12, d: 13 },
+          attachedBath: { w: 8, d: 6 },
+          commonBath: { w: 8, d: 6 },
+          utility: { w: 6, d: 8 },
+          pooja: { w: 5, d: 6 },
+          corridor: 4
+        };
+      }
+
+      function defaultSetbacksFt(plotWidth, plotDepth) {
+        return {
+          front: plotDepth >= 60 ? 10 : 8,
+          rear: plotDepth >= 55 ? 5 : 4,
+          left: plotWidth >= 45 ? 4 : 3,
+          right: plotWidth >= 45 ? 4 : 3
+        };
+      }
+
+      function createSpaceProposal() {
+        if (!isConceptReady()) return null;
+
+        const plotW = Number(layoutState.plot.width);
+        const plotD = Number(layoutState.plot.depth);
+        const s = defaultSetbacksFt(plotW, plotD);
+        const sizes = preferredRoomSizes(layoutState.bedrooms);
+
+        const buildW = Math.max(24, plotW - s.left - s.right);
+        const buildD = Math.max(30, plotD - s.front - s.rear);
+
+        // A practical 3-zone concept:
+        // Front = arrival/living/guest bedroom
+        // Middle = dining/kitchen/service
+        // Rear = bedrooms/private zone
+        const frontBand = clamp(buildD * 0.30, 14, 19);
+        const middleBand = clamp(buildD * 0.27, 12, 17);
+        const rearBand = Math.max(14, buildD - frontBand - middleBand);
+
+        const summary = {
+          plot: { width: plotW, depth: plotD, unit: layoutState.plot.unit },
+          facing: layoutState.facing,
+          floors: layoutState.floors,
+          bedrooms: layoutState.bedrooms,
+          bathrooms: layoutState.bathrooms || (layoutState.bedrooms >= 3 ? 3 : 2),
+          parking: layoutState.parking || (plotW >= 45 ? 2 : 1),
+          planningStyle: layoutState.planningStyle || "practical",
+          setbacks: s,
+          buildable: { width: round1(buildW), depth: round1(buildD) },
+          preferred: sizes,
+          bands: {
+            front: round1(frontBand),
+            middle: round1(middleBand),
+            rear: round1(rearBand)
+          }
+        };
+
+        layoutState.proposal = summary;
+        layoutState.proposalReady = true;
+        layoutState.proposalAccepted = false;
+        return summary;
+      }
+
+      function proposalText() {
+        const p = layoutState.proposal;
+        if (!p) return "";
+
+        const roomLines = [
+          `Living room: approx. ${p.preferred.living.w}' × ${p.preferred.living.d}'`,
+          `Dining: approx. ${p.preferred.dining.w}' × ${p.preferred.dining.d}'`,
+          `Kitchen: approx. ${p.preferred.kitchen.w}' × ${p.preferred.kitchen.d}'`,
+          `Master bedroom: approx. ${p.preferred.master.w}' × ${p.preferred.master.d}'`
+        ];
+
+        for (let i = 2; i <= p.bedrooms; i++) {
+          roomLines.push(`Bedroom ${i}: approx. ${p.preferred.bedroom.w}' × ${p.preferred.bedroom.d}'`);
+        }
+
+        roomLines.push(`Bathrooms: ${p.bathrooms}`);
+        roomLines.push(`Parking: ${p.parking} car${p.parking > 1 ? "s" : ""}`);
+
+        if (p.planningStyle === "vastu") {
+          roomLines.push("Vastu intent: living NE/E, kitchen SE, master SW where geometry allows");
+        }
+
+        return `PROPOSED CONCEPT
+
+Plot: ${p.plot.width} × ${p.plot.depth} ${p.plot.unit}
+Facing: ${directionName(p.facing)}
+Floors: ${floorLabel(p.floors)}
+
+Setbacks (concept):
+Front ${p.setbacks.front}' · Rear ${p.setbacks.rear}' · Left ${p.setbacks.left}' · Right ${p.setbacks.right}'
+
+Buildable footprint:
+Approx. ${p.buildable.width}' × ${p.buildable.depth}'
+
+Space program:
+${roomLines.map(x => "• " + x).join("\n")}
+
+Planning logic:
+• Front zone: entrance, living, guest/bedroom access
+• Middle zone: dining, kitchen and service spaces
+• Rear zone: private bedrooms
+• A continuous circulation path is reserved between zones
+
+This is a concept proposal, not a structural or permit drawing.
+
+Click “Accept Proposal” to generate the architectural layout, or describe changes in chat first.`;
+      }
+
+      function acceptProposal() {
+        if (!layoutState.proposalReady) return;
+        layoutState.proposalAccepted = true;
+        layoutState.rendered = false;
+        layoutState.confirmed = false;
+        updateLayoutButtons();
+
+        addMessage("assistant",
+`Proposal accepted.
+
+I’ll now use this program as the source of truth for the floor plan.
+
+Click “Render Concept 1” to generate the technical blueprint.`);
+        setStatus("Proposal accepted ✅ Render Concept 1 is now enabled.");
+      }
+
+      function userAcceptedProposal(text) {
+        return /\b(accept|accepted|looks good|go ahead|proceed|render it|okay|ok)\b/i.test(String(text || ""));
+      }
+
       function updateRequirementsFromMessage(text) {
+        const before = JSON.stringify({
+          plot: layoutState.plot,
+          facing: layoutState.facing,
+          bedrooms: layoutState.bedrooms,
+          floors: layoutState.floors,
+          planningStyle: layoutState.planningStyle,
+          bathrooms: layoutState.bathrooms,
+          parking: layoutState.parking,
+          rooms: layoutState.rooms
+        });
+
         const plot = extractPlotSize(text);
         if (plot) {
           layoutState.plot.width = plot.width;
@@ -970,10 +1142,27 @@
           if (dir) layoutState.rooms[key] = dir;
         }
 
-        layoutState.rendered = false;
-        layoutState.confirmed = false;
-        isConfirmed = false;
-        lastPdfBase64 = null;
+        const after = JSON.stringify({
+          plot: layoutState.plot,
+          facing: layoutState.facing,
+          bedrooms: layoutState.bedrooms,
+          floors: layoutState.floors,
+          planningStyle: layoutState.planningStyle,
+          bathrooms: layoutState.bathrooms,
+          parking: layoutState.parking,
+          rooms: layoutState.rooms
+        });
+
+        if (before !== after) {
+          layoutState.proposalReady = false;
+          layoutState.proposalAccepted = false;
+          layoutState.proposal = null;
+          layoutState.rendered = false;
+          layoutState.confirmed = false;
+          isConfirmed = false;
+          lastPdfBase64 = null;
+        }
+
         updateLayoutButtons();
       }
 
@@ -1043,16 +1232,18 @@ or
 “G+1”`;
         }
 
-        return `Perfect. I have enough information to create your first concept.
+        if (!layoutState.proposalReady) {
+          createSpaceProposal();
+          return proposalText();
+        }
 
-CONCEPT BRIEF
-${conceptSummary()}
+        if (!layoutState.proposalAccepted) {
+          return proposalText();
+        }
 
-Stage 1 is complete.
+        return `Proposal accepted.
 
-You can now click “Render Concept 1”.
-
-I’ll use sensible preliminary defaults for setbacks, walls, doors and windows. After rendering, Stage 2 lets you refine room positions, parking, bathrooms, staircase, utility, balconies and other preferences.`;
+Click “Render Concept 1” to generate the technical blueprint.`;
       }
 
       function addMessage(role, content) {
@@ -1176,332 +1367,287 @@ I’ll use sensible preliminary defaults for setbacks, walls, doors and windows.
       function applySvgThemeAndOverlay(svgString, plan) {
         const plotW = Number(plan?.plot?.w || 1);
         const plotH = Number(plan?.plot?.h || 1);
-
-        const pad = Math.max(plotW, plotH) * 0.08;
-        const viewX = -pad;
-        const viewY = -pad;
-        const viewW = plotW + pad * 2;
-        const viewH = plotH + pad * 2;
+        const pad = Math.max(plotW, plotH) * 0.10;
 
         const svgNS = "http://www.w3.org/2000/svg";
         const svg = document.createElementNS(svgNS, "svg");
         svg.setAttribute("xmlns", svgNS);
-        svg.setAttribute("viewBox", `${viewX} ${viewY} ${viewW} ${viewH}`);
+        svg.setAttribute("viewBox", `${-pad} ${-pad} ${plotW + pad * 2} ${plotH + pad * 2}`);
         svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
         svg.setAttribute("role", "img");
-        svg.setAttribute("aria-label", "Technical floor plan blueprint");
+        svg.setAttribute("aria-label", "Architectural concept floor plan");
         svg.setAttribute("style", "background:#ffffff;");
 
         const defs = document.createElementNS(svgNS, "defs");
-
-        const smallGrid = document.createElementNS(svgNS, "pattern");
-        smallGrid.setAttribute("id", "sqSmallGrid");
-        smallGrid.setAttribute("width", "0.5");
-        smallGrid.setAttribute("height", "0.5");
-        smallGrid.setAttribute("patternUnits", "userSpaceOnUse");
-
-        const gridPath = document.createElementNS(svgNS, "path");
-        gridPath.setAttribute("d", "M 0.5 0 L 0 0 0 0.5");
-        gridPath.setAttribute("fill", "none");
-        gridPath.setAttribute("stroke", "#e5e7eb");
-        gridPath.setAttribute("stroke-width", "0.015");
-        smallGrid.appendChild(gridPath);
-        defs.appendChild(smallGrid);
-
-        const marker = document.createElementNS(svgNS, "marker");
-        marker.setAttribute("id", "sqDimArrow");
-        marker.setAttribute("viewBox", "0 0 10 10");
-        marker.setAttribute("refX", "5");
-        marker.setAttribute("refY", "5");
-        marker.setAttribute("markerWidth", "4");
-        marker.setAttribute("markerHeight", "4");
-        marker.setAttribute("orient", "auto-start-reverse");
-
-        const markerPath = document.createElementNS(svgNS, "path");
-        markerPath.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
-        markerPath.setAttribute("fill", "#475569");
-        marker.appendChild(markerPath);
-        defs.appendChild(marker);
-
         svg.appendChild(defs);
 
-        const background = document.createElementNS(svgNS, "rect");
-        background.setAttribute("x", String(viewX));
-        background.setAttribute("y", String(viewY));
-        background.setAttribute("width", String(viewW));
-        background.setAttribute("height", String(viewH));
-        background.setAttribute("fill", "#ffffff");
-        svg.appendChild(background);
+        const add = (tag, attrs={}, parent=svg) => {
+          const el = document.createElementNS(svgNS, tag);
+          Object.entries(attrs).forEach(([k,v]) => el.setAttribute(k, String(v)));
+          parent.appendChild(el);
+          return el;
+        };
 
-        const grid = document.createElementNS(svgNS, "rect");
-        grid.setAttribute("x", "0");
-        grid.setAttribute("y", "0");
-        grid.setAttribute("width", String(plotW));
-        grid.setAttribute("height", String(plotH));
-        grid.setAttribute("fill", "url(#sqSmallGrid)");
-        svg.appendChild(grid);
+        const textEl = (x, y, value, size=0.25, weight=500, anchor="middle", parent=svg) => {
+          const t = add("text", {
+            x, y,
+            "text-anchor": anchor,
+            "font-family": "Inter, Arial, sans-serif",
+            "font-size": size,
+            "font-weight": weight,
+            fill: "#0f172a"
+          }, parent);
+          t.textContent = value;
+          return t;
+        };
 
-        const boundary = document.createElementNS(svgNS, "rect");
-        boundary.setAttribute("x", "0");
-        boundary.setAttribute("y", "0");
-        boundary.setAttribute("width", String(plotW));
-        boundary.setAttribute("height", String(plotH));
-        boundary.setAttribute("fill", "none");
-        boundary.setAttribute("stroke", "#0f172a");
-        boundary.setAttribute("stroke-width", String(Math.max(0.12, Math.min(plotW, plotH) * 0.012)));
-        boundary.setAttribute("vector-effect", "non-scaling-stroke");
-        svg.appendChild(boundary);
-
-        const setbacks = plan?.setbacks || {};
-        const left = Number(setbacks.left || 0);
-        const right = Number(setbacks.right || 0);
-        const front = Number(setbacks.front || 0);
-        const back = Number(setbacks.back || 0);
-
-        if (left || right || front || back) {
-          const setRect = document.createElementNS(svgNS, "rect");
-          setRect.setAttribute("x", String(left));
-          setRect.setAttribute("y", String(front));
-          setRect.setAttribute("width", String(Math.max(0, plotW - left - right)));
-          setRect.setAttribute("height", String(Math.max(0, plotH - front - back)));
-          setRect.setAttribute("fill", "none");
-          setRect.setAttribute("stroke", "#94a3b8");
-          setRect.setAttribute("stroke-width", "0.06");
-          setRect.setAttribute("stroke-dasharray", "0.25 0.18");
-          setRect.setAttribute("vector-effect", "non-scaling-stroke");
-          svg.appendChild(setRect);
-        }
-
-        const rooms = Array.isArray(plan?.rooms) ? plan.rooms : [];
-        const roomStroke = Math.max(0.08, Math.min(plotW, plotH) * 0.007);
-
-        rooms.forEach((room, i) => {
-          const x = Number(room.x || 0);
-          const y = Number(room.y || 0);
-          const w = Math.max(0.01, Number(room.w || 0));
-          const h = Math.max(0.01, Number(room.h || 0));
-
-          const group = document.createElementNS(svgNS, "g");
-          const rect = document.createElementNS(svgNS, "rect");
-          rect.setAttribute("x", String(x));
-          rect.setAttribute("y", String(y));
-          rect.setAttribute("width", String(w));
-          rect.setAttribute("height", String(h));
-          rect.setAttribute("fill", "#f8fafc");
-          rect.setAttribute("stroke", "#111827");
-          rect.setAttribute("stroke-width", String(roomStroke));
-          rect.setAttribute("vector-effect", "non-scaling-stroke");
-          group.appendChild(rect);
-
-          const inset = Math.min(w, h) * 0.025;
-          if (w > inset * 4 && h > inset * 4) {
-            const inner = document.createElementNS(svgNS, "rect");
-            inner.setAttribute("x", String(x + inset));
-            inner.setAttribute("y", String(y + inset));
-            inner.setAttribute("width", String(Math.max(0.01, w - inset * 2)));
-            inner.setAttribute("height", String(Math.max(0.01, h - inset * 2)));
-            inner.setAttribute("fill", "none");
-            inner.setAttribute("stroke", "#64748b");
-            inner.setAttribute("stroke-width", "0.025");
-            inner.setAttribute("vector-effect", "non-scaling-stroke");
-            group.appendChild(inner);
-          }
-
-          const clipId = `sqRoomClip${i}`;
-          const clip = document.createElementNS(svgNS, "clipPath");
-          clip.setAttribute("id", clipId);
-
-          const clipRect = document.createElementNS(svgNS, "rect");
-          clipRect.setAttribute("x", String(x + inset));
-          clipRect.setAttribute("y", String(y + inset));
-          clipRect.setAttribute("width", String(Math.max(0.01, w - inset * 2)));
-          clipRect.setAttribute("height", String(Math.max(0.01, h - inset * 2)));
-          clip.appendChild(clipRect);
-          defs.appendChild(clip);
-
-          const cx = x + w / 2;
-          const cy = y + h / 2;
-          const roomMin = Math.min(w, h);
-          const titleSize = Math.max(0.18, Math.min(0.42, roomMin * 0.13));
-          const subSize = Math.max(0.12, Math.min(0.26, roomMin * 0.085));
-
-          const labels = document.createElementNS(svgNS, "g");
-          labels.setAttribute("clip-path", `url(#${clipId})`);
-
-          const title = document.createElementNS(svgNS, "text");
-          title.setAttribute("x", String(cx));
-          title.setAttribute("y", String(cy - titleSize * 0.25));
-          title.setAttribute("text-anchor", "middle");
-          title.setAttribute("dominant-baseline", "central");
-          title.setAttribute("font-family", "Inter, Arial, sans-serif");
-          title.setAttribute("font-size", String(titleSize));
-          title.setAttribute("font-weight", "700");
-          title.setAttribute("fill", "#0f172a");
-          title.textContent = room.name || `Room ${i + 1}`;
-          labels.appendChild(title);
-
-          const details = document.createElementNS(svgNS, "text");
-          details.setAttribute("x", String(cx));
-          details.setAttribute("y", String(cy + titleSize * 0.75));
-          details.setAttribute("text-anchor", "middle");
-          details.setAttribute("dominant-baseline", "central");
-          details.setAttribute("font-family", "Inter, Arial, sans-serif");
-          details.setAttribute("font-size", String(subSize));
-          details.setAttribute("fill", "#475569");
-          details.textContent = `${w.toFixed(2)} × ${h.toFixed(2)} m · ${(w * h).toFixed(1)} m²`;
-          labels.appendChild(details);
-
-          group.appendChild(labels);
-
-          const doorW = Math.min(0.9, Math.max(0.55, w * 0.22));
-          if (w > 1.2 && h > 1.2) {
-            const doorX = x + (w - doorW) / 2;
-            const doorY = y + h;
-
-            const opening = document.createElementNS(svgNS, "line");
-            opening.setAttribute("x1", String(doorX));
-            opening.setAttribute("y1", String(doorY));
-            opening.setAttribute("x2", String(doorX + doorW));
-            opening.setAttribute("y2", String(doorY));
-            opening.setAttribute("stroke", "#ffffff");
-            opening.setAttribute("stroke-width", String(roomStroke * 1.7));
-            opening.setAttribute("vector-effect", "non-scaling-stroke");
-            group.appendChild(opening);
-
-            const leaf = document.createElementNS(svgNS, "line");
-            leaf.setAttribute("x1", String(doorX));
-            leaf.setAttribute("y1", String(doorY));
-            leaf.setAttribute("x2", String(doorX));
-            leaf.setAttribute("y2", String(doorY - doorW));
-            leaf.setAttribute("stroke", "#334155");
-            leaf.setAttribute("stroke-width", "0.045");
-            leaf.setAttribute("vector-effect", "non-scaling-stroke");
-            group.appendChild(leaf);
-
-            const arc = document.createElementNS(svgNS, "path");
-            arc.setAttribute("d", `M ${doorX} ${doorY - doorW} A ${doorW} ${doorW} 0 0 1 ${doorX + doorW} ${doorY}`);
-            arc.setAttribute("fill", "none");
-            arc.setAttribute("stroke", "#94a3b8");
-            arc.setAttribute("stroke-width", "0.035");
-            arc.setAttribute("vector-effect", "non-scaling-stroke");
-            group.appendChild(arc);
-          }
-
-          svg.appendChild(group);
+        // White sheet
+        add("rect", {
+          x: -pad, y: -pad,
+          width: plotW + pad * 2,
+          height: plotH + pad * 2,
+          fill: "#ffffff"
         });
 
-        const dimOffset = pad * 0.48;
-        const dimY = -dimOffset;
+        // Fine drafting grid
+        const pattern = add("pattern", {
+          id: "archGrid",
+          width: 0.5,
+          height: 0.5,
+          patternUnits: "userSpaceOnUse"
+        }, defs);
+        add("path", {
+          d: "M 0.5 0 L 0 0 0 0.5",
+          fill: "none",
+          stroke: "#eef2f7",
+          "stroke-width": 0.012
+        }, pattern);
 
-        const dimH = document.createElementNS(svgNS, "line");
-        dimH.setAttribute("x1", "0");
-        dimH.setAttribute("y1", String(dimY));
-        dimH.setAttribute("x2", String(plotW));
-        dimH.setAttribute("y2", String(dimY));
-        dimH.setAttribute("stroke", "#475569");
-        dimH.setAttribute("stroke-width", "0.035");
-        dimH.setAttribute("marker-start", "url(#sqDimArrow)");
-        dimH.setAttribute("marker-end", "url(#sqDimArrow)");
-        dimH.setAttribute("vector-effect", "non-scaling-stroke");
-        svg.appendChild(dimH);
+        add("rect", { x: 0, y: 0, width: plotW, height: plotH, fill: "url(#archGrid)" });
 
-        const dimHText = document.createElementNS(svgNS, "text");
-        dimHText.setAttribute("x", String(plotW / 2));
-        dimHText.setAttribute("y", String(dimY - 0.18));
-        dimHText.setAttribute("text-anchor", "middle");
-        dimHText.setAttribute("font-family", "Inter, Arial, sans-serif");
-        dimHText.setAttribute("font-size", "0.28");
-        dimHText.setAttribute("font-weight", "600");
-        dimHText.setAttribute("fill", "#334155");
-        dimHText.textContent = `${plotW.toFixed(2)} m`;
-        svg.appendChild(dimHText);
+        // Plot boundary
+        add("rect", {
+          x: 0, y: 0, width: plotW, height: plotH,
+          fill: "none", stroke: "#111827",
+          "stroke-width": 0.11,
+          "vector-effect": "non-scaling-stroke"
+        });
 
-        const dimX = -dimOffset;
+        // Road side label
+        const facing = plan?.production?.facing || "E";
+        const roadLabel = `${directionName(facing).toUpperCase()} ROAD`;
+        if (facing === "E") {
+          textEl(plotW + pad * 0.45, plotH / 2, roadLabel, 0.3, 800);
+        } else if (facing === "W") {
+          textEl(-pad * 0.45, plotH / 2, roadLabel, 0.3, 800);
+        } else if (facing === "N") {
+          textEl(plotW / 2, -pad * 0.55, roadLabel, 0.3, 800);
+        } else {
+          textEl(plotW / 2, plotH + pad * 0.7, roadLabel, 0.3, 800);
+        }
 
-        const dimV = document.createElementNS(svgNS, "line");
-        dimV.setAttribute("x1", String(dimX));
-        dimV.setAttribute("y1", "0");
-        dimV.setAttribute("x2", String(dimX));
-        dimV.setAttribute("y2", String(plotH));
-        dimV.setAttribute("stroke", "#475569");
-        dimV.setAttribute("stroke-width", "0.035");
-        dimV.setAttribute("marker-start", "url(#sqDimArrow)");
-        dimV.setAttribute("marker-end", "url(#sqDimArrow)");
-        dimV.setAttribute("vector-effect", "non-scaling-stroke");
-        svg.appendChild(dimV);
+        // Setback/building envelope
+        const s = plan?.setbacks || {};
+        const sx = Number(s.left || 0);
+        const sy = Number(s.front || 0);
+        const sw = plotW - Number(s.left || 0) - Number(s.right || 0);
+        const sh = plotH - Number(s.front || 0) - Number(s.back || 0);
 
-        const dimVText = document.createElementNS(svgNS, "text");
-        dimVText.setAttribute("x", String(dimX - 0.18));
-        dimVText.setAttribute("y", String(plotH / 2));
-        dimVText.setAttribute("text-anchor", "middle");
-        dimVText.setAttribute("font-family", "Inter, Arial, sans-serif");
-        dimVText.setAttribute("font-size", "0.28");
-        dimVText.setAttribute("font-weight", "600");
-        dimVText.setAttribute("fill", "#334155");
-        dimVText.setAttribute("transform", `rotate(-90 ${dimX - 0.18} ${plotH / 2})`);
-        dimVText.textContent = `${plotH.toFixed(2)} m`;
-        svg.appendChild(dimVText);
+        add("rect", {
+          x: sx, y: sy, width: sw, height: sh,
+          fill: "none", stroke: "#94a3b8",
+          "stroke-width": 0.045,
+          "stroke-dasharray": "0.18 0.12",
+          "vector-effect": "non-scaling-stroke"
+        });
 
-        const northX = plotW - Math.max(0.8, pad * 0.6);
-        const northY = Math.max(0.8, pad * 0.7);
-        const north = document.createElementNS(svgNS, "g");
-        north.setAttribute("transform", `translate(${northX} ${northY})`);
+        // Outdoor / parking
+        (plan?.outdoor || []).forEach(o => {
+          add("rect", {
+            x: o.x, y: o.y, width: o.w, height: o.h,
+            fill: "#f1f5f9",
+            stroke: "#64748b",
+            "stroke-width": 0.045,
+            "stroke-dasharray": "0.12 0.08"
+          });
+          textEl(o.x + o.w/2, o.y + o.h/2, o.name || "Parking", 0.24, 700);
+          if (o.dimensions_ft) {
+            textEl(
+              o.x + o.w/2,
+              o.y + o.h/2 + 0.32,
+              `${o.dimensions_ft.w}' × ${o.dimensions_ft.h}'`,
+              0.18, 500
+            );
+          }
+        });
 
-        const northLine = document.createElementNS(svgNS, "line");
-        northLine.setAttribute("x1", "0");
-        northLine.setAttribute("y1", "0.45");
-        northLine.setAttribute("x2", "0");
-        northLine.setAttribute("y2", "-0.38");
-        northLine.setAttribute("stroke", "#0f172a");
-        northLine.setAttribute("stroke-width", "0.06");
-        north.appendChild(northLine);
+        const rooms = Array.isArray(plan?.rooms) ? plan.rooms : [];
+        const extStroke = 0.13;
+        const intStroke = 0.085;
 
-        const northTip = document.createElementNS(svgNS, "path");
-        northTip.setAttribute("d", "M 0 -0.5 L -0.16 -0.18 L 0.16 -0.18 Z");
-        northTip.setAttribute("fill", "#0f172a");
-        north.appendChild(northTip);
+        rooms.forEach((room, i) => {
+          const isCirculation = room.type === "circulation";
+          const isBath = room.type === "bath";
+          const isService = ["utility", "pooja"].includes(room.type);
 
-        const northText = document.createElementNS(svgNS, "text");
-        northText.setAttribute("x", "0");
-        northText.setAttribute("y", "-0.7");
-        northText.setAttribute("text-anchor", "middle");
-        northText.setAttribute("font-family", "Inter, Arial, sans-serif");
-        northText.setAttribute("font-size", "0.3");
-        northText.setAttribute("font-weight", "800");
-        northText.setAttribute("fill", "#0f172a");
-        northText.textContent = "N";
-        north.appendChild(northText);
-        svg.appendChild(north);
+          let fill = "#ffffff";
+          if (isCirculation) fill = "#f8fafc";
+          if (isBath) fill = "#f1f5f9";
+          if (isService) fill = "#f8fafc";
 
-        const title = document.createElementNS(svgNS, "text");
-        title.setAttribute("x", String(plotW / 2));
-        title.setAttribute("y", String(plotH + pad * 0.62));
-        title.setAttribute("text-anchor", "middle");
-        title.setAttribute("font-family", "Inter, Arial, sans-serif");
-        title.setAttribute("font-size", "0.34");
-        title.setAttribute("font-weight", "700");
-        title.setAttribute("fill", "#0f172a");
-        title.textContent = plan?.meta?.title || "Concept Floor Plan";
-        svg.appendChild(title);
+          add("rect", {
+            x: room.x, y: room.y,
+            width: room.w, height: room.h,
+            fill,
+            stroke: "#111827",
+            "stroke-width": isCirculation ? 0.065 : intStroke,
+            "vector-effect": "non-scaling-stroke"
+          });
 
-        const subtitle = document.createElementNS(svgNS, "text");
-        subtitle.setAttribute("x", String(plotW / 2));
-        subtitle.setAttribute("y", String(plotH + pad * 0.9));
-        subtitle.setAttribute("text-anchor", "middle");
-        subtitle.setAttribute("font-family", "Inter, Arial, sans-serif");
-        subtitle.setAttribute("font-size", "0.22");
-        subtitle.setAttribute("fill", "#64748b");
+          const clipId = `roomClip-${i}`;
+          const clip = add("clipPath", { id: clipId }, defs);
+          add("rect", {
+            x: room.x + 0.08, y: room.y + 0.08,
+            width: Math.max(0.1, room.w - 0.16),
+            height: Math.max(0.1, room.h - 0.16)
+          }, clip);
 
-        const facing = plan?.production?.facing
-          ? `Facing: ${directionName(plan.production.facing)}`
-          : "Facing: not set";
+          const g = add("g", { "clip-path": `url(#${clipId})` });
+          const cx = room.x + room.w / 2;
+          const cy = room.y + room.h / 2;
 
-        const floors = plan?.meta?.floors
-          ? ` · ${floorLabel(plan.meta.floors)}`
-          : "";
+          const nameSize = clamp(Math.min(room.w, room.h) * 0.10, 0.18, 0.32);
+          textEl(cx, cy - nameSize * 0.45, room.name, nameSize, 750, "middle", g);
 
-        subtitle.textContent = `${facing}${floors} · Concept drawing — not for construction`;
-        svg.appendChild(subtitle);
+          if (room.dimensions_ft) {
+            textEl(
+              cx, cy + nameSize * 0.7,
+              `${room.dimensions_ft.w}' × ${room.dimensions_ft.h}'`,
+              Math.max(0.16, nameSize * 0.68), 600, "middle", g
+            );
+            const area = Math.round(room.dimensions_ft.w * room.dimensions_ft.h);
+            textEl(
+              cx, cy + nameSize * 1.45,
+              `${area} sq.ft.`,
+              Math.max(0.14, nameSize * 0.58), 450, "middle", g
+            );
+          }
+        });
+
+        const roomById = Object.fromEntries(rooms.map(r => [r.id, r]));
+
+        // Door geometry from plan
+        (plan?.openings?.doors || []).forEach(d => {
+          const r = roomById[d.roomId];
+          if (!r) return;
+          const width = Number(d.width || 0.9);
+          const offset = Number(d.offset || 0.5);
+
+          let x1, y1, x2, y2, hx, hy, ex, ey, arcD;
+
+          if (d.wall === "east") {
+            const y = r.y + clamp(offset, width/2, Math.max(width/2, r.h - width/2));
+            x1 = r.x + r.w; y1 = y - width/2;
+            x2 = r.x + r.w; y2 = y + width/2;
+            hx = x1; hy = y1; ex = x1 - width; ey = y1;
+            arcD = `M ${ex} ${ey} A ${width} ${width} 0 0 1 ${x2} ${y2}`;
+          } else if (d.wall === "west") {
+            const y = r.y + clamp(offset, width/2, Math.max(width/2, r.h - width/2));
+            x1 = r.x; y1 = y - width/2;
+            x2 = r.x; y2 = y + width/2;
+            hx = x1; hy = y2; ex = x1 + width; ey = y2;
+            arcD = `M ${ex} ${ey} A ${width} ${width} 0 0 0 ${x2} ${y1}`;
+          } else if (d.wall === "north") {
+            const x = r.x + clamp(offset, width/2, Math.max(width/2, r.w - width/2));
+            x1 = x - width/2; y1 = r.y;
+            x2 = x + width/2; y2 = r.y;
+            hx = x1; hy = y1; ex = x1; ey = y1 + width;
+            arcD = `M ${ex} ${ey} A ${width} ${width} 0 0 0 ${x2} ${y2}`;
+          } else {
+            const x = r.x + clamp(offset, width/2, Math.max(width/2, r.w - width/2));
+            x1 = x - width/2; y1 = r.y + r.h;
+            x2 = x + width/2; y2 = r.y + r.h;
+            hx = x1; hy = y1; ex = x1; ey = y1 - width;
+            arcD = `M ${ex} ${ey} A ${width} ${width} 0 0 1 ${x2} ${y2}`;
+          }
+
+          add("line", {
+            x1, y1, x2, y2,
+            stroke: "#ffffff",
+            "stroke-width": 0.18,
+            "vector-effect": "non-scaling-stroke"
+          });
+
+          add("line", {
+            x1: hx, y1: hy, x2: ex, y2: ey,
+            stroke: "#0f172a",
+            "stroke-width": 0.045,
+            "vector-effect": "non-scaling-stroke"
+          });
+
+          add("path", {
+            d: arcD,
+            fill: "none",
+            stroke: "#64748b",
+            "stroke-width": 0.03,
+            "vector-effect": "non-scaling-stroke"
+          });
+        });
+
+        // Windows from plan
+        (plan?.openings?.windows || []).forEach(w => {
+          const r = roomById[w.roomId];
+          if (!r) return;
+          const width = Number(w.width || 1.2);
+          const offset = Number(w.offset || 0.6);
+          const gap = 0.055;
+
+          if (w.wall === "east" || w.wall === "west") {
+            const x = w.wall === "east" ? r.x + r.w : r.x;
+            const y = r.y + clamp(offset, width/2, Math.max(width/2, r.h - width/2));
+            add("line", { x1:x, y1:y-width/2, x2:x, y2:y+width/2, stroke:"#ffffff", "stroke-width":0.16 });
+            add("line", { x1:x-gap, y1:y-width/2, x2:x-gap, y2:y+width/2, stroke:"#2563eb", "stroke-width":0.025 });
+            add("line", { x1:x+gap, y1:y-width/2, x2:x+gap, y2:y+width/2, stroke:"#2563eb", "stroke-width":0.025 });
+          } else {
+            const y = w.wall === "north" ? r.y : r.y + r.h;
+            const x = r.x + clamp(offset, width/2, Math.max(width/2, r.w - width/2));
+            add("line", { x1:x-width/2, y1:y, x2:x+width/2, y2:y, stroke:"#ffffff", "stroke-width":0.16 });
+            add("line", { x1:x-width/2, y1:y-gap, x2:x+width/2, y2:y-gap, stroke:"#2563eb", "stroke-width":0.025 });
+            add("line", { x1:x-width/2, y1:y+gap, x2:x+width/2, y2:y+gap, stroke:"#2563eb", "stroke-width":0.025 });
+          }
+        });
+
+        // Overall dimensions in feet
+        const plotWidthFt = plan?.plot?.width_ft || +(plotW / 0.3048).toFixed(1);
+        const plotDepthFt = plan?.plot?.depth_ft || +(plotH / 0.3048).toFixed(1);
+
+        const dimY = -pad * 0.42;
+        add("line", { x1:0, y1:dimY, x2:plotW, y2:dimY, stroke:"#475569", "stroke-width":0.03 });
+        add("line", { x1:0, y1:dimY-0.12, x2:0, y2:dimY+0.12, stroke:"#475569", "stroke-width":0.03 });
+        add("line", { x1:plotW, y1:dimY-0.12, x2:plotW, y2:dimY+0.12, stroke:"#475569", "stroke-width":0.03 });
+        textEl(plotW/2, dimY-0.15, `${plotWidthFt}'-0"`, 0.26, 700);
+
+        const dimX = -pad * 0.42;
+        add("line", { x1:dimX, y1:0, x2:dimX, y2:plotH, stroke:"#475569", "stroke-width":0.03 });
+        add("line", { x1:dimX-0.12, y1:0, x2:dimX+0.12, y2:0, stroke:"#475569", "stroke-width":0.03 });
+        add("line", { x1:dimX-0.12, y1:plotH, x2:dimX+0.12, y2:plotH, stroke:"#475569", "stroke-width":0.03 });
+        const vt = textEl(dimX-0.18, plotH/2, `${plotDepthFt}'-0"`, 0.26, 700);
+        vt.setAttribute("transform", `rotate(-90 ${dimX-0.18} ${plotH/2})`);
+
+        // North arrow
+        const nx = plotW - pad * 0.55;
+        const ny = pad * 0.65;
+        const ng = add("g", { transform:`translate(${nx} ${ny})` });
+        add("line", { x1:0, y1:0.38, x2:0, y2:-0.35, stroke:"#0f172a", "stroke-width":0.05 }, ng);
+        add("path", { d:"M 0 -0.48 L -0.14 -0.18 L 0.14 -0.18 Z", fill:"#0f172a" }, ng);
+        textEl(0, -0.62, "N", 0.26, 800, "middle", ng);
+
+        // Title block
+        textEl(plotW/2, plotH + pad*0.5, plan?.meta?.title || "Architectural Concept", 0.30, 800);
+        textEl(plotW/2, plotH + pad*0.76,
+          `${directionName(facing)} facing · ${floorLabel(plan?.meta?.floors || 1)} · Concept plan — verify with licensed architect/engineer`,
+          0.19, 500
+        );
 
         return new XMLSerializer().serializeToString(svg);
       }
@@ -1574,123 +1720,269 @@ I’ll use sensible preliminary defaults for setbacks, walls, doors and windows.
       }
 
       function buildDraftPlanFromState() {
-        if (!isConceptReady()) return null;
+        if (!layoutState.proposalAccepted || !layoutState.proposal) return null;
 
-        const plotW = toMeters(layoutState.plot.width, layoutState.plot.unit);
-        const plotH = toMeters(layoutState.plot.depth, layoutState.plot.unit);
+        const p = layoutState.proposal;
+        const plotWft = Number(layoutState.plot.width);
+        const plotDft = Number(layoutState.plot.depth);
 
-        const setbacks = {
-          left: 0.6,
-          right: 0.6,
-          front: 1.2,
-          back: 0.6
+        const s = p.setbacks;
+        const bx = s.left;
+        const by = s.front;
+        const bw = plotWft - s.left - s.right;
+        const bd = plotDft - s.front - s.rear;
+
+        const corridor = clamp(p.preferred.corridor, 3.5, 4.5);
+        const gap = 0.35; // conceptual wall allowance in ft
+
+        const frontD = p.bands.front;
+        const middleD = p.bands.middle;
+        const rearD = Math.max(12, bd - frontD - middleD);
+
+        // Central corridor creates understandable circulation.
+        const leftW = Math.max(10, (bw - corridor) * 0.52);
+        const rightW = bw - corridor - leftW;
+        const corridorX = bx + leftW;
+
+        const roomsFt = [];
+        const doorsFt = [];
+        const windowsFt = [];
+        const outdoorFt = [];
+
+        const addRoom = (id, name, type, x, y, w, d, zone, direction=null) => {
+          const room = {
+            id, name, type,
+            x: round1(x), y: round1(y),
+            w: round1(Math.max(3, w)),
+            h: round1(Math.max(3, d)),
+            zone,
+            direction
+          };
+          roomsFt.push(room);
+          return room;
         };
 
-        const left = setbacks.left;
-        const front = setbacks.front;
-        const usableW = Math.max(2, plotW - setbacks.left - setbacks.right);
-        const usableH = Math.max(2, plotH - setbacks.front - setbacks.back);
+        const addDoor = (id, roomId, wall, offset, width=3, swing="in") => {
+          doorsFt.push({ id, roomId, wall, offset: round1(offset), width, swing });
+        };
 
-        const rooms = [];
+        const addWindow = (id, roomId, wall, offset, width=4) => {
+          windowsFt.push({ id, roomId, wall, offset: round1(offset), width });
+        };
 
-        rooms.push({
-          name: "Living",
-          x: left,
-          y: front,
-          w: +(usableW * 0.52).toFixed(2),
-          h: +(usableH * 0.25).toFixed(2),
-          direction: layoutState.rooms.living || (layoutState.planningStyle === "vastu" ? "NE" : null)
+        // FRONT ZONE
+        const living = addRoom(
+          "living", "Living Room", "living",
+          bx, by,
+          leftW, frontD,
+          "front",
+          layoutState.rooms.living || (layoutState.planningStyle === "vastu" ? "NE" : null)
+        );
+
+        const frontRightRoom = addRoom(
+          layoutState.bedrooms >= 3 ? "bed3" : "dining",
+          layoutState.bedrooms >= 3 ? "Bedroom 3" : "Dining",
+          layoutState.bedrooms >= 3 ? "bedroom" : "dining",
+          corridorX + corridor, by,
+          rightW, frontD,
+          "front",
+          layoutState.rooms.bedroom3 || null
+        );
+
+        // MIDDLE ZONE
+        const dining = addRoom(
+          "dining", "Dining", "dining",
+          bx, by + frontD + gap,
+          leftW, middleD - gap,
+          "middle",
+          layoutState.rooms.dining || null
+        );
+
+        const kitchen = addRoom(
+          "kitchen", "Kitchen", "kitchen",
+          corridorX + corridor, by + frontD + gap,
+          rightW, middleD * 0.68,
+          "middle",
+          layoutState.rooms.kitchen || (layoutState.planningStyle === "vastu" ? "SE" : null)
+        );
+
+        const utility = addRoom(
+          "utility", "Utility", "utility",
+          corridorX + corridor,
+          by + frontD + gap + middleD * 0.68 + gap,
+          rightW,
+          Math.max(5, middleD * 0.32 - gap * 2),
+          "middle",
+          layoutState.rooms.utility || null
+        );
+
+        // REAR ZONE
+        const rearY = by + frontD + middleD + gap;
+        const master = addRoom(
+          "master", "Master Bedroom", "bedroom",
+          bx, rearY,
+          leftW, Math.max(12, rearD - gap),
+          "rear",
+          layoutState.rooms.masterBedroom || (layoutState.planningStyle === "vastu" ? "SW" : null)
+        );
+
+        const bed2H = Math.max(9, rearD * 0.64);
+        const bed2 = addRoom(
+          "bed2", "Bedroom 2", "bedroom",
+          corridorX + corridor, rearY,
+          rightW, bed2H,
+          "rear",
+          layoutState.rooms.bedroom2 || (layoutState.planningStyle === "vastu" ? "NW" : null)
+        );
+
+        const bathRowY = rearY + bed2H + gap;
+        const bathAvailable = Math.max(5, rearD - bed2H - gap);
+
+        const bathW = rightW / 2 - gap / 2;
+        const bath1 = addRoom(
+          "bath_master", "Master Bath", "bath",
+          corridorX + corridor, bathRowY,
+          bathW, bathAvailable,
+          "rear"
+        );
+
+        const bath2 = addRoom(
+          "bath_common", "Common Bath", "bath",
+          corridorX + corridor + bathW + gap, bathRowY,
+          bathW, bathAvailable,
+          "rear"
+        );
+
+        // Corridor as explicit circulation space.
+        addRoom(
+          "corridor", "Passage", "circulation",
+          corridorX, by,
+          corridor, bd,
+          "circulation"
+        );
+
+        // Optional pooja inside dining edge.
+        if (layoutState.planningStyle === "vastu" || /pooja|puja/i.test(JSON.stringify(layoutState.rooms))) {
+          addRoom(
+            "pooja", "Pooja", "pooja",
+            bx,
+            by + frontD + gap,
+            Math.min(5.5, leftW * 0.28),
+            Math.min(6, middleD * 0.38),
+            "middle",
+            "NE"
+          );
+        }
+
+        // Parking in the front setback, not inside the building.
+        const parkingW = Math.min(plotWft - 2, (layoutState.parking || p.parking) >= 2 ? 18 : 10);
+        const parkingD = Math.min(Math.max(8, s.front - 1), 18);
+        outdoorFt.push({
+          id: "parking",
+          name: `${layoutState.parking || p.parking}-Car Parking`,
+          type: "parking",
+          x: clamp((plotWft - parkingW) / 2, 1, plotWft - parkingW - 1),
+          y: 0.5,
+          w: parkingW,
+          h: parkingD
         });
 
-        rooms.push({
-          name: "Kitchen",
-          x: +(left + usableW * 0.56).toFixed(2),
-          y: front,
-          w: +(usableW * 0.40).toFixed(2),
-          h: +(usableH * 0.23).toFixed(2),
-          direction: layoutState.rooms.kitchen || (layoutState.planningStyle === "vastu" ? "SE" : null)
-        });
+        // Doors: place them toward corridor / circulation, not randomly.
+        addDoor("D1", "living", "east", frontD * 0.45, 4, "in-left");
+        addDoor("D2", frontRightRoom.id, "west", frontD * 0.55, 3, "in-right");
+        addDoor("D3", "dining", "east", (middleD - gap) * 0.45, 3, "in-left");
+        addDoor("D4", "kitchen", "west", (middleD * 0.68) * 0.45, 3, "in-right");
+        addDoor("D5", "master", "east", Math.max(3, rearD * 0.35), 3, "in-left");
+        addDoor("D6", "bed2", "west", Math.max(3, bed2H * 0.35), 3, "in-right");
+        addDoor("D7", "bath_master", "north", bathW * 0.45, 2.5, "in");
+        addDoor("D8", "bath_common", "north", bathW * 0.45, 2.5, "in");
 
-        rooms.push({
-          name: "Bed 1",
-          x: left,
-          y: +(front + usableH * 0.31).toFixed(2),
-          w: +(usableW * 0.46).toFixed(2),
-          h: +(usableH * 0.25).toFixed(2),
-          direction: layoutState.rooms.masterBedroom || (layoutState.planningStyle === "vastu" ? "SW" : null)
-        });
+        // Windows primarily on exterior walls.
+        addWindow("W1", "living", "north", leftW * 0.32, Math.min(6, leftW * 0.45));
+        addWindow("W2", frontRightRoom.id, "north", rightW * 0.28, Math.min(5, rightW * 0.45));
+        addWindow("W3", "kitchen", "east", (middleD * 0.68) * 0.28, 4);
+        addWindow("W4", "utility", "east", 2, 3);
+        addWindow("W5", "master", "west", Math.max(3, rearD * 0.3), 5);
+        addWindow("W6", "bed2", "east", Math.max(3, bed2H * 0.3), 5);
 
-        if (layoutState.bedrooms >= 2) {
-          rooms.push({
-            name: "Bed 2",
-            x: +(left + usableW * 0.52).toFixed(2),
-            y: +(front + usableH * 0.31).toFixed(2),
-            w: +(usableW * 0.42).toFixed(2),
-            h: +(usableH * 0.25).toFixed(2),
-            direction: layoutState.rooms.bedroom2 || (layoutState.planningStyle === "vastu" ? "NW" : null)
-          });
-        }
+        // Convert final plan to meters because existing render/view code expects metric geometry.
+        const rooms = roomsFt.map(r => ({
+          ...r,
+          x: ftToM(r.x),
+          y: ftToM(r.y),
+          w: ftToM(r.w),
+          h: ftToM(r.h),
+          dimensions_ft: { w: r.w, h: r.h }
+        }));
 
-        if (layoutState.bedrooms >= 3) {
-          rooms.push({
-            name: "Bed 3",
-            x: left,
-            y: +(front + usableH * 0.62).toFixed(2),
-            w: +(usableW * 0.46).toFixed(2),
-            h: +(usableH * 0.25).toFixed(2),
-            direction: layoutState.rooms.bedroom3 || null
-          });
-        }
+        const doors = doorsFt.map(d => ({
+          ...d,
+          offset: ftToM(d.offset),
+          width: ftToM(d.width),
+          width_ft: d.width
+        }));
 
-        if (layoutState.bedrooms >= 4) {
-          rooms.push({
-            name: "Bed 4",
-            x: +(left + usableW * 0.52).toFixed(2),
-            y: +(front + usableH * 0.62).toFixed(2),
-            w: +(usableW * 0.42).toFixed(2),
-            h: +(usableH * 0.25).toFixed(2),
-            direction: null
-          });
-        }
+        const windows = windowsFt.map(w => ({
+          ...w,
+          offset: ftToM(w.offset),
+          width: ftToM(w.width),
+          width_ft: w.width
+        }));
 
-        const bathCount = layoutState.bathrooms || Math.max(1, Math.min(2, layoutState.bedrooms - 1));
-        for (let i = 0; i < bathCount; i++) {
-          rooms.push({
-            name: `Bath ${i + 1}`,
-            x: +(left + usableW * (0.72 + (i * 0.1))).toFixed(2),
-            y: +(front + usableH * 0.62).toFixed(2),
-            w: +(usableW * 0.16).toFixed(2),
-            h: +(usableH * 0.14).toFixed(2)
-          });
-        }
+        const outdoor = outdoorFt.map(o => ({
+          ...o,
+          x: ftToM(o.x),
+          y: ftToM(o.y),
+          w: ftToM(o.w),
+          h: ftToM(o.h),
+          dimensions_ft: { w: round1(o.w), h: round1(o.h) }
+        }));
 
         draftPlan = {
           meta: {
-            title: `${layoutState.plot.width}x${layoutState.plot.depth} ${layoutState.bedrooms}BHK Concept 1`,
-            stage: "concept",
+            title: `${layoutState.plot.width}x${layoutState.plot.depth} ${layoutState.bedrooms}BHK Architectural Concept`,
+            stage: "space-planned-concept",
             floors: layoutState.floors,
-            source_units: layoutState.plot.unit
+            source_units: layoutState.plot.unit,
+            disclaimer: "Concept drawing only. Structural design and local approvals require a licensed professional."
           },
-          plot: { w: plotW, h: plotH },
-          setbacks,
+          plot: {
+            w: ftToM(plotWft),
+            h: ftToM(plotDft),
+            width_ft: plotWft,
+            depth_ft: plotDft,
+            roadSide: layoutState.facing
+          },
+          setbacks: {
+            left: ftToM(s.left),
+            right: ftToM(s.right),
+            front: ftToM(s.front),
+            back: ftToM(s.rear),
+            source_ft: s
+          },
+          building: {
+            external_wall_ft: 0.75,
+            internal_wall_ft: 0.375,
+            circulation_ft: corridor
+          },
           production: {
             units: "m",
-            wall_thickness: layoutState.production.exteriorWallThickness || 0.23,
-            scale: layoutState.production.scale || "1:100",
+            display_units: "ft",
+            wall_thickness: 0.23,
+            internal_wall_thickness: 0.115,
+            scale: "1:100",
             north_arrow: true,
             facing: layoutState.facing,
-            title_block: layoutState.production.titleBlock || {
+            title_block: {
               client: "Client",
               site: "Site",
-              sheet: "Concept 1"
+              sheet: "Concept Ground Floor"
             },
             dimension_lines: { outer_plot: true, inner_rooms: true }
           },
-          openings: {
-            doors: [],
-            windows: []
-          },
-          rooms
+          rooms,
+          openings: { doors, windows },
+          outdoor
         };
 
         return draftPlan;
@@ -1699,9 +1991,19 @@ I’ll use sensible preliminary defaults for setbacks, walls, doors and windows.
       function localAgentReply(userText) {
         updateRequirementsFromMessage(userText);
 
-        if (isConceptReady()) {
+        if (isConceptReady() && !layoutState.proposalReady) {
+          createSpaceProposal();
+        }
+
+        if (layoutState.proposalReady && !layoutState.proposalAccepted && userAcceptedProposal(userText)) {
+          layoutState.proposalAccepted = true;
+        }
+
+        if (layoutState.proposalAccepted) {
           buildDraftPlanFromState();
         }
+
+        updateLayoutButtons();
 
         return {
           reply: getNextAgentResponse(),
@@ -1740,11 +2042,13 @@ I’ll use sensible preliminary defaults for setbacks, walls, doors and windows.
             const out = localAgentReply(text);
             addMessage("assistant", out.reply);
 
-            if (isConceptReady()) {
-              setStatus("Stage 1 complete ✅ Click <strong>Render Concept 1</strong>.");
-            } else {
+            if (!isConceptReady()) {
               const missing = getMissingConceptFields();
               setStatus(`Stage 1 · Concept — still needed: <strong>${missing.join(", ")}</strong>.`);
+            } else if (!layoutState.proposalAccepted) {
+              setStatus("Space proposal ready ✅ Review it, then click <strong>Accept Proposal</strong>.");
+            } else {
+              setStatus("Proposal accepted ✅ Click <strong>Render Concept 1</strong>.");
             }
 
             updateLayoutButtons();
@@ -1773,13 +2077,14 @@ I’ll use sensible preliminary defaults for setbacks, walls, doors and windows.
       // Render / Confirm / Download
       // ---------------------------
       async function renderNow() {
-        if (!isConceptReady()) {
-          addMessage("assistant", getNextAgentResponse());
+        if (!layoutState.proposalAccepted) {
+          addMessage("assistant", "Please accept the proposed space program before rendering.");
           updateLayoutButtons();
           return;
         }
 
-        buildDraftPlanFromState();
+        const plan = buildDraftPlanFromState();
+        if (!plan) return;
 
         btnRender.disabled = true;
         btnConfirm.disabled = true;
@@ -1788,63 +2093,62 @@ I’ll use sensible preliminary defaults for setbacks, walls, doors and windows.
         isConfirmed = false;
         layoutState.confirmed = false;
 
-        const payload = getPlanPayloadForRender();
-        renderLegend(payload.plan);
-
-        setStatus("Rendering Concept 1...");
+        setStatus("Generating architectural blueprint...");
         const t0 = performance.now();
-        startPredictableWait("Rendering concept");
+        startPredictableWait("Generating blueprint");
 
         try {
-          const res = await fetch(RENDER_API, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-
-          const data = await res.json().catch(() => ({}));
-          const t1 = performance.now();
-
-          if (!res.ok) {
-            finishWait(t1 - t0, false);
-            const msg = data.error || ("Render failed (HTTP " + res.status + ")");
-            setStatus("<span style='color:#fca5a5;'>Render error:</span> " + msg);
-            layoutState.rendered = false;
-            updateLayoutButtons();
-            return;
-          }
-
-          bumpAvg(t1 - t0);
-          finishWait(t1 - t0, true);
-
-          const rawSvg = data.svg || "";
-          let themed = rawSvg ? applySvgThemeAndOverlay(rawSvg, payload.plan) : "(No SVG returned)";
-
-          preview.innerHTML = themed || "(No SVG returned)";
+          // Render the technical SVG locally from the structured plan.
+          const localSvg = applySvgThemeAndOverlay("", plan);
+          preview.innerHTML = localSvg;
           showBlueprintTab();
-          lastPdfBase64 = data.pdf_base64 || null;
+          renderLegend(plan);
 
           layoutState.rendered = true;
           layoutState.confirmed = false;
           resetView(true);
-          updateLayoutButtons();
+
+          const tLocal = performance.now();
+          finishWait(tLocal - t0, true);
 
           addMessage("assistant",
-`Concept 1 is rendered.
+`Concept 1 is rendered from the accepted space plan.
 
-Stage 2 · Refine
+This blueprint now uses:
+• explicit circulation
+• front / middle / rear zoning
+• room dimensions
+• real door openings and swings
+• windows on selected exterior walls
+• setbacks
+• parking zone
+• overall plot dimensions
 
-You can now tell me changes such as:
-• “parking for 2 cars”
-• “kitchen southeast”
-• “master bedroom southwest”
-• “add 3 bathrooms”
-• “living room northeast”
-• “use Vastu”
+Review it in the Blueprint tab.
 
-After any change, render again to preview the updated concept.`);
+You can still change requirements in chat. Any change will invalidate the current proposal and generate a new one.`);
 
-          setStatus("Stage 2 · Refine — review the preview, describe changes in chat, or confirm the layout.");
+          setStatus("Stage 2 · Review — inspect the blueprint, request changes, or confirm the layout.");
+          updateLayoutButtons();
+
+          // Optional: ask the existing backend only for a PDF artifact.
+          // Its SVG is ignored because the browser now renders the blueprint itself.
+          try {
+            const res = await fetch(RENDER_API, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ plan }),
+            });
+
+            if (res.ok) {
+              const data = await res.json().catch(() => ({}));
+              lastPdfBase64 = data.pdf_base64 || null;
+            }
+          } catch (pdfErr) {
+            console.warn("Renderer PDF unavailable; local blueprint still works.", pdfErr);
+          }
+
+          updateLayoutButtons();
 
         } catch (err) {
           const t1 = performance.now();
@@ -1852,9 +2156,7 @@ After any change, render again to preview the updated concept.`);
           console.error(err);
           layoutState.rendered = false;
           updateLayoutButtons();
-          setStatus("<span style='color:#fca5a5;'>Network error.</span> Check console.");
-        } finally {
-          updateLayoutButtons();
+          setStatus("<span style='color:#fca5a5;'>Blueprint generation error.</span> Check console.");
         }
       }
 
@@ -1914,6 +2216,7 @@ For this prototype, the current renderer PDF is now available${canDownload ? "" 
         if (e.key === "Enter") sendChat();
       });
 
+      btnAcceptProposal?.addEventListener("click", acceptProposal);
       btnRender.addEventListener("click", renderNow);
       btnConfirm.addEventListener("click", confirmLayout);
       btnPdf.addEventListener("click", downloadPdf);
@@ -1958,6 +2261,8 @@ For this prototype, the current renderer PDF is now available${canDownload ? "" 
       // Boot
       // ---------------------------
       setProgress(0, "Idle");
+      layoutState.proposalReady = false;
+      layoutState.proposalAccepted = false;
       layoutState.rendered = false;
       layoutState.confirmed = false;
       applyTransform();
@@ -1979,7 +2284,9 @@ Stage 1 only needs:
 • plot facing
 • number of floors
 
-You do not need wall thickness, door widths, windows or title-block details yet.`);
+Then I’ll propose a space program before anything is rendered.
+
+You can refine the proposal, accept it, and only then generate the technical blueprint.`);
 
       setStatus("Stage 1 · Concept — start with your plot size.");
     })();
