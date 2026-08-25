@@ -34,7 +34,7 @@ app = FastAPI(title="Still In Queue Backend", version="0.1.0")
 
 # OpenAI configuration.
 # Keep OPENAI_API_KEY in the hosting environment; never commit it to GitHub.
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.1")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
 
 
 def get_openai_client() -> OpenAI:
@@ -392,6 +392,398 @@ def test_openai() -> dict[str, Any]:
         "model": OPENAI_MODEL,
         "reply": response.output_text,
     }
+
+
+
+# ---------------------------------------------------------------------------
+# OpenAI real-estate conversation / requirements agent
+# ---------------------------------------------------------------------------
+
+class RealEstateChatRequest(BaseModel):
+    message: str
+    state: Optional[dict[str, Any]] = None
+    history: Optional[list[dict[str, Any]]] = None
+
+
+class RealEstateChatResponse(BaseModel):
+    reply: str
+    state: dict[str, Any]
+    missing_fields: list[str]
+    concept_ready: bool
+    proposal_ready: bool
+    proposal: Optional[dict[str, Any]] = None
+    interpreted_message: str
+    model: str
+
+
+REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "reply": {"type": "string"},
+        "interpreted_message": {"type": "string"},
+        "state": {
+            "type": "object",
+            "properties": {
+                "plot": {
+                    "type": "object",
+                    "properties": {
+                        "width": {"type": ["number", "null"]},
+                        "depth": {"type": ["number", "null"]},
+                        "unit": {
+                            "type": ["string", "null"],
+                            "enum": ["ft", "m", null],
+                        },
+                    },
+                    "required": ["width", "depth", "unit"],
+                    "additionalProperties": False,
+                },
+                "facing": {
+                    "type": ["string", "null"],
+                    "enum": ["N", "NE", "E", "SE", "S", "SW", "W", "NW", null],
+                },
+                "bedrooms": {"type": ["integer", "null"]},
+                "floors": {"type": ["integer", "null"]},
+                "floor_description": {"type": ["string", "null"]},
+                "planning_style": {
+                    "type": ["string", "null"],
+                    "enum": ["practical", "vastu", "modern", "accessible", null],
+                },
+                "bathrooms": {"type": ["integer", "null"]},
+                "parking_spaces": {"type": ["integer", "null"]},
+                "road_side": {
+                    "type": ["string", "null"],
+                    "enum": ["N", "NE", "E", "SE", "S", "SW", "W", "NW", null],
+                },
+                "site_context": {"type": ["string", "null"]},
+                "special_requirements": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "room_preferences": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "room": {"type": "string"},
+                            "preference": {"type": "string"},
+                        },
+                        "required": ["room", "preference"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": [
+                "plot",
+                "facing",
+                "bedrooms",
+                "floors",
+                "floor_description",
+                "planning_style",
+                "bathrooms",
+                "parking_spaces",
+                "road_side",
+                "site_context",
+                "special_requirements",
+                "room_preferences",
+            ],
+            "additionalProperties": False,
+        },
+        "missing_fields": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "concept_ready": {"type": "boolean"},
+        "proposal_ready": {"type": "boolean"},
+        "proposal": {
+            "type": ["object", "null"],
+            "properties": {
+                "summary": {"type": "string"},
+                "assumptions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "design_strategy": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "spaces": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "width_ft": {"type": ["number", "null"]},
+                            "depth_ft": {"type": ["number", "null"]},
+                            "area_sqft": {"type": ["number", "null"]},
+                            "preferred_zone": {"type": ["string", "null"]},
+                            "notes": {"type": ["string", "null"]},
+                        },
+                        "required": [
+                            "name",
+                            "width_ft",
+                            "depth_ft",
+                            "area_sqft",
+                            "preferred_zone",
+                            "notes",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+                "engineer_notes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "buyer_notes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+            },
+            "required": [
+                "summary",
+                "assumptions",
+                "design_strategy",
+                "spaces",
+                "engineer_notes",
+                "buyer_notes",
+            ],
+            "additionalProperties": False,
+        },
+    },
+    "required": [
+        "reply",
+        "interpreted_message",
+        "state",
+        "missing_fields",
+        "concept_ready",
+        "proposal_ready",
+        "proposal",
+    ],
+    "additionalProperties": False,
+}
+
+
+REAL_ESTATE_AGENT_INSTRUCTIONS = """
+You are the conversational requirements agent for Still In Queue's residential
+planning product.
+
+Your job is NOT to create structural engineering calculations and NOT to claim
+that a concept is construction-approved. Your job is to understand the user's
+natural-language requirements, maintain a clean structured state, ask only the
+next useful question, and create a sensible residential space-program proposal
+once the minimum concept requirements are known.
+
+IMPORTANT BEHAVIOUR
+
+1. Understand normal conversation, abbreviations, spelling mistakes and typos.
+   Examples:
+   - "norht" probably means north.
+   - "3bhk" means 3 bedrooms unless the user clearly means something else.
+   - "ground", "ground only", "ground floor" mean one floor.
+   - "g+1" means two floors total.
+   - "g+2" means three floors total.
+   - "88*97", "88x97", "88 × 97" are plot dimensions.
+   - If the unit is omitted and dimensions look like a normal Indian residential
+     plot in feet, use ft but say that you interpreted them as feet.
+   - Never silently make a high-impact assumption when clarification is safer.
+
+2. Preserve previously known state unless the user changes it.
+   The incoming "current_state" is the source of truth for facts established
+   earlier in the conversation.
+
+3. Minimum fields for concept readiness are:
+   - plot.width
+   - plot.depth
+   - plot.unit
+   - bedrooms
+   - facing
+   - floors
+
+4. Ask only ONE focused follow-up question at a time when required fields are
+   missing. Do not dump a giant questionnaire on the user.
+
+5. Optional requirements such as bathrooms, parking, Vastu, utility room,
+   balconies, pooja, stairs, accessibility, home office, garden, etc. can be
+   collected naturally. They do not block concept readiness unless the user
+   explicitly says they are essential.
+
+6. When all minimum fields are known:
+   - concept_ready must be true.
+   - proposal_ready should normally be true.
+   - generate a practical preliminary SPACE PROGRAM, not structural design.
+   - use realistic residential room sizes as a planning starting point.
+   - account for the plot dimensions and avoid proposing obviously impossible
+     room areas.
+   - include assumptions explicitly.
+   - engineer_notes should describe what a later technical drawing needs:
+     setbacks subject to local rules, wall/opening dimensions, circulation,
+     wet-area coordination, structural grid to be verified, etc.
+   - buyer_notes should describe the home in plain language: privacy,
+     circulation, natural light, room relationships, parking and usability.
+
+7. Do NOT invent local building-code setbacks as legal requirements. If the user
+   has not provided city/jurisdiction, describe setback values as concept
+   assumptions only and state that local regulations must be checked.
+
+8. A proposal is NOT a structural or permit drawing. Never say it is certified,
+   approved, safe for construction, or ready to build without professional
+   verification.
+
+9. Distinguish:
+   - user-provided facts,
+   - interpreted user intent,
+   - design assumptions,
+   - unresolved information.
+
+10. Keep "reply" conversational and concise. If a proposal is ready, summarize
+    the concept and tell the user that the application can now present it for
+    acceptance/refinement.
+
+11. Always return the FULL updated state, not only changed fields.
+
+12. "missing_fields" must contain only genuinely missing minimum concept fields.
+    Use these exact labels when applicable:
+    "plot size", "plot unit", "BHK / bedrooms", "plot facing", "floors".
+
+13. "road_side" usually equals facing for a conventional facing description
+    unless the user explicitly distinguishes them.
+
+14. If the user's message is ambiguous, do not hallucinate certainty. Explain
+    the likely interpretation in "interpreted_message" and ask for confirmation
+    in "reply" when needed.
+""".strip()
+
+
+def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str, Any]:
+    state = raw_state if isinstance(raw_state, dict) else {}
+    plot = state.get("plot") if isinstance(state.get("plot"), dict) else {}
+
+    room_preferences = state.get("room_preferences")
+    if not isinstance(room_preferences, list):
+        room_preferences = []
+
+    special_requirements = state.get("special_requirements")
+    if not isinstance(special_requirements, list):
+        special_requirements = []
+
+    return {
+        "plot": {
+            "width": plot.get("width"),
+            "depth": plot.get("depth"),
+            "unit": plot.get("unit"),
+        },
+        "facing": state.get("facing"),
+        "bedrooms": state.get("bedrooms"),
+        "floors": state.get("floors"),
+        "floor_description": state.get("floor_description"),
+        "planning_style": state.get("planning_style"),
+        "bathrooms": state.get("bathrooms"),
+        "parking_spaces": state.get("parking_spaces"),
+        "road_side": state.get("road_side"),
+        "site_context": state.get("site_context"),
+        "special_requirements": special_requirements,
+        "room_preferences": room_preferences,
+    }
+
+
+def trim_realestate_history(history: Optional[list[dict[str, Any]]]) -> list[dict[str, str]]:
+    if not isinstance(history, list):
+        return []
+
+    cleaned: list[dict[str, str]] = []
+    for item in history[-12:]:
+        if not isinstance(item, dict):
+            continue
+
+        role = str(item.get("role") or "").strip().lower()
+        content = str(item.get("content") or "").strip()
+
+        if role not in {"user", "assistant"} or not content:
+            continue
+
+        cleaned.append({
+            "role": role,
+            "content": content[:3000],
+        })
+
+    return cleaned
+
+
+@app.post("/api/realestate/chat", response_model=RealEstateChatResponse)
+def realestate_chat(payload: RealEstateChatRequest) -> RealEstateChatResponse:
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required.")
+
+    current_state = normalize_realestate_state(payload.state)
+    history = trim_realestate_history(payload.history)
+
+    # The stable instructions stay first for prompt-cache friendliness.
+    # Dynamic conversation data is appended at the end.
+    request_context = {
+        "current_state": current_state,
+        "recent_history": history,
+        "latest_user_message": message,
+    }
+
+    client = get_openai_client()
+
+    try:
+        response = client.responses.create(
+            model=OPENAI_MODEL,
+            instructions=REAL_ESTATE_AGENT_INSTRUCTIONS,
+            input=json.dumps(request_context, ensure_ascii=False),
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "real_estate_requirement_update",
+                    "strict": True,
+                    "schema": REAL_ESTATE_CHAT_SCHEMA,
+                },
+                "verbosity": "low",
+            },
+            store=False,
+        )
+    except Exception as exc:
+        message_text = str(exc).strip() or exc.__class__.__name__
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenAI real-estate chat failed: {message_text}",
+        ) from exc
+
+    raw_output = (response.output_text or "").strip()
+    if not raw_output:
+        raise HTTPException(
+            status_code=502,
+            detail="OpenAI returned an empty real-estate chat response.",
+        )
+
+    try:
+        result = json.loads(raw_output)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="OpenAI returned invalid structured JSON.",
+        ) from exc
+
+    # Basic server-side sanity checks even though Structured Outputs is strict.
+    state = result.get("state")
+    if not isinstance(state, dict):
+        raise HTTPException(status_code=502, detail="OpenAI response is missing state.")
+
+    missing_fields = result.get("missing_fields")
+    if not isinstance(missing_fields, list):
+        missing_fields = []
+
+    return RealEstateChatResponse(
+        reply=str(result.get("reply") or ""),
+        state=state,
+        missing_fields=[str(item) for item in missing_fields],
+        concept_ready=bool(result.get("concept_ready")),
+        proposal_ready=bool(result.get("proposal_ready")),
+        proposal=result.get("proposal"),
+        interpreted_message=str(result.get("interpreted_message") or message),
+        model=OPENAI_MODEL,
+    )
 
 
 
