@@ -966,22 +966,24 @@
       function localAgentReply(userText) {
         const t = (userText || "").toLowerCase();
 
-        // Plot size like 30x40 (feet) OR 9x12 (meters)
-        const sizeMatch = t.match(/(\d+(\.\d+)?)\s*(?:x|\*|×)\s*(\d+(\.\d+)?)/);
+        const lengthToMeters = (value, unit, fallbackUnit) => {
+          const normalized = (unit || fallbackUnit || "m").toLowerCase();
+          if (normalized.startsWith("in")) return value * 0.0254;
+          return normalized.startsWith("f") ? value * 0.3048 : value;
+        };
+        const formatMeters = (value) => +value.toFixed(2);
+
+        const sizeMatch = t.match(/(\d+(\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?\s*(?:x|\*|×|by)\s*(\d+(\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?/);
         let plotW = 9, plotH = 12;
         let units = "m";
         if (sizeMatch) {
           const a = parseFloat(sizeMatch[1]);
-          const b = parseFloat(sizeMatch[3]);
-          if (a >= 20 || b >= 20) {
-            // feet -> meters (approx), store units as m but note original
-            plotW = +(a * 0.3048).toFixed(2);
-            plotH = +(b * 0.3048).toFixed(2);
-            units = "m";
-          } else {
-            plotW = a; plotH = b;
-            units = "m";
-          }
+          const b = parseFloat(sizeMatch[4]);
+          const explicitUnit = sizeMatch[3] || sizeMatch[5];
+          const sourceUnits = explicitUnit || (a >= 20 || b >= 20 ? "ft" : "m");
+          plotW = formatMeters(lengthToMeters(a, sizeMatch[3], sourceUnits));
+          plotH = formatMeters(lengthToMeters(b, sizeMatch[5], sourceUnits));
+          units = "m";
         }
 
         const wants2bhk = t.includes("2bhk") || t.includes("2 bhk");
@@ -996,10 +998,22 @@
         const mMatch = t.match(/(\d+(\.\d+)?)\s*m\b/);
         if (mMatch && parseFloat(mMatch[1]) <= 1) wall = +parseFloat(mMatch[1]).toFixed(3);
 
-        // Very rough auto-layout (only to make renderer work)
-        const left = 0.6, front = 1.2;
-        const usableW = Math.max(2, plotW - 1.2);
-        const usableH = Math.max(2, plotH - 1.8);
+        const parseLengthAfter = (pattern, fallback) => {
+          const match = t.match(pattern);
+          return match ? formatMeters(lengthToMeters(parseFloat(match[1]), match[2], "m")) : fallback;
+        };
+        const setbacks = {
+          left: parseLengthAfter(/(?:left|side|sides)\s*setback\s*(?:is\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?/, 0.6),
+          right: parseLengthAfter(/right\s*setback\s*(?:is\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?/, 0.6),
+          front: parseLengthAfter(/front\s*setback\s*(?:is\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?/, 1.2),
+          back: parseLengthAfter(/back\s*setback\s*(?:is\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?/, 0.6)
+        };
+        const sideSetback = parseLengthAfter(/(?:setbacks?|margins?)\s*(?:of\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?\s*(?:on\s*)?sides?/, null);
+        if (sideSetback != null) setbacks.left = setbacks.right = sideSetback;
+
+        const left = setbacks.left, front = setbacks.front;
+        const usableW = Math.max(2, plotW - setbacks.left - setbacks.right);
+        const usableH = Math.max(2, plotH - setbacks.front - setbacks.back);
 
         const rooms = [];
         rooms.push({ name: "Living",  x: left, y: front, w: +(usableW * 0.52).toFixed(2), h: +(usableH * 0.28).toFixed(2) });
@@ -1014,27 +1028,37 @@
           rooms.push({ name: "Bed 3", x: +(left + usableW * 0.52).toFixed(2), y: +(front + usableH * 0.63).toFixed(2), w: +(usableW * 0.42).toFixed(2), h: +(usableH * 0.25).toFixed(2) });
         }
 
-        // Store "production-ready" details (future use)
+        const directionPattern = "north|south|east|west|ne|nw|se|sw|n|s|e|w";
+        const directionFor = (roomName) => {
+          const aliases = roomName === "Living" ? "living" : roomName === "Kitchen" ? "kitchen" : roomName.toLowerCase().replace(" ", "\\s*");
+          const match = t.match(new RegExp(`\\b${aliases}\\b.{0,35}\\b(${directionPattern})\\b|\\b(${directionPattern})\\b.{0,35}\\b${aliases}\\b`));
+          return match ? (match[1] || match[2]).toUpperCase() : null;
+        };
+        rooms.forEach((room) => {
+          room.direction = directionFor(room.name);
+        });
+
+        const facingMatch = t.match(/(?:facing|face(?:s|d)?\s+)(north|south|east|west|ne|nw|se|sw)\b|\b(north|south|east|west|ne|nw|se|sw)\s+facing\b/);
+        const facing = facingMatch ? (facingMatch[1] || facingMatch[2]).toUpperCase() : null;
+        const doorWidth = parseLengthAfter(/(?:main\s+)?door\s*(?:width\s*)?(?:of\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m|inch|in)?/, null);
+        const windowWallMatch = t.match(/windows?\s+(?:on|along)\s+(north|south|east|west|ne|nw|se|sw)\b/);
+
         draftPlan = {
           meta: { title: "Draft Plan (chat)" },
           plot: { w: plotW, h: plotH },
-          setbacks: { left: 0.6, right: 0.6, front: 1.2, back: 0.6 },
+          setbacks,
           production: {
             units,
             wall_thickness: wall,
-            // placeholders to be filled by real agent later
             scale: "1:100",
             north_arrow: true,
+            facing,
             title_block: { client: "Client", site: "Site", sheet: "A1" },
             dimension_lines: { outer_plot: true, inner_rooms: true }
           },
           openings: {
-            doors: [
-              // future schema: { room: "Living", wall: "south", width: 1.0, swing: "left", offset: 0.5 }
-            ],
-            windows: [
-              // future schema: { room: "Bed 1", wall: "north", width: 1.2, sill_height: 0.9, offset: 0.3 }
-            ]
+            doors: doorWidth != null ? [{ room: "Main", width: doorWidth, wall: facing || "south" }] : [],
+            windows: windowWallMatch ? [{ wall: windowWallMatch[1].toUpperCase() }] : []
           },
           rooms
         };
@@ -1044,13 +1068,14 @@
 
 • Plot: ${plotW} × ${plotH} (units: ${units})
 • Wall thickness: ${wall} m
-• Rooms: ${rooms.map(r => r.name).join(", ")}
+• Rooms: ${rooms.map(r => r.direction ? `${r.name} (${r.direction})` : r.name).join(", ")}
+${facing ? `• Facing: ${facing}` : ""}
+• Setbacks: ${setbacks.front} m front, ${setbacks.back} m back, ${setbacks.left} m sides
 
-Next, we will collect (via real agent):
-- doors (hinge + swing), windows
-- dimension lines (outer plot + inner rooms)
-- scale + north arrow
-- title block
+Captured details:
+- ${doorWidth != null ? `main door ${doorWidth} m` : "doors can include width and swing"}
+- ${windowWallMatch ? `windows on ${windowWallMatch[1].toUpperCase()}` : "windows can include wall and width"}
+- dimension lines, scale, north arrow, and title block
 
 For now, click "Render Layout" to preview.`;
 
