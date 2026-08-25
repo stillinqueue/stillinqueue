@@ -29,9 +29,9 @@ export function generateLayout(requirements) {
     ---------------------------------------------------------
     ADAPTIVE COMPACT FALLBACK
 
-    If the plan is tight and ANY required room cannot be
-    placed, remove the automatically-added family lounge and
-    retry, unless the user explicitly requested that lounge.
+    If ANY required room cannot be placed, remove the
+    automatically-added family lounge and retry, unless the
+    user explicitly requested that lounge.
 
     This is practical for compact 3BHK / 4BHK Indian plots:
     bedrooms, bathrooms, kitchen, dining and circulation take
@@ -54,7 +54,6 @@ export function generateLayout(requirements) {
     result.failedRooms.length > 0;
 
   if (
-    result.feasibility?.status === "tight" &&
     hasFailedRooms &&
     !familyLoungeExplicit
   ) {
@@ -98,8 +97,8 @@ export function generateLayout(requirements) {
     Utility is useful but not more important than bedrooms,
     bathrooms, living, dining, kitchen and circulation.
 
-    If the compact retry still cannot place all required rooms
-    and utility was only added by default, remove it and retry.
+    If the retry still cannot place all required rooms and
+    utility was only added by default, remove it and retry.
     ---------------------------------------------------------
   */
 
@@ -111,7 +110,6 @@ export function generateLayout(requirements) {
     result.failedRooms.length > 0;
 
   if (
-    result.feasibility?.status === "tight" &&
     stillHasFailedRooms &&
     !utilityExplicit
   ) {
@@ -597,6 +595,12 @@ function getPlacementPriority(
     case "bedroom":
       return 25;
 
+    case "attachedToilet":
+      return 26;
+
+    case "commonToilet":
+      return 27;
+
     case "kitchen":
       return 30;
 
@@ -605,12 +609,6 @@ function getPlacementPriority(
 
     case "familyLounge":
       return 40;
-
-    case "attachedToilet":
-      return 50;
-
-    case "commonToilet":
-      return 55;
 
     case "utility":
       return 60;
