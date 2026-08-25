@@ -597,7 +597,7 @@
       <div class="hero-kicker">SQ-AI · Design</div>
       <h1 class="hero-title">Real Estate Intelligence</h1>
       <p class="hero-subline">
-        Chat-driven concept planning + SVG blueprint preview + guided refinement + PDF export.
+        Chat-driven architectural planning + constraint-based layouts + engineer-style SVG blueprints + guided refinement + export.
         Start with what you know. The agent collects only the details needed for each stage and progressively turns them into a renderable layout.
       </p>
     </div>
@@ -612,7 +612,7 @@
         <h2 class="section-title">Modules</h2>
       </div>
       <p class="section-desc">
-        Layout Studio is live as a prototype. Next versions will produce construction-ready PDFs with full annotation and 3D.
+        Layout Studio combines OpenAI requirement capture with deterministic geometry, technical blueprint output and buyer-friendly presentation views.
       </p>
     </div>
 
@@ -678,7 +678,7 @@
             <button id="btnAcceptProposal" class="studio-btn-secondary" disabled>Accept Proposal</button>
             <button id="btnRender" class="studio-btn" disabled>Render Concept 1</button>
             <button id="btnConfirm" class="studio-btn-secondary" disabled>Confirm Layout</button>
-            <button id="btnDownloadPdf" class="studio-btn-secondary" disabled>Download PDF</button>
+            <button id="btnDownloadPdf" class="studio-btn-secondary" disabled>Download SVG</button>
           </div>
 
           <!-- Predictable wait UI -->
@@ -776,12 +776,12 @@
 
   <script type="module">
     import { generateLayout } from "./js/layout/layout-planner.js";
-    import { renderDebugLayout } from "./js/layout/debug-renderer.js";
+    import { renderBlueprintLayout, renderBuyerLayout, renderLayoutLegend } from "./js/layout/blueprint-renderer.js";
 
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "openai-planner-v6-dynamic";
+      const REAL_ESTATE_VERSION = "constraint-blueprint-v2";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -964,7 +964,7 @@
 
         btnRender.disabled = !(layoutState.proposalAccepted && layoutState.proposal && isConceptReady());
         btnConfirm.disabled = !layoutState.rendered;
-        btnPdf.disabled = !layoutState.confirmed || !lastPdfBase64;
+        btnPdf.disabled = !layoutState.confirmed || !layoutState.rendered;
         btnRender.textContent = layoutState.rendered ? "Re-render Layout" : "Render Concept 1";
       }
 
@@ -2716,7 +2716,32 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           );
         }
 
+        /*
+          Only treat bathroom count as explicit when the USER
+          actually mentioned bathrooms/toilets in chat.
+
+          OpenAI may infer a bathroom count in its state.
+          That inferred value must NOT override our practical
+          country/BHK defaults.
+
+          Example:
+          User says only "3BHK".
+          India default remains:
+            2 attached + 1 common
+
+          User says "3BHK with 2 bathrooms".
+          Then we respect the explicit total of 2.
+        */
+        const userExplicitlyMentionedBathrooms =
+          messages.some(
+            message =>
+              message.role === "user" &&
+              /\b(?:\d+\s*)?(?:bathroom|bathrooms|bath|baths|toilet|toilets|wc|washroom|washrooms)\b/i
+                .test(String(message.content || ""))
+          );
+
         const hasExplicitBathroomCount =
+          userExplicitlyMentionedBathrooms &&
           layoutState.bathrooms !== null &&
           layoutState.bathrooms !== undefined &&
           layoutState.bathrooms !== "" &&
@@ -2724,28 +2749,34 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           Number(layoutState.bathrooms) > 0;
 
         if (hasExplicitBathroomCount) {
-          const totalBathrooms = Number(layoutState.bathrooms);
+          const totalBathrooms =
+            Number(layoutState.bathrooms);
 
           if (country === "india") {
-            preferences.attachedBathroomCount = Math.max(
-              0,
-              Math.min(
-                Number(layoutState.bedrooms || 1),
-                totalBathrooms - 1
-              )
-            );
+            preferences.commonBathroomCount =
+              totalBathrooms >= 2 ? 1 : 0;
 
-            preferences.commonBathroomCount = 1;
+            preferences.attachedBathroomCount =
+              Math.max(
+                0,
+                Math.min(
+                  Number(layoutState.bedrooms || 1),
+                  totalBathrooms -
+                    preferences.commonBathroomCount
+                )
+              );
           }
 
           if (country === "germany") {
             preferences.attachedBathroomCount =
               totalBathrooms >= 2 ? 1 : 0;
 
-            preferences.commonBathroomCount = Math.max(
-              1,
-              totalBathrooms - preferences.attachedBathroomCount
-            );
+            preferences.commonBathroomCount =
+              Math.max(
+                1,
+                totalBathrooms -
+                  preferences.attachedBathroomCount
+              );
           }
         }
 
@@ -2873,9 +2904,32 @@ This is useful test information. The planner has refused to draw a knowingly inv
             return;
           }
 
-          renderDebugLayout(layout, preview);
+          const title =
+            `${layoutState.plot.width}×${layoutState.plot.depth} ${layoutState.bedrooms}BHK Concept`;
 
-          // Keep the Stage 8 result available for browser DevTools inspection.
+          renderBlueprintLayout(
+            layout,
+            preview,
+            {
+              requirements,
+              title
+            }
+          );
+
+          renderBuyerLayout(
+            layout,
+            buyerPreview,
+            {
+              requirements,
+              title
+            }
+          );
+
+          renderLayoutLegend(
+            layout,
+            legendEl
+          );
+
           window.currentConstraintLayout = layout;
           window.currentConstraintRequirements = requirements;
 
@@ -2891,9 +2945,18 @@ This is useful test information. The planner has refused to draw a knowingly inv
 
           const stats = layout.statistics;
 
+          const adaptations =
+            Array.isArray(layout.adaptations) &&
+            layout.adaptations.length
+              ? "\n\nCompact-plan adaptations:\n" +
+                layout.adaptations
+                  .map(x => `• ${x.room}: ${x.reason}`)
+                  .join("\n")
+              : "";
+
           addMessage(
             "assistant",
-            `Constraint-based Concept 1 generated.
+            `Blueprint generated.
 
 Country profile:
 ${layout.country}
@@ -2904,25 +2967,27 @@ ${layout.buildableArea.width} × ${layout.buildableArea.height} ${layout.unit}
 Rooms placed:
 ${stats.placedRooms} / ${stats.requestedRooms}
 
-Passage area:
-${stats.corridorArea} ${layout.unit}²
+Layout strategy:
+${layout.placementStrategy || "balanced"}
 
-This is currently the diagnostic architectural layout.
+Engineer Drawing now includes:
+• architectural wall linework
+• door openings and swing arcs
+• exterior windows
+• room names and dimensions
+• bedroom / bathroom / kitchen furniture cues
+• passage / circulation
+• plot dimensions
+• north arrow and road orientation
 
-Check:
-• room dimensions
-• corridor position
-• wasted space
-• bedroom locations
-• kitchen location
-• bathroom locations
-
-If something looks architecturally wrong, do not confirm it yet — send me the screenshot and we will improve the planner.`
+Buyer Plan uses the same geometry with a softer presentation style.${adaptations}`
           );
 
           setStatus(
-            "Stage 8 · Constraint layout test — inspect the room placement and passage."
+            "Blueprint V2 ready — review Engineer Drawing and Buyer Plan, then confirm."
           );
+
+          updateLayoutButtons();
 
           updateLayoutButtons();
 
@@ -2959,47 +3024,79 @@ If something looks architecturally wrong, do not confirm it yet — send me the 
         isConfirmed = true;
         layoutState.confirmed = true;
 
-        const canDownload = !!lastPdfBase64;
         updateLayoutButtons();
 
-        addMessage("assistant",
+        addMessage(
+          "assistant",
 `Layout confirmed.
 
-Stage 3 · Production details can be added next as the renderer evolves:
-• wall thickness
-• door widths and swings
-• window positions
-• exact dimensions
-• scale
-• north arrow
-• title block
+The Engineer Drawing can now be exported as SVG.
 
-For this prototype, the current renderer PDF is now available${canDownload ? "" : " only if the renderer returns one"}.`);
+You can still request a design change in chat. Any understood requirement change will invalidate this confirmation and create a new proposal before the next render.`
+        );
 
-        if (canDownload) {
-          setStatus("Stage 5 · Export — confirmed ✅ You can now <strong>Download PDF</strong>.");
-        } else {
-          setStatus("Confirmed ✅ PDF was not returned by the renderer.");
-        }
+        setStatus(
+          "Confirmed ✅ You can now <strong>Download SVG</strong>."
+        );
       }
+
 
       function downloadPdf() {
-        if (!lastPdfBase64 || !isConfirmed) return;
+        if (!isConfirmed || !layoutState.rendered) return;
 
-        const byteChars = atob(lastPdfBase64);
-        const byteNumbers = new Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+        const svg =
+          preview?.querySelector("svg");
 
-        const blob = new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
+        if (!svg) {
+          setStatus(
+            "<span style='color:#fca5a5;'>No SVG is available to export.</span>"
+          );
+          return;
+        }
 
-        const a = document.createElement("a");
+        const clone =
+          svg.cloneNode(true);
+
+        clone.setAttribute(
+          "xmlns",
+          "http://www.w3.org/2000/svg"
+        );
+
+        const source =
+          new XMLSerializer()
+            .serializeToString(clone);
+
+        const blob =
+          new Blob(
+            [source],
+            {
+              type:
+                "image/svg+xml;charset=utf-8"
+            }
+          );
+
+        const url =
+          URL.createObjectURL(blob);
+
+        const a =
+          document.createElement("a");
+
         a.href = url;
-        a.download = "layout.pdf";
+
+        a.download =
+          `stillinqueue-${layoutState.bedrooms || "home"}bhk-blueprint.svg`;
+
+        document.body.appendChild(a);
         a.click();
+        a.remove();
 
         URL.revokeObjectURL(url);
+
+        setStatus(
+          "Blueprint SVG exported ✅"
+        );
       }
+
 
       // ---------------------------
       // Wire events
