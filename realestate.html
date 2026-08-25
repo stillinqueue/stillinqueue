@@ -631,12 +631,58 @@
         }
       };
 
-      // State
-      const messages = []; // { role: "user"|"assistant", content: string }
-      let draftPlan = null; // plan object (NOT payload wrapper)
-      let lastPdfBase64 = null;
-      let isConfirmed = false;
-      let is3D = false;
+     // State
+const messages = []; // { role: "user"|"assistant", content: string }
+let draftPlan = null; // plan object (NOT payload wrapper)
+let lastPdfBase64 = null;
+let isConfirmed = false;
+let is3D = false;
+
+// NEW: central requirements state
+const layoutState = {
+  stage: 1,
+
+  plot: {
+    width: null,
+    depth: null,
+    unit: "ft"
+  },
+
+  facing: null,
+  bedrooms: null,
+  floors: null,
+
+  planningStyle: null,
+
+  bathrooms: null,
+  parking: null,
+
+  rooms: {
+    living: null,
+    kitchen: null,
+    dining: null,
+    masterBedroom: null,
+    bedroom2: null,
+    bedroom3: null,
+    staircase: null,
+    utility: null,
+    pooja: null
+  },
+
+  production: {
+    exteriorWallThickness: null,
+    interiorWallThickness: null,
+    mainDoorWidth: null,
+    internalDoorWidth: null,
+    scale: null,
+    titleBlock: null
+  },
+
+  rendered: false,
+  confirmed: false
+};
+
+function setStatus(html) { statusEl.innerHTML = html; }
 
       function setStatus(html) { statusEl.innerHTML = html; }
 
