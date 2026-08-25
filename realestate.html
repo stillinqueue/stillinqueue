@@ -2716,7 +2716,14 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           );
         }
 
-        if (Number.isFinite(Number(layoutState.bathrooms))) {
+        const hasExplicitBathroomCount =
+          layoutState.bathrooms !== null &&
+          layoutState.bathrooms !== undefined &&
+          layoutState.bathrooms !== "" &&
+          Number.isFinite(Number(layoutState.bathrooms)) &&
+          Number(layoutState.bathrooms) > 0;
+
+        if (hasExplicitBathroomCount) {
           const totalBathrooms = Number(layoutState.bathrooms);
 
           if (country === "india") {
@@ -2727,11 +2734,14 @@ Click “Render Concept 1” to generate the technical blueprint.`;
                 totalBathrooms - 1
               )
             );
-            preferences.commonBathroomCount = totalBathrooms > 0 ? 1 : 0;
+
+            preferences.commonBathroomCount = 1;
           }
 
           if (country === "germany") {
-            preferences.attachedBathroomCount = totalBathrooms >= 2 ? 1 : 0;
+            preferences.attachedBathroomCount =
+              totalBathrooms >= 2 ? 1 : 0;
+
             preferences.commonBathroomCount = Math.max(
               1,
               totalBathrooms - preferences.attachedBathroomCount
