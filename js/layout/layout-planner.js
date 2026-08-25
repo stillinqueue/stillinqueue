@@ -29,12 +29,13 @@ export function generateLayout(requirements) {
     ---------------------------------------------------------
     ADAPTIVE COMPACT FALLBACK
 
-    If the plan is tight and the user did NOT explicitly ask
-    for a family lounge, remove that optional room and retry.
+    If the plan is tight and ANY required room cannot be
+    placed, remove the automatically-added family lounge and
+    retry, unless the user explicitly requested that lounge.
 
-    This is practical for compact 3BHK / 4BHK Indian plots
-    such as 30x40 where a separate family lounge often makes
-    the plan unnecessarily difficult.
+    This is practical for compact 3BHK / 4BHK Indian plots:
+    bedrooms, bathrooms, kitchen, dining and circulation take
+    priority over a separate optional family lounge.
 
     IMPORTANT:
     If the user explicitly requested a family lounge,
@@ -48,17 +49,13 @@ export function generateLayout(requirements) {
   const familyLoungeExplicit =
     typeof preferences.familyLounge === "boolean";
 
-  const familyLoungeFailed =
+  const hasFailedRooms =
     Array.isArray(result.failedRooms) &&
-    result.failedRooms.some(
-      room =>
-        room.id === "family-lounge" ||
-        room.name === "Family Lounge"
-    );
+    result.failedRooms.length > 0;
 
   if (
     result.feasibility?.status === "tight" &&
-    familyLoungeFailed &&
+    hasFailedRooms &&
     !familyLoungeExplicit
   ) {
     const compactRequirements = {
@@ -99,27 +96,23 @@ export function generateLayout(requirements) {
     SECOND COMPACT FALLBACK
 
     Utility is useful but not more important than bedrooms,
-    bathrooms, living, dining and kitchen.
+    bathrooms, living, dining, kitchen and circulation.
 
-    If the default utility was automatically added and the
-    user did not explicitly request it, retry without it.
+    If the compact retry still cannot place all required rooms
+    and utility was only added by default, remove it and retry.
     ---------------------------------------------------------
   */
 
   const utilityExplicit =
     typeof preferences.utility === "boolean";
 
-  const utilityFailed =
+  const stillHasFailedRooms =
     Array.isArray(result.failedRooms) &&
-    result.failedRooms.some(
-      room =>
-        room.id === "utility" ||
-        room.name === "Utility"
-    );
+    result.failedRooms.length > 0;
 
   if (
     result.feasibility?.status === "tight" &&
-    utilityFailed &&
+    stillHasFailedRooms &&
     !utilityExplicit
   ) {
     const compactRequirements = {
