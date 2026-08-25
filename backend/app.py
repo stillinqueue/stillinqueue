@@ -1,3 +1,6 @@
+import base64
+import io
+import json
 import os
 import secrets
 import shlex
@@ -14,6 +17,8 @@ from urllib.request import urlopen
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.pdfgen import canvas as pdf_canvas
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 
@@ -103,6 +108,20 @@ def init_db() -> None:
                   AND payment_provider IS NULL
                   AND payment_last4 IS NULL
                   AND payment_renewal_at IS NULL
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS plans (
+                    id TEXT PRIMARY KEY,
+                    user_email TEXT,
+                    plan_json TEXT NOT NULL,
+                    svg TEXT NOT NULL,
+                    pdf_base64 TEXT,
+                    created_at TEXT NOT NULL
+                )
                 """
             )
         )
@@ -693,3 +712,204 @@ def get_inventorypulse_status() -> dict[str, Any]:
         "backend_online": backend_online,
         "is_ready": frontend_online and backend_online,
     }
+
+
+# ---------------------------------------------------------------------------
+# Real estate plan renderer (realestate.html: Chat -> Render -> Confirm -> Download)
+# ---------------------------------------------------------------------------
+
+ROOM_COLORS = {
+    "living": "#3b82f6",
+    "kitchen": "#22c55e",
+    "bed": "#a78bfa",
+    "bath": "#f59e0b",
+    "toilet": "#f59e0b",
+    "pooja": "#14b8a6",
+    "dining": "#60a5fa",
+}
+DEFAULT_ROOM_COLOR = "#38bdf8"
+
+
+def room_color(name: Optional[str]) -> str:
+    lowered = (name or "").lower()
+    for key, color in ROOM_COLORS.items():
+        if key in lowered:
+            return color
+    return DEFAULT_ROOM_COLOR
+
+
+def hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
+    hex_color = hex_color.lstrip("#")
+    return (
+        int(hex_color[0:2], 16) / 255,
+        int(hex_color[2:4], 16) / 255,
+        int(hex_color[4:6], 16) / 255,
+    )
+
+
+def build_plan_svg(plan: dict[str, Any], plot_w: float, plot_h: float) -> str:
+    setbacks = plan.get("setbacks") or {}
+    left = float(setbacks.get("left") or 0)
+    right = float(setbacks.get("right") or 0)
+    front = float(setbacks.get("front") or 0)
+    back = float(setbacks.get("back") or 0)
+
+    buildable_x = left
+    buildable_y = front
+    buildable_w = max(0.0, plot_w - left - right)
+    buildable_h = max(0.0, plot_h - front - back)
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {plot_w} {plot_h}" '
+        f'width="{plot_w * 100:.0f}" height="{plot_h * 100:.0f}">',
+        f'<rect x="0" y="0" width="{plot_w}" height="{plot_h}" fill="#0b1120" '
+        f'stroke="#94a3b8" stroke-width="0.05" />',
+    ]
+    if buildable_w > 0 and buildable_h > 0:
+        parts.append(
+            f'<rect x="{buildable_x}" y="{buildable_y}" width="{buildable_w}" height="{buildable_h}" '
+            f'fill="none" stroke="#64748b" stroke-dasharray="0.15,0.1" stroke-width="0.03" />'
+        )
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def build_plan_pdf_base64(plan: dict[str, Any], plot_w: float, plot_h: float) -> Optional[str]:
+    try:
+        rooms = plan.get("rooms") or []
+        meta = plan.get("meta") or {}
+        production = plan.get("production") or {}
+        title_block = production.get("title_block") or {}
+
+        page_size = landscape(A4) if plot_w >= plot_h else A4
+        page_w, page_h = page_size
+        margin = 40.0
+        header_h = 46.0
+        footer_h = 46.0
+
+        avail_w = page_w - margin * 2
+        avail_h = page_h - margin * 2 - header_h - footer_h
+        scale = max(1.0, min(avail_w / plot_w, avail_h / plot_h))
+
+        origin_x = margin
+        origin_y = margin + footer_h
+
+        def to_pdf(x_m: float, y_m: float) -> tuple[float, float]:
+            return origin_x + x_m * scale, origin_y + (plot_h - y_m) * scale
+
+        buf = io.BytesIO()
+        c = pdf_canvas.Canvas(buf, pagesize=page_size)
+
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(margin, page_h - margin, str(meta.get("title") or "Floor Plan"))
+        c.setFont("Helvetica", 9)
+        scale_label = production.get("scale")
+        if scale_label:
+            c.drawRightString(page_w - margin, page_h - margin, f"Scale: {scale_label}")
+
+        px, py = to_pdf(0, plot_h)
+        c.setStrokeColorRGB(0.55, 0.6, 0.7)
+        c.setLineWidth(1.2)
+        c.rect(px, py, plot_w * scale, plot_h * scale, stroke=1, fill=0)
+
+        for room in rooms:
+            try:
+                rx = float(room.get("x", 0))
+                ry = float(room.get("y", 0))
+                rw = float(room.get("w", 0))
+                rh = float(room.get("h", 0))
+            except (TypeError, ValueError):
+                continue
+            if rw <= 0 or rh <= 0:
+                continue
+
+            name = str(room.get("name") or "Room")
+            r, g, b = hex_to_rgb01(room_color(name))
+            x0, y0 = to_pdf(rx, ry + rh)
+            box_w, box_h = rw * scale, rh * scale
+
+            c.setFillColorRGB(r, g, b)
+            c.setFillAlpha(0.18)
+            c.setStrokeColorRGB(r, g, b)
+            c.setStrokeAlpha(0.9)
+            c.setLineWidth(1)
+            c.rect(x0, y0, box_w, box_h, stroke=1, fill=1)
+
+            c.setFillAlpha(1)
+            c.setStrokeAlpha(1)
+            c.setFillColorRGB(0.15, 0.18, 0.25)
+            cx, cy = x0 + box_w / 2, y0 + box_h / 2
+            c.setFont("Helvetica-Bold", 8)
+            c.drawCentredString(cx, cy + 3, name)
+            c.setFont("Helvetica", 7)
+            c.drawCentredString(cx, cy - 8, f"{rw:.2f} x {rh:.2f} m")
+
+        footer_lines = [
+            value
+            for value in (
+                f"Client: {title_block.get('client')}" if title_block.get("client") else None,
+                f"Site: {title_block.get('site')}" if title_block.get("site") else None,
+                f"Sheet: {title_block.get('sheet')}" if title_block.get("sheet") else None,
+            )
+            if value
+        ]
+        c.setFillColorRGB(0.4, 0.4, 0.4)
+        c.setFont("Helvetica", 8)
+        for i, line in enumerate(footer_lines):
+            c.drawString(margin, margin - 4 + (len(footer_lines) - 1 - i) * 11, line)
+
+        c.showPage()
+        c.save()
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        # PDF export is a bonus; never let it break SVG rendering.
+        return None
+
+
+class PlanRenderRequest(BaseModel):
+    plan: dict[str, Any]
+
+
+class PlanRenderResponse(BaseModel):
+    svg: str
+    pdf_base64: Optional[str] = None
+
+
+@app.post("/api/plans/render", response_model=PlanRenderResponse)
+def render_plan(payload: PlanRenderRequest) -> PlanRenderResponse:
+    plan = payload.plan or {}
+    plot = plan.get("plot") or {}
+
+    try:
+        plot_w = float(plot.get("w"))
+        plot_h = float(plot.get("h"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="plan.plot.w and plan.plot.h are required numbers.")
+
+    if plot_w <= 0 or plot_h <= 0:
+        raise HTTPException(status_code=400, detail="plan.plot.w and plan.plot.h must be positive.")
+
+    rooms = plan.get("rooms")
+    if rooms is not None and not isinstance(rooms, list):
+        raise HTTPException(status_code=400, detail="plan.rooms must be a list.")
+
+    svg = build_plan_svg(plan, plot_w, plot_h)
+    pdf_base64 = build_plan_pdf_base64(plan, plot_w, plot_h)
+
+    plan_id = secrets.token_urlsafe(16)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO plans (id, plan_json, svg, pdf_base64, created_at) "
+                "VALUES (:id, :plan_json, :svg, :pdf_base64, :created_at)"
+            ),
+            {
+                "id": plan_id,
+                "plan_json": json.dumps(plan),
+                "svg": svg,
+                "pdf_base64": pdf_base64,
+                "created_at": datetime.utcnow().isoformat() + "Z",
+            },
+        )
+
+    return PlanRenderResponse(svg=svg, pdf_base64=pdf_base64)
