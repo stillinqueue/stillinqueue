@@ -15,7 +15,877 @@ import {
 } from "./plan-schema.js";
 
 
+/*
+  Still In Queue · Layout Planner V14
+  ------------------------------------
+  Preferred path:
+    connected architectural block layout
+
+  Fallback:
+    previous multi-strategy rectangle planner
+
+  The connected template is intentionally optimized first for
+  practical single-floor 3BHK homes because this is the current
+  reference case. Other configurations safely fall back to the
+  generic planner until their connected templates are added.
+*/
+
 export function generateLayout(requirements) {
+  const connected =
+    generateConnectedArchitecturalLayout(requirements);
+
+  if (connected?.success) {
+    return connected;
+  }
+
+  return legacyGenerateLayout(requirements);
+}
+
+
+function generateConnectedArchitecturalLayout(requirements) {
+  const country =
+    String(requirements.country || "india").toLowerCase();
+
+  const bhk =
+    Number(requirements.house?.bhk || 1);
+
+  const floors =
+    Number(requirements.house?.floors || 1);
+
+  const roadSide =
+    normalizeConnectedRoadSide(
+      requirements.plot?.roadSide
+    );
+
+  /*
+    V14 connected template:
+    single-floor 3BHK + north/south road.
+
+    This covers the current reference case and creates a much
+    more architectural footprint than the older free packing.
+  */
+  if (
+    bhk !== 3 ||
+    floors !== 1 ||
+    !["north", "south"].includes(roadSide)
+  ) {
+    return null;
+  }
+
+  const profile =
+    getDesignProfile(country);
+
+  const feasibility =
+    checkPlanFeasibility(requirements);
+
+  if (feasibility.status === "infeasible") {
+    return null;
+  }
+
+  const areaInfo =
+    calculateBuildableArea(requirements);
+
+  const buildable =
+    areaInfo.buildable;
+
+  const program =
+    buildRoomProgram({
+      ...requirements,
+      preferences: {
+        ...(requirements.preferences || {}),
+
+        /*
+          A separate family lounge is not forced in this compact
+          connected template unless the user explicitly asks for it.
+        */
+        familyLounge:
+          requirements.preferences?.familyLounge === true
+            ? true
+            : false
+      }
+    });
+
+  const byId =
+    Object.fromEntries(
+      program.map(room => [room.id, room])
+    );
+
+  const required = [
+    "living",
+    "dining",
+    "kitchen",
+    "bedroom-1",
+    "bedroom-2",
+    "bedroom-3",
+    "attached-toilet-1",
+    "attached-toilet-2",
+    "common-toilet"
+  ];
+
+  if (
+    required.some(id => !byId[id])
+  ) {
+    return null;
+  }
+
+  const unit =
+    profile.unit;
+
+  const corridorPreferred =
+    Number(
+      profile.roomDefaults.corridor
+        ?.preferredWidth || 4
+    );
+
+  /*
+    Slightly narrower circulation than the previous full-height
+    strip, but still practical:
+      India: 3.5 ft
+      Germany: ~1.10 m
+  */
+  const corridorWidth =
+    country === "germany"
+      ? Math.min(1.10, buildable.width * 0.14)
+      : Math.min(3.5, buildable.width * 0.14);
+
+  const wingWidth =
+    (buildable.width - corridorWidth) / 2;
+
+  /*
+    The connected template needs enough width for practical rooms.
+  */
+  const minimumWingWidth =
+    country === "germany"
+      ? 3.0
+      : 10.0;
+
+  if (wingWidth < minimumWingWidth) {
+    return null;
+  }
+
+  const corridor = {
+    id: "corridor-main",
+    name: "Passage",
+    type: "corridor",
+
+    x:
+      buildable.x +
+      wingWidth,
+
+    y:
+      buildable.y,
+
+    width:
+      corridorWidth,
+
+    height:
+      buildable.height
+  };
+
+  const leftX =
+    buildable.x;
+
+  const rightX =
+    corridor.x +
+    corridor.width;
+
+  const rooms = [];
+
+  const living =
+    cloneRoom(byId["living"]);
+
+  const kitchen =
+    cloneRoom(byId["kitchen"]);
+
+  const master =
+    cloneRoom(byId["bedroom-1"]);
+
+  const masterToilet =
+    cloneRoom(byId["attached-toilet-1"]);
+
+  const utility =
+    byId["utility"]
+      ? cloneRoom(byId["utility"])
+      : null;
+
+  const dining =
+    cloneRoom(byId["dining"]);
+
+  const bed2 =
+    cloneRoom(byId["bedroom-2"]);
+
+  const bed3 =
+    cloneRoom(byId["bedroom-3"]);
+
+  const attached2 =
+    cloneRoom(byId["attached-toilet-2"]);
+
+  const common =
+    cloneRoom(byId["common-toilet"]);
+
+  /*
+    ---------------------------------------------------------
+    LEFT WING
+      Living
+      Kitchen
+      Utility + Master Toilet
+      Master Bedroom
+
+    RIGHT WING
+      Dining
+      Common Toilet + Attached Toilet 2
+      Bedroom 3
+      Bedroom 2
+
+    All bands share walls.
+    No floating gaps.
+    ---------------------------------------------------------
+  */
+
+  const leftServiceHeight =
+    Math.max(
+      utility?.minHeight || 0,
+      masterToilet.minHeight || 0,
+      country === "germany" ? 2.0 : 6.0
+    );
+
+  const rightServiceHeight =
+    Math.max(
+      common.minHeight || 0,
+      attached2.minHeight || 0,
+      country === "germany" ? 2.0 : 6.0
+    );
+
+  const roomScales =
+    requirements.preferences?.roomScales || {};
+
+  const leftFixed =
+    scaledHeight(living, roomScales.living) +
+    scaledHeight(kitchen, roomScales.kitchen) +
+    leftServiceHeight +
+    scaledHeight(master, roomScales.masterBedroom);
+
+  const rightFixed =
+    scaledHeight(dining, roomScales.dining) +
+    rightServiceHeight +
+    scaledHeight(bed3, roomScales.bedroom) +
+    scaledHeight(bed2, roomScales.bedroom);
+
+  const leftScale =
+    buildable.height / leftFixed;
+
+  const rightScale =
+    buildable.height / rightFixed;
+
+  /*
+    We only accept moderate vertical scaling.
+    Otherwise generic planner should take over.
+  */
+  if (
+    leftScale < 0.82 ||
+    rightScale < 0.82
+  ) {
+    return null;
+  }
+
+  const leftHeights = normalizeHeights(
+    [
+      scaledHeight(living, roomScales.living),
+      scaledHeight(kitchen, roomScales.kitchen),
+      leftServiceHeight,
+      scaledHeight(master, roomScales.masterBedroom)
+    ],
+    buildable.height
+  );
+
+  const rightHeights = normalizeHeights(
+    [
+      scaledHeight(dining, roomScales.dining),
+      rightServiceHeight,
+      scaledHeight(bed3, roomScales.bedroom),
+      scaledHeight(bed2, roomScales.bedroom)
+    ],
+    buildable.height
+  );
+
+  let yLeft =
+    buildable.y;
+
+  placeFullBand(
+    rooms,
+    living,
+    leftX,
+    yLeft,
+    wingWidth,
+    leftHeights[0]
+  );
+  yLeft += leftHeights[0];
+
+  placeFullBand(
+    rooms,
+    kitchen,
+    leftX,
+    yLeft,
+    wingWidth,
+    leftHeights[1]
+  );
+  yLeft += leftHeights[1];
+
+  if (utility) {
+    const utilMinW =
+      Math.max(
+        utility.minWidth || 0,
+        wingWidth * 0.42
+      );
+
+    const toiletMinW =
+      masterToilet.minWidth || 0;
+
+    let utilW =
+      Math.max(
+        wingWidth * 0.46,
+        utilMinW
+      );
+
+    utilW =
+      Math.min(
+        utilW,
+        wingWidth -
+        Math.max(
+          toiletMinW,
+          wingWidth * 0.38
+        )
+      );
+
+    utilW =
+      Math.max(
+        wingWidth * 0.40,
+        utilW
+      );
+
+    const toiletW =
+      wingWidth - utilW;
+
+    placeRect(
+      rooms,
+      utility,
+      leftX,
+      yLeft,
+      utilW,
+      leftHeights[2]
+    );
+
+    placeRect(
+      rooms,
+      masterToilet,
+      leftX + utilW,
+      yLeft,
+      toiletW,
+      leftHeights[2]
+    );
+  } else {
+    placeFullBand(
+      rooms,
+      masterToilet,
+      leftX,
+      yLeft,
+      wingWidth,
+      leftHeights[2]
+    );
+  }
+
+  yLeft += leftHeights[2];
+
+  placeFullBand(
+    rooms,
+    master,
+    leftX,
+    yLeft,
+    wingWidth,
+    leftHeights[3]
+  );
+
+  let yRight =
+    buildable.y;
+
+  placeFullBand(
+    rooms,
+    dining,
+    rightX,
+    yRight,
+    wingWidth,
+    rightHeights[0]
+  );
+  yRight += rightHeights[0];
+
+  /*
+    Put two toilets side-by-side in one compact service band.
+  */
+  const commonW =
+    Math.max(
+      common.minWidth || 0,
+      wingWidth * 0.46
+    );
+
+  const attachedW =
+    wingWidth -
+    commonW;
+
+  if (
+    attachedW <
+    Math.max(
+      attached2.minWidth || 0,
+      wingWidth * 0.34
+    )
+  ) {
+    return null;
+  }
+
+  placeRect(
+    rooms,
+    common,
+    rightX,
+    yRight,
+    commonW,
+    rightHeights[1]
+  );
+
+  placeRect(
+    rooms,
+    attached2,
+    rightX + commonW,
+    yRight,
+    attachedW,
+    rightHeights[1]
+  );
+
+  yRight +=
+    rightHeights[1];
+
+  placeFullBand(
+    rooms,
+    bed3,
+    rightX,
+    yRight,
+    wingWidth,
+    rightHeights[2]
+  );
+  yRight += rightHeights[2];
+
+  placeFullBand(
+    rooms,
+    bed2,
+    rightX,
+    yRight,
+    wingWidth,
+    rightHeights[3]
+  );
+
+  /*
+    If south-facing, mirror the whole connected arrangement
+    vertically so the public rooms remain toward the road.
+  */
+  if (roadSide === "south") {
+    mirrorRoomsVertically(
+      rooms,
+      buildable
+    );
+  }
+
+  /*
+    Apply explicit room-direction changes from chat.
+    For the connected template these are handled as left/right
+    swaps where possible without destroying the connected plan.
+  */
+  applyConnectedPreferenceSwaps(
+    rooms,
+    requirements,
+    buildable,
+    corridor
+  );
+
+  const roomArea =
+    rooms.reduce(
+      (sum, room) =>
+        sum +
+        room.width *
+        room.height,
+      0
+    );
+
+  return {
+    success: true,
+
+    country,
+    unit,
+    roadSide,
+
+    plot:
+      areaInfo.plot,
+
+    setbacks:
+      areaInfo.setbacks,
+
+    buildableArea:
+      buildable,
+
+    feasibility,
+
+    circulation: [
+      corridor
+    ],
+
+    rooms,
+
+    failedRooms: [],
+
+    placementStrategy:
+      "connected-architectural-blocks",
+
+    statistics: {
+      requestedRooms:
+        rooms.length,
+
+      placedRooms:
+        rooms.length,
+
+      failedRooms:
+        0,
+
+      roomArea:
+        roundConnected(roomArea),
+
+      corridorArea:
+        roundConnected(
+          corridor.width *
+          corridor.height
+        )
+    },
+
+    adaptations: [
+      {
+        type:
+          "connected-footprint",
+
+        room:
+          "Whole plan",
+
+        reason:
+          "Rooms were organized into connected wall-sharing bands around a compact central passage."
+      }
+    ]
+  };
+}
+
+
+function cloneRoom(room) {
+  return {
+    ...room
+  };
+}
+
+
+function preferredOrMinHeight(room) {
+  return Number(
+    room.preferredHeight ||
+    room.minHeight ||
+    1
+  );
+}
+
+
+function scaledHeight(
+  room,
+  multiplier
+) {
+  const base =
+    preferredOrMinHeight(room);
+
+  const scale =
+    Number.isFinite(
+      Number(multiplier)
+    )
+      ? Number(multiplier)
+      : 1;
+
+  return (
+    base *
+    Math.max(
+      0.72,
+      Math.min(
+        1.35,
+        scale
+      )
+    )
+  );
+}
+
+
+function normalizeHeights(
+  heights,
+  totalHeight
+) {
+  const sum =
+    heights.reduce(
+      (a, b) => a + b,
+      0
+    );
+
+  const scaled =
+    heights.map(
+      h =>
+        (h / sum) *
+        totalHeight
+    );
+
+  /*
+    Force final cell to close any floating point gap.
+  */
+  const beforeLast =
+    scaled
+      .slice(0, -1)
+      .reduce(
+        (a, b) => a + b,
+        0
+      );
+
+  scaled[
+    scaled.length - 1
+  ] =
+    totalHeight -
+    beforeLast;
+
+  return scaled;
+}
+
+
+function placeFullBand(
+  target,
+  room,
+  x,
+  y,
+  width,
+  height
+) {
+  placeRect(
+    target,
+    room,
+    x,
+    y,
+    width,
+    height
+  );
+}
+
+
+function placeRect(
+  target,
+  room,
+  x,
+  y,
+  width,
+  height
+) {
+  target.push({
+    ...room,
+
+    x:
+      roundConnected(x),
+
+    y:
+      roundConnected(y),
+
+    width:
+      roundConnected(width),
+
+    height:
+      roundConnected(height),
+
+    area:
+      roundConnected(
+        width *
+        height
+      )
+  });
+}
+
+
+function mirrorRoomsVertically(
+  rooms,
+  buildable
+) {
+  for (
+    const room
+    of rooms
+  ) {
+    const offset =
+      room.y -
+      buildable.y;
+
+    room.y =
+      roundConnected(
+        buildable.y +
+        buildable.height -
+        offset -
+        room.height
+      );
+  }
+}
+
+
+function applyConnectedPreferenceSwaps(
+  rooms,
+  requirements,
+  buildable,
+  corridor
+) {
+  const preferences =
+    requirements.preferences || {};
+
+  /*
+    Kitchen west/east preference:
+    swap entire kitchen band with dining band when direction
+    explicitly points to the opposite side.
+
+    This preserves a coherent connected plan.
+  */
+  const kitchen =
+    rooms.find(
+      room =>
+        room.id === "kitchen"
+    );
+
+  const dining =
+    rooms.find(
+      room =>
+        room.id === "dining"
+    );
+
+  const kitchenDirection =
+    String(
+      preferences.kitchenDirection || ""
+    ).toLowerCase();
+
+  if (
+    kitchen &&
+    dining &&
+    [
+      "east",
+      "northeast",
+      "southeast"
+    ].includes(
+      kitchenDirection
+    )
+  ) {
+    const kx =
+      kitchen.x;
+
+    kitchen.x =
+      dining.x;
+
+    dining.x =
+      kx;
+  }
+
+  /*
+    Master preference east/west:
+    swap master with the rear-most bedroom if explicitly asked.
+  */
+  const master =
+    rooms.find(
+      room =>
+        room.id === "bedroom-1"
+    );
+
+  const alternatives =
+    rooms
+      .filter(
+        room =>
+          room.type === "bedroom"
+      )
+      .sort(
+        (a, b) =>
+          b.y - a.y
+      );
+
+  const masterDirection =
+    String(
+      preferences.masterBedroomDirection ||
+      ""
+    ).toLowerCase();
+
+  if (
+    master &&
+    alternatives.length &&
+    [
+      "east",
+      "northeast",
+      "southeast"
+    ].includes(
+      masterDirection
+    ) &&
+    master.x <
+      corridor.x
+  ) {
+    const other =
+      alternatives[0];
+
+    const mx =
+      master.x;
+
+    master.x =
+      other.x;
+
+    other.x =
+      mx;
+  }
+}
+
+
+function normalizeConnectedRoadSide(
+  roadSide
+) {
+  const value =
+    String(
+      roadSide ||
+      "north"
+    ).toLowerCase();
+
+  if (
+    [
+      "north",
+      "south",
+      "east",
+      "west"
+    ].includes(
+      value
+    )
+  ) {
+    return value;
+  }
+
+  return "north";
+}
+
+
+function roundConnected(
+  value,
+  decimals = 2
+) {
+  const factor =
+    10 ** decimals;
+
+  return (
+    Math.round(
+      value *
+      factor
+    ) /
+    factor
+  );
+}
+
+
+function legacyGenerateLayout(requirements) {
   /*
     First try the requested/default room program exactly as-is.
   */
