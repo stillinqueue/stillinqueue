@@ -427,34 +427,34 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                 "plot": {
                     "type": "object",
                     "properties": {
-                        "width": {"type": ["number", "null"]},
-                        "depth": {"type": ["number", "null"]},
+                        "width": {"type": ["number", "None"]},
+                        "depth": {"type": ["number", "None"]},
                         "unit": {
-                            "type": ["string", "null"],
-                            "enum": ["ft", "m", null],
+                            "type": ["string", "None"],
+                            "enum": ["ft", "m", None],
                         },
                     },
                     "required": ["width", "depth", "unit"],
                     "additionalProperties": False,
                 },
                 "facing": {
-                    "type": ["string", "null"],
-                    "enum": ["N", "NE", "E", "SE", "S", "SW", "W", "NW", null],
+                    "type": ["string", "None"],
+                    "enum": ["N", "NE", "E", "SE", "S", "SW", "W", "NW", None],
                 },
-                "bedrooms": {"type": ["integer", "null"]},
-                "floors": {"type": ["integer", "null"]},
-                "floor_description": {"type": ["string", "null"]},
+                "bedrooms": {"type": ["integer", "None"]},
+                "floors": {"type": ["integer", "None"]},
+                "floor_description": {"type": ["string", "None"]},
                 "planning_style": {
-                    "type": ["string", "null"],
-                    "enum": ["practical", "vastu", "modern", "accessible", null],
+                    "type": ["string", "None"],
+                    "enum": ["practical", "vastu", "modern", "accessible", None],
                 },
-                "bathrooms": {"type": ["integer", "null"]},
-                "parking_spaces": {"type": ["integer", "null"]},
+                "bathrooms": {"type": ["integer", "None"]},
+                "parking_spaces": {"type": ["integer", "None"]},
                 "road_side": {
-                    "type": ["string", "null"],
-                    "enum": ["N", "NE", "E", "SE", "S", "SW", "W", "NW", null],
+                    "type": ["string", "None"],
+                    "enum": ["N", "NE", "E", "SE", "S", "SW", "W", "NW", None],
                 },
-                "site_context": {"type": ["string", "null"]},
+                "site_context": {"type": ["string", "None"]},
                 "special_requirements": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -495,7 +495,7 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
         "concept_ready": {"type": "boolean"},
         "proposal_ready": {"type": "boolean"},
         "proposal": {
-            "type": ["object", "null"],
+            "type": ["object", "None"],
             "properties": {
                 "summary": {"type": "string"},
                 "assumptions": {
@@ -512,11 +512,11 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                         "type": "object",
                         "properties": {
                             "name": {"type": "string"},
-                            "width_ft": {"type": ["number", "null"]},
-                            "depth_ft": {"type": ["number", "null"]},
-                            "area_sqft": {"type": ["number", "null"]},
-                            "preferred_zone": {"type": ["string", "null"]},
-                            "notes": {"type": ["string", "null"]},
+                            "width_ft": {"type": ["number", "None"]},
+                            "depth_ft": {"type": ["number", "None"]},
+                            "area_sqft": {"type": ["number", "None"]},
+                            "preferred_zone": {"type": ["string", "None"]},
+                            "notes": {"type": ["string", "None"]},
                         },
                         "required": [
                             "name",
