@@ -353,7 +353,13 @@
       will-change: transform;
     }
 
-    .viewer-canvas svg { display: block; max-width: none; height: auto; }
+    .viewer-canvas svg {
+      display: block;
+      width: min(78vw, 680px);
+      max-width: 100%;
+      max-height: 58vh;
+      height: auto;
+    }
 
     /* ===== Blueprint legend ===== */
     .legend {
@@ -837,7 +843,7 @@
           dims.setAttribute("y", String(cy + 0.20));
           dims.setAttribute("text-anchor", "middle");
           dims.setAttribute("dominant-baseline", "central");
-          dims.setAttribute("font-size", "12");
+          dims.setAttribute("font-size", "0.14");
           dims.textContent = `${Number(r.w).toFixed(2)} × ${Number(r.h).toFixed(2)}`;
           overlay.appendChild(dims);
 
@@ -961,7 +967,7 @@
         const t = (userText || "").toLowerCase();
 
         // Plot size like 30x40 (feet) OR 9x12 (meters)
-        const sizeMatch = t.match(/(\d+(\.\d+)?)\s*x\s*(\d+(\.\d+)?)/);
+        const sizeMatch = t.match(/(\d+(\.\d+)?)\s*(?:x|\*|×)\s*(\d+(\.\d+)?)/);
         let plotW = 9, plotH = 12;
         let units = "m";
         if (sizeMatch) {
