@@ -50,7 +50,7 @@ export function renderBlueprintLayout(layout, container, options = {}) {
     y: 0,
     width: plotW,
     height: plotH,
-    fill: "url(#siqGrid)"
+    fill: "#ffffff"
   });
 
   // Plot boundary
@@ -61,7 +61,7 @@ export function renderBlueprintLayout(layout, container, options = {}) {
     height: plotH,
     fill: "#ffffff",
     stroke: "#111111",
-    "stroke-width": base * 0.32,
+    "stroke-width": base * 0.55,
     "vector-effect": "non-scaling-stroke"
   });
 
@@ -88,9 +88,9 @@ export function renderBlueprintLayout(layout, container, options = {}) {
       y: c.y,
       width: c.width,
       height: c.height,
-      fill: "#f7f7f7",
-      stroke: "#111111",
-      "stroke-width": base * 0.12
+      fill: "#ffffff",
+      stroke: "#000000",
+      "stroke-width": base * 0.30
     });
 
     const cx = c.x + c.width / 2;
@@ -113,7 +113,7 @@ export function renderBlueprintLayout(layout, container, options = {}) {
       height: room.height,
       fill: "#ffffff",
       stroke: "#000000",
-      "stroke-width": base * 0.50,
+      "stroke-width": base * 0.95,
       "stroke-linejoin": "miter",
       "vector-effect": "non-scaling-stroke"
     });
@@ -188,7 +188,7 @@ export function renderBuyerLayout(layout, container, options = {}) {
     height: plotH,
     fill: "#ffffff",
     stroke: "#111111",
-    "stroke-width": base * 0.25
+    "stroke-width": base * 0.45
   });
 
   add(svg, "rect", {
@@ -224,7 +224,7 @@ export function renderBuyerLayout(layout, container, options = {}) {
       height: room.height,
       fill: buyerFill(room.type),
       stroke: "#000000",
-      "stroke-width": base * 0.34
+      "stroke-width": base * 0.75
     });
 
     drawFurniture(svg, room, base, true);
@@ -294,6 +294,9 @@ function text(parent, x, y, value, size, weight = 600, fill = "#111111", anchor 
     "font-family": "Arial, Helvetica, sans-serif",
     "font-size": size,
     "font-weight": weight,
+    "paint-order": "stroke",
+    "stroke": "#ffffff",
+    "stroke-width": size * 0.08,
     fill
   });
   el.textContent = value;
@@ -375,9 +378,9 @@ function drawRoomDoor(svg, room, roomMap, circulation, base) {
 function drawDoorGeometry(svg, connection, width, base) {
   const wall = connection.wall;
   const center = connection.center;
-  const wallGapStroke = base * 0.95;
-  const lineStroke = base * 0.20;
-  const arcStroke = base * 0.16;
+  const wallGapStroke = base * 1.65;
+  const lineStroke = base * 0.34;
+  const arcStroke = base * 0.26;
 
   if (wall === "east" || wall === "west") {
     const x = connection.coord;
@@ -535,7 +538,7 @@ function drawWindowHorizontal(svg, cx, y, width, base) {
     x2: cx + width / 2,
     y2: y,
     stroke: "#ffffff",
-    "stroke-width": base * 0.90
+    "stroke-width": base * 1.65
   });
 
   add(svg, "line", {
@@ -544,7 +547,7 @@ function drawWindowHorizontal(svg, cx, y, width, base) {
     x2: cx + width / 2,
     y2: y - gap,
     stroke: "#000000",
-    "stroke-width": base * 0.18
+    "stroke-width": base * 0.30
   });
 
   add(svg, "line", {
@@ -553,7 +556,7 @@ function drawWindowHorizontal(svg, cx, y, width, base) {
     x2: cx + width / 2,
     y2: y + gap,
     stroke: "#000000",
-    "stroke-width": base * 0.18
+    "stroke-width": base * 0.30
   });
 }
 
@@ -567,7 +570,7 @@ function drawWindowVertical(svg, x, cy, height, base) {
     x2: x,
     y2: cy + height / 2,
     stroke: "#ffffff",
-    "stroke-width": base * 0.90
+    "stroke-width": base * 1.65
   });
 
   add(svg, "line", {
@@ -576,7 +579,7 @@ function drawWindowVertical(svg, x, cy, height, base) {
     x2: x - gap,
     y2: cy + height / 2,
     stroke: "#000000",
-    "stroke-width": base * 0.18
+    "stroke-width": base * 0.30
   });
 
   add(svg, "line", {
@@ -585,7 +588,7 @@ function drawWindowVertical(svg, x, cy, height, base) {
     x2: x + gap,
     y2: cy + height / 2,
     stroke: "#000000",
-    "stroke-width": base * 0.18
+    "stroke-width": base * 0.30
   });
 }
 
@@ -1014,12 +1017,12 @@ function drawNorthArrow(svg, plotW, pad, base) {
 function drawTitleBlock(svg, plotW, plotH, pad, base, info) {
   const y = plotH + pad * 0.60;
 
-  text(svg, plotW / 2, y, info.title || "Concept Plan", base * 1.55, 700, "#000000");
+  text(svg, plotW / 2, y, info.title || "Concept Plan", base * 1.25, 700, "#000000");
 
   const details = [
     info.country ? `Profile: ${capitalize(info.country)}` : null,
     info.strategy ? `Layout: ${info.strategy}` : null,
-    "Concept only · verify with architect/engineer"
+    "Concept plan"
   ].filter(Boolean).join(" · ");
 
   text(svg, plotW / 2, y + base * 1.65, details, base * 0.95, 400, "#444444");
