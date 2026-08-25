@@ -774,7 +774,10 @@
     <p>© 2025 Still in Queue · SQ-AI Real Estate. All rights reserved.</p>
   </footer>
 
-  <script>
+  <script type="module">
+    import { generateLayout } from "./js/layout/layout-planner.js";
+    import { renderDebugLayout } from "./js/layout/debug-renderer.js";
+
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
@@ -2615,15 +2618,136 @@ Click “Render Concept 1” to generate the technical blueprint.`;
       // ---------------------------
       // Render / Confirm / Download
       // ---------------------------
+      function buildConstraintPlannerRequirements() {
+        const unit = String(layoutState.plot.unit || "ft").toLowerCase();
+
+        // Prefer a country returned by OpenAI. For this Stage 8 test only,
+        // metre plots fall back to Germany and feet plots fall back to India.
+        // We will later ask for country explicitly in the chat flow.
+        let country = String(
+          aiState?.country ||
+          aiState?.location?.country ||
+          ""
+        ).toLowerCase();
+
+        if (!["india", "germany"].includes(country)) {
+          country = unit === "m" ? "germany" : "india";
+        }
+
+        const facingMap = {
+          N: "north",
+          E: "east",
+          S: "south",
+          W: "west"
+        };
+
+        const roadSide = facingMap[layoutState.facing] || "north";
+
+        const oldSetbacks =
+          layoutState.proposal?.setbacks ||
+          defaultSetbacksFt(
+            Number(layoutState.plot.width),
+            Number(layoutState.plot.depth)
+          );
+
+        const convertSetback = (value) => {
+          const n = Number(value || 0);
+          return unit === "m" ? +(n * 0.3048).toFixed(2) : n;
+        };
+
+        const preferences = {};
+
+        if (layoutState.rooms?.masterBedroom) {
+          preferences.masterBedroomDirection = directionCodeToWord(
+            layoutState.rooms.masterBedroom
+          );
+        }
+
+        if (layoutState.rooms?.kitchen) {
+          preferences.kitchenDirection = directionCodeToWord(
+            layoutState.rooms.kitchen
+          );
+        }
+
+        if (Number.isFinite(Number(layoutState.bathrooms))) {
+          const totalBathrooms = Number(layoutState.bathrooms);
+
+          if (country === "india") {
+            preferences.attachedBathroomCount = Math.max(
+              0,
+              Math.min(
+                Number(layoutState.bedrooms || 1),
+                totalBathrooms - 1
+              )
+            );
+            preferences.commonBathroomCount = totalBathrooms > 0 ? 1 : 0;
+          }
+
+          if (country === "germany") {
+            preferences.attachedBathroomCount = totalBathrooms >= 2 ? 1 : 0;
+            preferences.commonBathroomCount = Math.max(
+              1,
+              totalBathrooms - preferences.attachedBathroomCount
+            );
+          }
+        }
+
+        if (layoutState.rooms?.utility) preferences.utility = true;
+        if (layoutState.rooms?.pooja) preferences.puja = true;
+
+        if (layoutState.planningStyle === "vastu" && country === "india") {
+          preferences.kitchenDirection =
+            preferences.kitchenDirection || "southeast";
+          preferences.masterBedroomDirection =
+            preferences.masterBedroomDirection || "southwest";
+        }
+
+        return {
+          country,
+          plot: {
+            width: Number(layoutState.plot.width),
+            height: Number(layoutState.plot.depth),
+            unit,
+            roadSide
+          },
+          setbacks: {
+            front: convertSetback(oldSetbacks.front),
+            rear: convertSetback(oldSetbacks.rear),
+            left: convertSetback(oldSetbacks.left),
+            right: convertSetback(oldSetbacks.right)
+          },
+          house: {
+            bhk: Number(layoutState.bedrooms || 1),
+            floors: Number(layoutState.floors || 1)
+          },
+          preferences
+        };
+      }
+
+      function directionCodeToWord(code) {
+        const map = {
+          N: "north",
+          NE: "northeast",
+          E: "east",
+          SE: "southeast",
+          S: "south",
+          SW: "southwest",
+          W: "west",
+          NW: "northwest"
+        };
+
+        return map[String(code || "").toUpperCase()] || null;
+      }
+
       async function renderNow() {
         if (!layoutState.proposalAccepted) {
-          addMessage("assistant", "Please accept the proposed space program before rendering.");
+          addMessage(
+            "assistant",
+            "Please accept the proposed space program before rendering."
+          );
           updateLayoutButtons();
           return;
         }
-
-        const plan = buildDraftPlanFromState();
-        if (!plan) return;
 
         btnRender.disabled = true;
         btnConfirm.disabled = true;
@@ -2632,60 +2756,143 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         isConfirmed = false;
         layoutState.confirmed = false;
 
-        setStatus("Generating architectural blueprint...");
+        setStatus("Running constraint-based architectural planner...");
+
         const t0 = performance.now();
-        startPredictableWait("Generating blueprint");
+        startPredictableWait("Planning rooms");
 
         try {
-          // Render the technical SVG locally from the structured plan.
-          const localSvg = applySvgThemeAndOverlay("", plan);
-          preview.innerHTML = localSvg;
-          renderBuyerPlan(plan);
+          const requirements = buildConstraintPlannerRequirements();
+
+          console.log("Constraint planner requirements:", requirements);
+
+          const layout = generateLayout(requirements);
+
+          console.log("Constraint planner result:", layout);
+
+          if (!layout.success) {
+            finishWait(performance.now() - t0, false);
+
+            const feasibilityStatus =
+              layout.feasibility?.status || "unknown";
+
+            const failedNames = Array.isArray(layout.failedRooms)
+              ? layout.failedRooms.map(r => r.name).join(", ")
+              : "";
+
+            preview.innerHTML = `
+              <div style="
+                padding:24px;
+                background:#fff7ed;
+                color:#9a3412;
+                border:1px solid #fdba74;
+                border-radius:12px;
+                font-family:Arial,sans-serif;
+                line-height:1.6;
+              ">
+                <strong>Constraint planner could not create a complete layout.</strong>
+                <br><br>
+                Feasibility: <strong>${feasibilityStatus}</strong>
+                ${failedNames ? `<br>Rooms not placed: ${failedNames}` : ""}
+                <br><br>
+                We will improve the packing strategy rather than drawing an invalid plan.
+              </div>
+            `;
+
+            addMessage(
+              "assistant",
+              `The new constraint planner could not place every required room.
+
+Feasibility: ${feasibilityStatus}
+
+${failedNames ? `Rooms not placed: ${failedNames}` : ""}
+
+This is useful test information. The planner has refused to draw a knowingly invalid layout.`
+            );
+
+            setStatus("Constraint planner needs another arrangement.");
+            layoutState.rendered = false;
+            updateLayoutButtons();
+            return;
+          }
+
+          renderDebugLayout(layout, preview);
+
+          // Keep the Stage 8 result available for browser DevTools inspection.
+          window.currentConstraintLayout = layout;
+          window.currentConstraintRequirements = requirements;
+
           showBlueprintTab();
           showEngineerSubtab();
-          renderLegend(plan);
 
           layoutState.rendered = true;
           layoutState.confirmed = false;
           resetView(true);
 
-          const tLocal = performance.now();
-          finishWait(tLocal - t0, true);
+          const elapsed = performance.now() - t0;
+          finishWait(elapsed, true);
 
-          addMessage("assistant",
-`Concept 1 is rendered from the latest accepted OpenAI requirement state and space proposal (${REAL_ESTATE_VERSION}).
+          const stats = layout.statistics;
 
-This blueprint now uses:
-• explicit circulation
-• front / middle / rear zoning
+          addMessage(
+            "assistant",
+            `Constraint-based Concept 1 generated.
+
+Country profile:
+${layout.country}
+
+Buildable area:
+${layout.buildableArea.width} × ${layout.buildableArea.height} ${layout.unit}
+
+Rooms placed:
+${stats.placedRooms} / ${stats.requestedRooms}
+
+Passage area:
+${stats.corridorArea} ${layout.unit}²
+
+This is currently the diagnostic architectural layout.
+
+Check:
 • room dimensions
-• real door openings and swings
-• windows on selected exterior walls
-• setbacks
-• parking zone
-• overall plot dimensions
+• corridor position
+• wasted space
+• bedroom locations
+• kitchen location
+• bathroom locations
 
-Review both views under Blueprint:
-• Engineer Drawing — technical/vector view
-• Buyer Plan — easier presentation view
+If something looks architecturally wrong, do not confirm it yet — send me the screenshot and we will improve the planner.`
+          );
 
-You can still change requirements in chat. Any change will invalidate the current proposal and generate a new one.`);
+          setStatus(
+            "Stage 8 · Constraint layout test — inspect the room placement and passage."
+          );
 
-          setStatus("Stage 2 · Review — inspect the blueprint, request changes, or confirm the layout.");
-          updateLayoutButtons();
-
-          // v3 test mode: do not call the legacy renderer at all.
-          // The displayed blueprint is generated only from the structured accepted plan.
-          lastPdfBase64 = null;
           updateLayoutButtons();
 
         } catch (err) {
-          const t1 = performance.now();
-          finishWait(t1 - t0, false);
-          console.error(err);
+          const elapsed = performance.now() - t0;
+          finishWait(elapsed, false);
+
+          console.error("Constraint planner error:", err);
+
           layoutState.rendered = false;
           updateLayoutButtons();
-          setStatus("<span style='color:#fca5a5;'>Blueprint generation error.</span> Check console.");
+
+          preview.innerHTML = `
+            <div style="
+              padding:20px;
+              color:#991b1b;
+              background:#fef2f2;
+              border:1px solid #fecaca;
+              border-radius:12px;
+            ">
+              Constraint planner error: ${String(err.message || err)}
+            </div>
+          `;
+
+          setStatus(
+            `<span style="color:#fca5a5;">Constraint planner error:</span> ${String(err.message || err)}`
+          );
         }
       }
 
