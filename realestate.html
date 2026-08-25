@@ -337,7 +337,7 @@
     .viewer-stage {
       position: relative;
       flex: 1;
-      min-height: 420px;
+      min-height: 620px;
       border-radius: 1rem;
       border: 1px solid rgba(148,163,184,.45);
       background: rgba(15,23,42,.65);
@@ -355,9 +355,9 @@
 
     .viewer-canvas svg {
       display: block;
-      width: min(78vw, 680px);
-      max-width: 100%;
-      max-height: 58vh;
+      width: min(92vw, 980px);
+      max-width: none;
+      max-height: none;
       height: auto;
     }
 
@@ -656,6 +656,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
+      const REAL_ESTATE_VERSION = "space-planner-v3";
 
       // OPTIONAL: If/when you connect your OpenAI agent backend, set this to your server endpoint.
       // Example backend: POST /api/realestate/chat  { messages: [...] }  -> { reply: "...", plan?: {...} }
@@ -830,7 +831,7 @@
           btnAcceptProposal.textContent = layoutState.proposalAccepted ? "Proposal Accepted" : "Accept Proposal";
         }
 
-        btnRender.disabled = !layoutState.proposalAccepted;
+        btnRender.disabled = !(layoutState.proposalAccepted && layoutState.proposal && isConceptReady());
         btnConfirm.disabled = !layoutState.rendered;
         btnPdf.disabled = !layoutState.confirmed || !lastPdfBase64;
         btnRender.textContent = layoutState.rendered ? "Re-render Layout" : "Render Concept 1";
@@ -1076,7 +1077,7 @@ Click “Accept Proposal” to generate the architectural layout, or describe ch
 I’ll now use this program as the source of truth for the floor plan.
 
 Click “Render Concept 1” to generate the technical blueprint.`);
-        setStatus("Proposal accepted ✅ Render Concept 1 is now enabled.");
+        setStatus(`Proposal accepted ✅ Render Concept 1 is now enabled. <span style="opacity:.65;">${REAL_ESTATE_VERSION}</span>`);
       }
 
       function userAcceptedProposal(text) {
@@ -1263,8 +1264,10 @@ Click “Render Concept 1” to generate the technical blueprint.`;
       }
 
       function getPlanPayloadForRender() {
-        const plan = draftPlan || samplePayload.plan;
-        return { plan };
+        if (!draftPlan) {
+          throw new Error("No accepted structured plan is available.");
+        }
+        return { plan: draftPlan };
       }
 
       // ---------------------------
@@ -1348,20 +1351,19 @@ Click “Render Concept 1” to generate the technical blueprint.`;
       function renderLegend(plan) {
         if (!legendEl) return;
         legendEl.innerHTML = "";
-        const uniq = [];
-        const used = new Set();
-        for (const r of (plan?.rooms || [])) {
-          const label = r.name || "Room";
-          const color = roomColor(label);
-          const k = label + "|" + color;
-          if (!used.has(k)) { used.add(k); uniq.push({ label, color }); }
-        }
-        uniq.slice(0, 12).forEach(it => {
-          const div = document.createElement("div");
-          div.className = "legend-item";
-          div.innerHTML = `<span class="legend-swatch" style="background:${it.color}"></span><span>${it.label}</span>`;
-          legendEl.appendChild(div);
-        });
+
+        const rooms = Array.isArray(plan?.rooms) ? plan.rooms : [];
+        rooms
+          .filter(r => r.type !== "circulation")
+          .forEach(r => {
+            const div = document.createElement("div");
+            div.className = "legend-item";
+            const dims = r.dimensions_ft
+              ? `${r.dimensions_ft.w}' × ${r.dimensions_ft.h}'`
+              : "";
+            div.innerHTML = `<span>${r.name}</span>${dims ? `<span style="opacity:.7;">${dims}</span>` : ""}`;
+            legendEl.appendChild(div);
+          });
       }
 
       function applySvgThemeAndOverlay(svgString, plan) {
@@ -1643,9 +1645,9 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         textEl(0, -0.62, "N", 0.26, 800, "middle", ng);
 
         // Title block
-        textEl(plotW/2, plotH + pad*0.5, plan?.meta?.title || "Architectural Concept", 0.30, 800);
+        textEl(plotW/2, plotH + pad*0.5, plan?.meta?.title || "Architectural Concept", 0.34, 800);
         textEl(plotW/2, plotH + pad*0.76,
-          `${directionName(facing)} facing · ${floorLabel(plan?.meta?.floors || 1)} · Concept plan — verify with licensed architect/engineer`,
+          `${directionName(facing)} facing · ${floorLabel(plan?.meta?.floors || 1)} · ${REAL_ESTATE_VERSION} · Concept plan — verify with licensed architect/engineer`,
           0.19, 500
         );
 
@@ -2112,7 +2114,7 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           finishWait(tLocal - t0, true);
 
           addMessage("assistant",
-`Concept 1 is rendered from the accepted space plan.
+`Concept 1 is rendered from the accepted structured space plan (${REAL_ESTATE_VERSION}).
 
 This blueprint now uses:
 • explicit circulation
@@ -2131,23 +2133,9 @@ You can still change requirements in chat. Any change will invalidate the curren
           setStatus("Stage 2 · Review — inspect the blueprint, request changes, or confirm the layout.");
           updateLayoutButtons();
 
-          // Optional: ask the existing backend only for a PDF artifact.
-          // Its SVG is ignored because the browser now renders the blueprint itself.
-          try {
-            const res = await fetch(RENDER_API, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ plan }),
-            });
-
-            if (res.ok) {
-              const data = await res.json().catch(() => ({}));
-              lastPdfBase64 = data.pdf_base64 || null;
-            }
-          } catch (pdfErr) {
-            console.warn("Renderer PDF unavailable; local blueprint still works.", pdfErr);
-          }
-
+          // v3 test mode: do not call the legacy renderer at all.
+          // The displayed blueprint is generated only from the structured accepted plan.
+          lastPdfBase64 = null;
           updateLayoutButtons();
 
         } catch (err) {
@@ -2270,7 +2258,9 @@ For this prototype, the current renderer PDF is now available${canDownload ? "" 
       updateLayoutButtons();
 
       addMessage("assistant",
-`Hi! Tell me about the property you'd like to design.
+`Layout Agent ${REAL_ESTATE_VERSION}
+
+Hi! Tell me about the property you'd like to design.
 
 Start with whatever you know — even something as simple as:
 
@@ -2288,7 +2278,7 @@ Then I’ll propose a space program before anything is rendered.
 
 You can refine the proposal, accept it, and only then generate the technical blueprint.`);
 
-      setStatus("Stage 1 · Concept — start with your plot size.");
+      setStatus(`Stage 1 · Concept — start with your plot size. <span style="opacity:.65;">${REAL_ESTATE_VERSION}</span>`);
     })();
   </script>
 
