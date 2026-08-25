@@ -2618,6 +2618,56 @@ Click “Render Concept 1” to generate the technical blueprint.`;
       // ---------------------------
       // Render / Confirm / Download
       // ---------------------------
+      function getConceptPlannerSetbacks(country, plotWidth, plotDepth, unit) {
+        const normalizedCountry = String(country || "").toLowerCase();
+
+        // Concept-planning defaults only. These are not permit/legal values.
+        // Real setbacks must later come from the user's location or supplied rules.
+        if (normalizedCountry === "india" && unit === "ft") {
+          return {
+            front: plotDepth >= 60 ? 5 : 3,
+            rear: plotDepth >= 60 ? 3 : 2,
+            left: plotWidth >= 40 ? 2 : 1.5,
+            right: plotWidth >= 40 ? 2 : 1.5
+          };
+        }
+
+        if (normalizedCountry === "india" && unit === "m") {
+          return {
+            front: plotDepth >= 18 ? 1.5 : 0.9,
+            rear: plotDepth >= 18 ? 0.9 : 0.6,
+            left: plotWidth >= 12 ? 0.6 : 0.45,
+            right: plotWidth >= 12 ? 0.6 : 0.45
+          };
+        }
+
+        if (normalizedCountry === "germany" && unit === "m") {
+          return {
+            front: 3,
+            rear: 3,
+            left: 3,
+            right: 3
+          };
+        }
+
+        if (normalizedCountry === "germany" && unit === "ft") {
+          const threeMetersInFeet = 9.84;
+          return {
+            front: threeMetersInFeet,
+            rear: threeMetersInFeet,
+            left: threeMetersInFeet,
+            right: threeMetersInFeet
+          };
+        }
+
+        return {
+          front: 3,
+          rear: 2,
+          left: 1.5,
+          right: 1.5
+        };
+      }
+
       function buildConstraintPlannerRequirements() {
         const unit = String(layoutState.plot.unit || "ft").toLowerCase();
 
@@ -2643,17 +2693,14 @@ Click “Render Concept 1” to generate the technical blueprint.`;
 
         const roadSide = facingMap[layoutState.facing] || "north";
 
-        const oldSetbacks =
-          layoutState.proposal?.setbacks ||
-          defaultSetbacksFt(
-            Number(layoutState.plot.width),
-            Number(layoutState.plot.depth)
-          );
+        const oldSetbacks = getConceptPlannerSetbacks(
+          country,
+          Number(layoutState.plot.width),
+          Number(layoutState.plot.depth),
+          unit
+        );
 
-        const convertSetback = (value) => {
-          const n = Number(value || 0);
-          return unit === "m" ? +(n * 0.3048).toFixed(2) : n;
-        };
+        const convertSetback = (value) => Number(value || 0);
 
         const preferences = {};
 
