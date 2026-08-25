@@ -694,11 +694,13 @@ function isConceptReady() {
 
 function setStatus(html) { statusEl.innerHTML = html; }
 
-function setStatus(html) { statusEl.innerHTML = html; }
+function updateLayoutButtons() {
+  btnRender.disabled = !isConceptReady();
+  btnConfirm.disabled = !layoutState.rendered;
+  btnPdf.disabled = !layoutState.confirmed;
+}
 
-      function setStatus(html) { statusEl.innerHTML = html; }
-
-      function addMessage(role, content) {
+function addMessage(role, content) {
         messages.push({ role, content });
 
         const meta = document.createElement("div");
