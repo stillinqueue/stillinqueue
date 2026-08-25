@@ -434,8 +434,8 @@
       <div class="hero-kicker">SQ-AI · Design</div>
       <h1 class="hero-title">Real Estate Intelligence</h1>
       <p class="hero-subline">
-        Chat-driven layout capture + SVG blueprint preview + PDF export.
-        We’ll collect production details in chat (wall thickness, doors, windows, dimensions, scale, north arrow, title block) and pass them to the renderer when integrated.
+        Chat-driven concept planning + SVG blueprint preview + guided refinement + PDF export.
+        Start with what you know. The agent collects only the details needed for each stage and progressively turns them into a renderable layout.
       </p>
     </div>
   </main>
@@ -458,7 +458,7 @@
         <div class="agent-tag">Layouts · Design</div>
         <h3 class="agent-title">Layout Studio</h3>
         <p class="agent-text">
-          Describe requirements in chat. Render updates the SVG blueprint. Confirm gates PDF download.
+          Describe what you know. The agent guides you through Concept → Refine → Production → Confirm → Export.
         </p>
         <div class="agent-meta">Status: <span>Live</span></div>
       </article>
@@ -489,10 +489,10 @@
     <div class="section-header">
       <div>
         <div class="section-kicker">Live Demo · Renderer</div>
-        <h2 class="section-title">Chat → Render → Confirm → Download</h2>
+        <h2 class="section-title">Concept → Refine → Produce → Confirm → Export</h2>
       </div>
       <p class="section-desc">
-        Zoom, rotate, pan, and inspect. Preview is enhanced (colors, dims, grid). PDF export stays as returned by your renderer for now.
+        Start with plot size, BHK, facing, and floors. Render Concept 1 first, then refine room placement and production details before confirmation.
       </p>
     </div>
 
@@ -506,12 +506,12 @@
 
           <div class="chat-input-row">
             <input id="chatInput" class="chat-input" type="text"
-              placeholder="Ex: Plot 30x40, 2BHK, living north, kitchen east, 9-inch walls, main door 4ft, windows on north…">
+              placeholder="Ex: 58x72 plot, 3BHK, east-facing, ground floor">
             <button id="chatSend" class="chat-send">Send</button>
           </div>
 
           <div class="studio-actions">
-            <button id="btnRender" class="studio-btn">Render Layout</button>
+            <button id="btnRender" class="studio-btn" disabled>Render Concept 1</button>
             <button id="btnConfirm" class="studio-btn-secondary" disabled>Confirm Layout</button>
             <button id="btnDownloadPdf" class="studio-btn-secondary" disabled>Download PDF</button>
           </div>
@@ -523,7 +523,7 @@
           </div>
 
           <p id="renderStatus" class="studio-status">
-            Describe your plot + rooms + directions. Then click <strong>Render Layout</strong>.
+            Stage 1 · Concept — tell me what you know. Render unlocks when plot size, BHK, facing, and floors are known.
           </p>
         </div>
       </div>
@@ -631,76 +631,343 @@
         }
       };
 
-     // State
-const messages = []; // { role: "user"|"assistant", content: string }
-let draftPlan = null; // plan object (NOT payload wrapper)
-let lastPdfBase64 = null;
-let isConfirmed = false;
-let is3D = false;
+     // ---------------------------
+      // Guided layout state
+      // ---------------------------
+      const messages = []; // { role: "user"|"assistant", content: string }
+      let draftPlan = null; // plan object (NOT payload wrapper)
+      let lastPdfBase64 = null;
+      let isConfirmed = false;
+      let is3D = false;
 
-// NEW: central requirements state
-const layoutState = {
-  stage: 1,
+      const layoutState = {
+        stage: 1,
 
-  plot: {
-    width: null,
-    depth: null,
-    unit: "ft"
-  },
+        plot: {
+          width: null,
+          depth: null,
+          unit: "ft"
+        },
 
-  facing: null,
-  bedrooms: null,
-  floors: null,
+        facing: null,
+        bedrooms: null,
+        floors: null,
 
-  planningStyle: null,
+        planningStyle: null,
+        bathrooms: null,
+        parking: null,
 
-  bathrooms: null,
-  parking: null,
+        rooms: {
+          living: null,
+          kitchen: null,
+          dining: null,
+          masterBedroom: null,
+          bedroom2: null,
+          bedroom3: null,
+          staircase: null,
+          utility: null,
+          pooja: null
+        },
 
-  rooms: {
-    living: null,
-    kitchen: null,
-    dining: null,
-    masterBedroom: null,
-    bedroom2: null,
-    bedroom3: null,
-    staircase: null,
-    utility: null,
-    pooja: null
-  },
+        production: {
+          exteriorWallThickness: null,
+          interiorWallThickness: null,
+          mainDoorWidth: null,
+          internalDoorWidth: null,
+          scale: "1:100",
+          titleBlock: null
+        },
 
-  production: {
-    exteriorWallThickness: null,
-    interiorWallThickness: null,
-    mainDoorWidth: null,
-    internalDoorWidth: null,
-    scale: null,
-    titleBlock: null
-  },
+        rendered: false,
+        confirmed: false
+      };
 
-  rendered: false,
-  confirmed: false
-};
+      function setStatus(html) {
+        statusEl.innerHTML = html;
+      }
 
-function isConceptReady() {
-  return Boolean(
-    layoutState.plot.width &&
-    layoutState.plot.depth &&
-    layoutState.facing &&
-    layoutState.bedrooms &&
-    layoutState.floors
-  );
-}
+      function directionName(code) {
+        const names = {
+          N: "North",
+          E: "East",
+          S: "South",
+          W: "West",
+          NE: "North-East",
+          NW: "North-West",
+          SE: "South-East",
+          SW: "South-West"
+        };
+        return names[code] || code || "";
+      }
 
-function setStatus(html) { statusEl.innerHTML = html; }
+      function floorLabel(floors) {
+        if (floors === 1) return "Ground floor only";
+        if (floors === 2) return "G+1";
+        if (floors === 3) return "G+2";
+        return `${floors} floors`;
+      }
 
-function updateLayoutButtons() {
-  btnRender.disabled = !isConceptReady();
-  btnConfirm.disabled = !layoutState.rendered;
-  btnPdf.disabled = !layoutState.confirmed;
-}
+      function isConceptReady() {
+        return Boolean(
+          layoutState.plot.width &&
+          layoutState.plot.depth &&
+          layoutState.facing &&
+          layoutState.bedrooms &&
+          layoutState.floors
+        );
+      }
 
-function addMessage(role, content) {
+      function updateStage() {
+        if (layoutState.confirmed) {
+          layoutState.stage = 5;
+        } else if (layoutState.rendered) {
+          layoutState.stage = 2;
+        } else {
+          layoutState.stage = 1;
+        }
+      }
+
+      function updateLayoutButtons() {
+        updateStage();
+        btnRender.disabled = !isConceptReady();
+        btnConfirm.disabled = !layoutState.rendered;
+        btnPdf.disabled = !layoutState.confirmed || !lastPdfBase64;
+        btnRender.textContent = layoutState.rendered ? "Re-render Layout" : "Render Concept 1";
+      }
+
+      function extractPlotSize(text) {
+        const match = String(text || "").match(
+          /(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?\s*(?:x|\*|×|by)\s*(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?/i
+        );
+
+        if (!match) return null;
+
+        const width = Number(match[1]);
+        const depth = Number(match[3]);
+        const explicitUnit = (match[2] || match[4] || "").toLowerCase();
+
+        let unit = "ft";
+        if (explicitUnit.startsWith("m")) unit = "m";
+        else if (explicitUnit.startsWith("f")) unit = "ft";
+        else unit = (width >= 20 || depth >= 20) ? "ft" : "m";
+
+        return { width, depth, unit };
+      }
+
+      function extractFacing(text) {
+        const value = String(text || "").toLowerCase();
+
+        const pairs = [
+          [/\b(?:north[\s-]?east|ne)\b/, "NE"],
+          [/\b(?:north[\s-]?west|nw)\b/, "NW"],
+          [/\b(?:south[\s-]?east|se)\b/, "SE"],
+          [/\b(?:south[\s-]?west|sw)\b/, "SW"],
+          [/\bnorth\b/, "N"],
+          [/\beast\b/, "E"],
+          [/\bsouth\b/, "S"],
+          [/\bwest\b/, "W"]
+        ];
+
+        for (const [pattern, code] of pairs) {
+          if (pattern.test(value)) return code;
+        }
+        return null;
+      }
+
+      function extractBedrooms(text) {
+        const value = String(text || "");
+
+        let match = value.match(/\b(\d+)\s*bhk\b/i);
+        if (match) return Number(match[1]);
+
+        match = value.match(/\b(\d+)\s*(?:bedroom|bedrooms|bed)\b/i);
+        if (match) return Number(match[1]);
+
+        return null;
+      }
+
+      function extractFloors(text) {
+        const value = String(text || "").toLowerCase();
+
+        if (/\bg\s*\+\s*2\b/.test(value) || /\b3\s*floors?\b/.test(value) || /\bthree\s*floors?\b/.test(value)) return 3;
+        if (/\bg\s*\+\s*1\b/.test(value) || /\b2\s*floors?\b/.test(value) || /\btwo\s*floors?\b/.test(value)) return 2;
+
+        if (
+          value.includes("ground floor only") ||
+          value.includes("ground floor") ||
+          value.includes("single floor") ||
+          value.includes("single storey") ||
+          value.includes("single story") ||
+          value.includes("one floor")
+        ) return 1;
+
+        return null;
+      }
+
+      function extractBathrooms(text) {
+        const match = String(text || "").match(/\b(\d+)\s*(?:bathroom|bathrooms|bath|baths|toilet|toilets)\b/i);
+        return match ? Number(match[1]) : null;
+      }
+
+      function extractParking(text) {
+        const value = String(text || "").toLowerCase();
+        let match = value.match(/\bparking\s+(?:for\s+)?(\d+)\s*(?:cars?|vehicles?)?/i);
+        if (!match) match = value.match(/\b(\d+)\s*(?:car|cars|vehicle|vehicles)\s+parking\b/i);
+        return match ? Number(match[1]) : null;
+      }
+
+      function normalizeDirection(text) {
+        return extractFacing(text) || null;
+      }
+
+      function extractRoomDirection(text, aliases) {
+        const value = String(text || "").toLowerCase();
+        const directionWords = "(north(?:[ -]?east|[ -]?west)?|south(?:[ -]?east|[ -]?west)?|east|west|ne|nw|se|sw|n|s|e|w)";
+        const aliasGroup = aliases.map(a => a.replace(/\s+/g, "\\s*")).join("|");
+
+        const pattern1 = new RegExp(`(?:${aliasGroup}).{0,30}?${directionWords}`, "i");
+        const pattern2 = new RegExp(`${directionWords}.{0,30}?(?:${aliasGroup})`, "i");
+
+        const match = value.match(pattern1) || value.match(pattern2);
+        if (!match) return null;
+
+        return normalizeDirection(match[1] || match[2]);
+      }
+
+      function updateRequirementsFromMessage(text) {
+        const plot = extractPlotSize(text);
+        if (plot) {
+          layoutState.plot.width = plot.width;
+          layoutState.plot.depth = plot.depth;
+          layoutState.plot.unit = plot.unit;
+        }
+
+        const facing = extractFacing(text);
+        if (facing && /\bfacing\b/i.test(text)) {
+          layoutState.facing = facing;
+        } else if (!layoutState.facing && facing && !/(living|kitchen|bed|master|dining|utility|pooja|stair)/i.test(text)) {
+          layoutState.facing = facing;
+        }
+
+        const bedrooms = extractBedrooms(text);
+        if (bedrooms) layoutState.bedrooms = bedrooms;
+
+        const floors = extractFloors(text);
+        if (floors) layoutState.floors = floors;
+
+        const bathrooms = extractBathrooms(text);
+        if (bathrooms) layoutState.bathrooms = bathrooms;
+
+        const parking = extractParking(text);
+        if (parking) layoutState.parking = parking;
+
+        const lower = String(text || "").toLowerCase();
+        if (lower.includes("vastu")) layoutState.planningStyle = "vastu";
+        else if (lower.includes("modern")) layoutState.planningStyle = "modern";
+
+        const roomMappings = [
+          ["living", ["living room", "living", "hall"]],
+          ["kitchen", ["kitchen"]],
+          ["dining", ["dining room", "dining"]],
+          ["masterBedroom", ["master bedroom", "master bed", "master"]],
+          ["bedroom2", ["bedroom 2", "bed 2", "second bedroom"]],
+          ["bedroom3", ["bedroom 3", "bed 3", "third bedroom"]],
+          ["staircase", ["staircase", "stairs"]],
+          ["utility", ["utility room", "utility"]],
+          ["pooja", ["pooja", "puja", "prayer room"]]
+        ];
+
+        for (const [key, aliases] of roomMappings) {
+          const dir = extractRoomDirection(text, aliases);
+          if (dir) layoutState.rooms[key] = dir;
+        }
+
+        layoutState.rendered = false;
+        layoutState.confirmed = false;
+        isConfirmed = false;
+        lastPdfBase64 = null;
+        updateLayoutButtons();
+      }
+
+      function getMissingConceptFields() {
+        const missing = [];
+        if (!layoutState.plot.width || !layoutState.plot.depth) missing.push("plot size");
+        if (!layoutState.bedrooms) missing.push("BHK / bedrooms");
+        if (!layoutState.facing) missing.push("plot facing");
+        if (!layoutState.floors) missing.push("floors");
+        return missing;
+      }
+
+      function conceptSummary() {
+        const lines = [
+          `Plot: ${layoutState.plot.width} × ${layoutState.plot.depth} ${layoutState.plot.unit}`,
+          `Home: ${layoutState.bedrooms}BHK`,
+          `Facing: ${directionName(layoutState.facing)}`,
+          `Floors: ${floorLabel(layoutState.floors)}`
+        ];
+
+        if (layoutState.planningStyle) {
+          lines.push(`Planning preference: ${layoutState.planningStyle === "vastu" ? "Vastu-oriented" : "Modern"}`);
+        }
+        if (layoutState.parking) lines.push(`Parking: ${layoutState.parking} car${layoutState.parking > 1 ? "s" : ""}`);
+        if (layoutState.bathrooms) lines.push(`Bathrooms: ${layoutState.bathrooms}`);
+
+        return lines.join("\n");
+      }
+
+      function getNextAgentResponse() {
+        const missing = getMissingConceptFields();
+
+        if (missing.includes("plot size")) {
+          return `Tell me your plot size first.
+
+For example:
+“58 × 72 ft”`;
+        }
+
+        if (missing.includes("BHK / bedrooms")) {
+          return `Got it — your plot is ${layoutState.plot.width} × ${layoutState.plot.depth} ${layoutState.plot.unit}.
+
+What would you like to build?
+
+For example:
+“3BHK, east-facing, ground floor.”`;
+        }
+
+        if (missing.includes("plot facing")) {
+          return `Great — I have a ${layoutState.bedrooms}BHK on a ${layoutState.plot.width} × ${layoutState.plot.depth} ${layoutState.plot.unit} plot.
+
+Which direction does the plot face?
+
+North, East, South or West are enough for now.`;
+        }
+
+        if (missing.includes("floors")) {
+          return `Great. So far I have:
+
+${conceptSummary()}
+
+How many floors would you like?
+
+For example:
+“Ground floor only”
+or
+“G+1”`;
+        }
+
+        return `Perfect. I have enough information to create your first concept.
+
+CONCEPT BRIEF
+${conceptSummary()}
+
+Stage 1 is complete.
+
+You can now click “Render Concept 1”.
+
+I’ll use sensible preliminary defaults for setbacks, walls, doors and windows. After rendering, Stage 2 lets you refine room positions, parking, bathrooms, staircase, utility, balconies and other preferences.`;
+      }
+
+      function addMessage(role, content) {
         messages.push({ role, content });
 
         const meta = document.createElement("div");
@@ -1020,126 +1287,146 @@ function addMessage(role, content) {
       }
 
       // ---------------------------
-      // Local prototype "agent" (until OpenAI is wired)
-      // It also stores future production fields so you're ready.
+      // Guided local agent
       // ---------------------------
-      function localAgentReply(userText) {
-        const t = (userText || "").toLowerCase();
+      function toMeters(value, unit) {
+        return unit === "ft" ? +(value * 0.3048).toFixed(2) : +Number(value).toFixed(2);
+      }
 
-        const lengthToMeters = (value, unit, fallbackUnit) => {
-          const normalized = (unit || fallbackUnit || "m").toLowerCase();
-          if (normalized.startsWith("in")) return value * 0.0254;
-          return normalized.startsWith("f") ? value * 0.3048 : value;
-        };
-        const formatMeters = (value) => +value.toFixed(2);
+      function buildDraftPlanFromState() {
+        if (!isConceptReady()) return null;
 
-        const sizeMatch = t.match(/(\d+(\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?\s*(?:x|\*|×|by)\s*(\d+(\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?/);
-        let plotW = 9, plotH = 12;
-        let units = "m";
-        if (sizeMatch) {
-          const a = parseFloat(sizeMatch[1]);
-          const b = parseFloat(sizeMatch[4]);
-          const explicitUnit = sizeMatch[3] || sizeMatch[5];
-          const sourceUnits = explicitUnit || (a >= 20 || b >= 20 ? "ft" : "m");
-          plotW = formatMeters(lengthToMeters(a, sizeMatch[3], sourceUnits));
-          plotH = formatMeters(lengthToMeters(b, sizeMatch[5], sourceUnits));
-          units = "m";
-        }
+        const plotW = toMeters(layoutState.plot.width, layoutState.plot.unit);
+        const plotH = toMeters(layoutState.plot.depth, layoutState.plot.unit);
 
-        const wants2bhk = t.includes("2bhk") || t.includes("2 bhk");
-        const wants3bhk = t.includes("3bhk") || t.includes("3 bhk");
-
-        // wall thickness: "9 inch", "4 inch", "0.23m", "230mm"
-        let wall = 0.23;
-        const inchMatch = t.match(/(\d+)\s*inch/);
-        if (inchMatch) wall = +(parseFloat(inchMatch[1]) * 0.0254).toFixed(2);
-        const mmMatch = t.match(/(\d+)\s*mm/);
-        if (mmMatch) wall = +(parseFloat(mmMatch[1]) / 1000).toFixed(3);
-        const mMatch = t.match(/(\d+(\.\d+)?)\s*m\b/);
-        if (mMatch && parseFloat(mMatch[1]) <= 1) wall = +parseFloat(mMatch[1]).toFixed(3);
-
-        const parseLengthAfter = (pattern, fallback) => {
-          const match = t.match(pattern);
-          return match ? formatMeters(lengthToMeters(parseFloat(match[1]), match[2], "m")) : fallback;
-        };
         const setbacks = {
-          left: parseLengthAfter(/(?:left|side|sides)\s*setback\s*(?:is\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?/, 0.6),
-          right: parseLengthAfter(/right\s*setback\s*(?:is\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?/, 0.6),
-          front: parseLengthAfter(/front\s*setback\s*(?:is\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?/, 1.2),
-          back: parseLengthAfter(/back\s*setback\s*(?:is\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?/, 0.6)
+          left: 0.6,
+          right: 0.6,
+          front: 1.2,
+          back: 0.6
         };
-        const sideSetback = parseLengthAfter(/(?:setbacks?|margins?)\s*(?:of\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m)?\s*(?:on\s*)?sides?/, null);
-        if (sideSetback != null) setbacks.left = setbacks.right = sideSetback;
 
-        const left = setbacks.left, front = setbacks.front;
+        const left = setbacks.left;
+        const front = setbacks.front;
         const usableW = Math.max(2, plotW - setbacks.left - setbacks.right);
         const usableH = Math.max(2, plotH - setbacks.front - setbacks.back);
 
         const rooms = [];
-        rooms.push({ name: "Living",  x: left, y: front, w: +(usableW * 0.52).toFixed(2), h: +(usableH * 0.28).toFixed(2) });
-        rooms.push({ name: "Kitchen", x: +(left + usableW * 0.56).toFixed(2), y: front, w: +(usableW * 0.40).toFixed(2), h: +(usableH * 0.26).toFixed(2) });
-        rooms.push({ name: "Bed 1", x: left, y: +(front + usableH * 0.33).toFixed(2), w: +(usableW * 0.46).toFixed(2), h: +(usableH * 0.27).toFixed(2) });
-        rooms.push({ name: "Bath",  x: +(left + usableW * 0.50).toFixed(2), y: +(front + usableH * 0.33).toFixed(2), w: +(usableW * 0.20).toFixed(2), h: +(usableH * 0.18).toFixed(2) });
 
-        if (wants2bhk || wants3bhk) {
-          rooms.push({ name: "Bed 2", x: left, y: +(front + usableH * 0.63).toFixed(2), w: +(usableW * 0.46).toFixed(2), h: +(usableH * 0.25).toFixed(2) });
-        }
-        if (wants3bhk) {
-          rooms.push({ name: "Bed 3", x: +(left + usableW * 0.52).toFixed(2), y: +(front + usableH * 0.63).toFixed(2), w: +(usableW * 0.42).toFixed(2), h: +(usableH * 0.25).toFixed(2) });
-        }
-
-        const directionPattern = "north|south|east|west|ne|nw|se|sw|n|s|e|w";
-        const directionFor = (roomName) => {
-          const aliases = roomName === "Living" ? "living" : roomName === "Kitchen" ? "kitchen" : roomName.toLowerCase().replace(" ", "\\s*");
-          const match = t.match(new RegExp(`\\b${aliases}\\b.{0,35}\\b(${directionPattern})\\b|\\b(${directionPattern})\\b.{0,35}\\b${aliases}\\b`));
-          return match ? (match[1] || match[2]).toUpperCase() : null;
-        };
-        rooms.forEach((room) => {
-          room.direction = directionFor(room.name);
+        rooms.push({
+          name: "Living",
+          x: left,
+          y: front,
+          w: +(usableW * 0.52).toFixed(2),
+          h: +(usableH * 0.25).toFixed(2),
+          direction: layoutState.rooms.living || (layoutState.planningStyle === "vastu" ? "NE" : null)
         });
 
-        const facingMatch = t.match(/(?:facing|face(?:s|d)?\s+)(north|south|east|west|ne|nw|se|sw)\b|\b(north|south|east|west|ne|nw|se|sw)\s+facing\b/);
-        const facing = facingMatch ? (facingMatch[1] || facingMatch[2]).toUpperCase() : null;
-        const doorWidth = parseLengthAfter(/(?:main\s+)?door\s*(?:width\s*)?(?:of\s*)?(\d+(?:\.\d+)?)\s*(feet?|ft|meters?|metres?|m|inch|in)?/, null);
-        const windowWallMatch = t.match(/windows?\s+(?:on|along)\s+(north|south|east|west|ne|nw|se|sw)\b/);
+        rooms.push({
+          name: "Kitchen",
+          x: +(left + usableW * 0.56).toFixed(2),
+          y: front,
+          w: +(usableW * 0.40).toFixed(2),
+          h: +(usableH * 0.23).toFixed(2),
+          direction: layoutState.rooms.kitchen || (layoutState.planningStyle === "vastu" ? "SE" : null)
+        });
+
+        rooms.push({
+          name: "Bed 1",
+          x: left,
+          y: +(front + usableH * 0.31).toFixed(2),
+          w: +(usableW * 0.46).toFixed(2),
+          h: +(usableH * 0.25).toFixed(2),
+          direction: layoutState.rooms.masterBedroom || (layoutState.planningStyle === "vastu" ? "SW" : null)
+        });
+
+        if (layoutState.bedrooms >= 2) {
+          rooms.push({
+            name: "Bed 2",
+            x: +(left + usableW * 0.52).toFixed(2),
+            y: +(front + usableH * 0.31).toFixed(2),
+            w: +(usableW * 0.42).toFixed(2),
+            h: +(usableH * 0.25).toFixed(2),
+            direction: layoutState.rooms.bedroom2 || (layoutState.planningStyle === "vastu" ? "NW" : null)
+          });
+        }
+
+        if (layoutState.bedrooms >= 3) {
+          rooms.push({
+            name: "Bed 3",
+            x: left,
+            y: +(front + usableH * 0.62).toFixed(2),
+            w: +(usableW * 0.46).toFixed(2),
+            h: +(usableH * 0.25).toFixed(2),
+            direction: layoutState.rooms.bedroom3 || null
+          });
+        }
+
+        if (layoutState.bedrooms >= 4) {
+          rooms.push({
+            name: "Bed 4",
+            x: +(left + usableW * 0.52).toFixed(2),
+            y: +(front + usableH * 0.62).toFixed(2),
+            w: +(usableW * 0.42).toFixed(2),
+            h: +(usableH * 0.25).toFixed(2),
+            direction: null
+          });
+        }
+
+        const bathCount = layoutState.bathrooms || Math.max(1, Math.min(2, layoutState.bedrooms - 1));
+        for (let i = 0; i < bathCount; i++) {
+          rooms.push({
+            name: `Bath ${i + 1}`,
+            x: +(left + usableW * (0.72 + (i * 0.1))).toFixed(2),
+            y: +(front + usableH * 0.62).toFixed(2),
+            w: +(usableW * 0.16).toFixed(2),
+            h: +(usableH * 0.14).toFixed(2)
+          });
+        }
 
         draftPlan = {
-          meta: { title: "Draft Plan (chat)" },
+          meta: {
+            title: `${layoutState.plot.width}x${layoutState.plot.depth} ${layoutState.bedrooms}BHK Concept 1`,
+            stage: "concept",
+            floors: layoutState.floors,
+            source_units: layoutState.plot.unit
+          },
           plot: { w: plotW, h: plotH },
           setbacks,
           production: {
-            units,
-            wall_thickness: wall,
-            scale: "1:100",
+            units: "m",
+            wall_thickness: layoutState.production.exteriorWallThickness || 0.23,
+            scale: layoutState.production.scale || "1:100",
             north_arrow: true,
-            facing,
-            title_block: { client: "Client", site: "Site", sheet: "A1" },
+            facing: layoutState.facing,
+            title_block: layoutState.production.titleBlock || {
+              client: "Client",
+              site: "Site",
+              sheet: "Concept 1"
+            },
             dimension_lines: { outer_plot: true, inner_rooms: true }
           },
           openings: {
-            doors: doorWidth != null ? [{ room: "Main", width: doorWidth, wall: facing || "south" }] : [],
-            windows: windowWallMatch ? [{ wall: windowWallMatch[1].toUpperCase() }] : []
+            doors: [],
+            windows: []
           },
           rooms
         };
 
-        const reply =
-`Captured a draft.
+        return draftPlan;
+      }
 
-• Plot: ${plotW} × ${plotH} (units: ${units})
-• Wall thickness: ${wall} m
-• Rooms: ${rooms.map(r => r.direction ? `${r.name} (${r.direction})` : r.name).join(", ")}
-${facing ? `• Facing: ${facing}` : ""}
-• Setbacks: ${setbacks.front} m front, ${setbacks.back} m back, ${setbacks.left} m sides
+      function localAgentReply(userText) {
+        updateRequirementsFromMessage(userText);
 
-Captured details:
-- ${doorWidth != null ? `main door ${doorWidth} m` : "doors can include width and swing"}
-- ${windowWallMatch ? `windows on ${windowWallMatch[1].toUpperCase()}` : "windows can include wall and width"}
-- dimension lines, scale, north arrow, and title block
+        if (isConceptReady()) {
+          buildDraftPlanFromState();
+        }
 
-For now, click "Render Layout" to preview.`;
-
-        return { reply, plan: draftPlan };
+        return {
+          reply: getNextAgentResponse(),
+          plan: draftPlan
+        };
       }
 
       async function sendChat() {
@@ -1172,14 +1459,23 @@ For now, click "Render Layout" to preview.`;
           } else {
             const out = localAgentReply(text);
             addMessage("assistant", out.reply);
-            setStatus("Draft updated ✅ Click <strong>Render Layout</strong> to preview.");
+
+            if (isConceptReady()) {
+              setStatus("Stage 1 complete ✅ Click <strong>Render Concept 1</strong>.");
+            } else {
+              const missing = getMissingConceptFields();
+              setStatus(`Stage 1 · Concept — still needed: <strong>${missing.join(", ")}</strong>.`);
+            }
+
+            updateLayoutButtons();
           }
 
           if (isConfirmed) {
             isConfirmed = false;
-            btnPdf.disabled = true;
-            btnConfirm.disabled = true;
-            setStatus("You changed requirements. Please <strong>Render Layout</strong> again, then <strong>Confirm Layout</strong>.");
+            layoutState.confirmed = false;
+            layoutState.rendered = false;
+            updateLayoutButtons();
+            setStatus("Requirements changed. Please render the updated concept again before confirmation.");
           }
 
         } catch (err) {
@@ -1197,18 +1493,27 @@ For now, click "Render Layout" to preview.`;
       // Render / Confirm / Download
       // ---------------------------
       async function renderNow() {
+        if (!isConceptReady()) {
+          addMessage("assistant", getNextAgentResponse());
+          updateLayoutButtons();
+          return;
+        }
+
+        buildDraftPlanFromState();
+
         btnRender.disabled = true;
         btnConfirm.disabled = true;
         btnPdf.disabled = true;
         lastPdfBase64 = null;
         isConfirmed = false;
+        layoutState.confirmed = false;
 
         const payload = getPlanPayloadForRender();
         renderLegend(payload.plan);
 
-        setStatus("Rendering...");
+        setStatus("Rendering Concept 1...");
         const t0 = performance.now();
-        startPredictableWait("Rendering layout");
+        startPredictableWait("Rendering concept");
 
         try {
           const res = await fetch(RENDER_API, {
@@ -1224,7 +1529,8 @@ For now, click "Render Layout" to preview.`;
             finishWait(t1 - t0, false);
             const msg = data.error || ("Render failed (HTTP " + res.status + ")");
             setStatus("<span style='color:#fca5a5;'>Render error:</span> " + msg);
-            btnRender.disabled = false;
+            layoutState.rendered = false;
+            updateLayoutButtons();
             return;
           }
 
@@ -1238,27 +1544,68 @@ For now, click "Render Layout" to preview.`;
           preview.innerHTML = themed || "(No SVG returned)";
           lastPdfBase64 = data.pdf_base64 || null;
 
-          btnConfirm.disabled = false;
+          layoutState.rendered = true;
+          layoutState.confirmed = false;
           resetView(true);
-          setStatus("Rendered ✅ Review in preview. If it looks good, click <strong>Confirm Layout</strong>.");
+          updateLayoutButtons();
+
+          addMessage("assistant",
+`Concept 1 is rendered.
+
+Stage 2 · Refine
+
+You can now tell me changes such as:
+• “parking for 2 cars”
+• “kitchen southeast”
+• “master bedroom southwest”
+• “add 3 bathrooms”
+• “living room northeast”
+• “use Vastu”
+
+After any change, render again to preview the updated concept.`);
+
+          setStatus("Stage 2 · Refine — review the preview, describe changes in chat, or confirm the layout.");
 
         } catch (err) {
           const t1 = performance.now();
           finishWait(t1 - t0, false);
           console.error(err);
+          layoutState.rendered = false;
+          updateLayoutButtons();
           setStatus("<span style='color:#fca5a5;'>Network error.</span> Check console.");
         } finally {
-          btnRender.disabled = false;
+          updateLayoutButtons();
         }
       }
 
       function confirmLayout() {
-        isConfirmed = true;
-        const canDownload = !!lastPdfBase64;
-        btnPdf.disabled = !canDownload;
+        if (!layoutState.rendered) return;
 
-        if (canDownload) setStatus("Confirmed ✅ You can now <strong>Download PDF</strong>.");
-        else setStatus("Confirmed ✅ (PDF not available from renderer response.)");
+        isConfirmed = true;
+        layoutState.confirmed = true;
+
+        const canDownload = !!lastPdfBase64;
+        updateLayoutButtons();
+
+        addMessage("assistant",
+`Layout confirmed.
+
+Stage 3 · Production details can be added next as the renderer evolves:
+• wall thickness
+• door widths and swings
+• window positions
+• exact dimensions
+• scale
+• north arrow
+• title block
+
+For this prototype, the current renderer PDF is now available${canDownload ? "" : " only if the renderer returns one"}.`);
+
+        if (canDownload) {
+          setStatus("Stage 5 · Export — confirmed ✅ You can now <strong>Download PDF</strong>.");
+        } else {
+          setStatus("Confirmed ✅ PDF was not returned by the renderer.");
+        }
       }
 
       function downloadPdf() {
@@ -1317,18 +1664,29 @@ For now, click "Render Layout" to preview.`;
       // Boot
       // ---------------------------
       setProgress(0, "Idle");
-      btnConfirm.disabled = true;
-      btnPdf.disabled = true;
+      layoutState.rendered = false;
+      layoutState.confirmed = false;
       applyTransform();
+      updateLayoutButtons();
 
       addMessage("assistant",
-`Hi! Tell me:
-1) Plot size (e.g., 30x40), facing (optional), setbacks (optional)
-2) Rooms + counts + directions (N/E/S/W + NE/NW/SE/SW)
-3) Production details (optional for now): wall thickness, door widths, window walls, scale, title block
+`Hi! Tell me about the property you'd like to design.
 
-Then click Render Layout.`
-      );
+Start with whatever you know — even something as simple as:
+
+“58 × 72 ft plot”
+
+I’ll ask for the remaining details step by step.
+
+Stage 1 only needs:
+• plot size
+• BHK / bedrooms
+• plot facing
+• number of floors
+
+You do not need wall thickness, door widths, windows or title-block details yet.`);
+
+      setStatus("Stage 1 · Concept — start with your plot size.");
     })();
   </script>
 
