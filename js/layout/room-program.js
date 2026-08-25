@@ -1,21 +1,20 @@
 import {
-  ROOM_DEFAULTS,
+  getDesignProfile,
   getDefaultBathroomPlan
 } from "./plan-schema.js";
-
 
 export function buildRoomProgram(requirements) {
   const rooms = [];
 
   const bhk = Number(requirements.house?.bhk || 1);
-
+  const country = String(requirements.country || "india").toLowerCase();
   const preferences = requirements.preferences || {};
 
-  /*
-    Bathroom defaults can be overridden later
-    by explicit user preferences.
-  */
-  const defaultBathroomPlan = getDefaultBathroomPlan(bhk);
+  const profile = getDesignProfile(country);
+  const ROOM_DEFAULTS = profile.roomDefaults;
+
+  const defaultBathroomPlan =
+    getDefaultBathroomPlan(bhk, country);
 
   const attachedBathroomCount =
     Number.isInteger(preferences.attachedBathroomCount)
@@ -27,10 +26,9 @@ export function buildRoomProgram(requirements) {
       ? preferences.commonBathroomCount
       : defaultBathroomPlan.commonBathrooms;
 
-
   /*
     ---------------------------------------------------------
-    PUBLIC AREA
+    LIVING
     ---------------------------------------------------------
   */
 
@@ -41,16 +39,27 @@ export function buildRoomProgram(requirements) {
     ...ROOM_DEFAULTS.living
   });
 
-
   /*
-    Family lounge is useful mainly for larger houses.
-    If user explicitly sets familyLounge, respect it.
-    Otherwise default to true for 3BHK and above.
+    ---------------------------------------------------------
+    FAMILY LOUNGE
+
+    India:
+    Default for 3BHK and above.
+
+    Germany:
+    Usually avoid automatically adding a separate family
+    lounge unless the user explicitly requests it.
+    ---------------------------------------------------------
   */
-  const includeFamilyLounge =
-    typeof preferences.familyLounge === "boolean"
-      ? preferences.familyLounge
-      : bhk >= 3;
+
+  let includeFamilyLounge;
+
+  if (typeof preferences.familyLounge === "boolean") {
+    includeFamilyLounge = preferences.familyLounge;
+  } else {
+    includeFamilyLounge =
+      country === "india" && bhk >= 3;
+  }
 
   if (includeFamilyLounge) {
     rooms.push({
@@ -61,10 +70,9 @@ export function buildRoomProgram(requirements) {
     });
   }
 
-
   /*
     ---------------------------------------------------------
-    DINING + KITCHEN
+    DINING
     ---------------------------------------------------------
   */
 
@@ -75,6 +83,12 @@ export function buildRoomProgram(requirements) {
     ...ROOM_DEFAULTS.dining
   });
 
+  /*
+    ---------------------------------------------------------
+    KITCHEN
+    ---------------------------------------------------------
+  */
+
   rooms.push({
     id: "kitchen",
     name: "Kitchen",
@@ -83,9 +97,10 @@ export function buildRoomProgram(requirements) {
     preferredDirection:
       preferences.kitchenDirection || null,
 
+    preferredNear: ["dining"],
+
     ...ROOM_DEFAULTS.kitchen
   });
-
 
   /*
     ---------------------------------------------------------
@@ -112,28 +127,42 @@ export function buildRoomProgram(requirements) {
           ? preferences.masterBedroomDirection || null
           : null,
 
+      requiresExteriorWall: true,
+
       ...ROOM_DEFAULTS[
-        isMaster ? "masterBedroom" : "bedroom"
+        isMaster
+          ? "masterBedroom"
+          : "bedroom"
       ]
     });
   }
-
 
   /*
     ---------------------------------------------------------
     ATTACHED BATHROOMS
 
-    Attach bathrooms to the first bedrooms by default:
-    Bedroom 1 = Master
-    Bedroom 2 = second preferred attached bathroom
-    etc.
+    By default, attach them beginning with the master bedroom.
+
+    Example:
+    4BHK India default:
+    Master Bedroom -> Master Toilet
+    Bedroom 2      -> Attached Toilet 2
+    Bedroom 3      -> no attached toilet
+    Bedroom 4      -> no attached toilet
     ---------------------------------------------------------
   */
 
-  const safeAttachedCount =
-    Math.min(attachedBathroomCount, bhk);
+  const safeAttachedBathroomCount =
+    Math.max(
+      0,
+      Math.min(attachedBathroomCount, bhk)
+    );
 
-  for (let i = 1; i <= safeAttachedCount; i++) {
+  for (
+    let i = 1;
+    i <= safeAttachedBathroomCount;
+    i++
+  ) {
     rooms.push({
       id: `attached-toilet-${i}`,
 
@@ -146,10 +175,13 @@ export function buildRoomProgram(requirements) {
 
       attachedTo: `bedroom-${i}`,
 
+      preferredNear: [`bedroom-${i}`],
+
+      wetArea: true,
+
       ...ROOM_DEFAULTS.attachedToilet
     });
   }
-
 
   /*
     ---------------------------------------------------------
@@ -157,7 +189,11 @@ export function buildRoomProgram(requirements) {
     ---------------------------------------------------------
   */
 
-  for (let i = 1; i <= commonBathroomCount; i++) {
+  for (
+    let i = 1;
+    i <= commonBathroomCount;
+    i++
+  ) {
     rooms.push({
       id:
         commonBathroomCount === 1
@@ -171,40 +207,55 @@ export function buildRoomProgram(requirements) {
 
       type: "commonToilet",
 
+      accessibleFromCirculation: true,
+
+      wetArea: true,
+
       ...ROOM_DEFAULTS.commonToilet
     });
   }
 
-
   /*
     ---------------------------------------------------------
-    OPTIONAL UTILITY
+    UTILITY
 
-    Default:
-    - included for 3BHK+
-    - user can explicitly turn it off
+    India:
+    Usually useful from 3BHK upwards.
+
+    Germany:
+    Do not automatically add it unless explicitly requested.
     ---------------------------------------------------------
   */
 
-  const includeUtility =
-    typeof preferences.utility === "boolean"
-      ? preferences.utility
-      : bhk >= 3;
+  let includeUtility;
+
+  if (typeof preferences.utility === "boolean") {
+    includeUtility = preferences.utility;
+  } else {
+    includeUtility =
+      country === "india" && bhk >= 3;
+  }
 
   if (includeUtility) {
     rooms.push({
       id: "utility",
       name: "Utility",
       type: "utility",
+
       attachedTo: "kitchen",
+      preferredNear: ["kitchen"],
+      wetArea: true,
+
       ...ROOM_DEFAULTS.utility
     });
   }
 
-
   /*
     ---------------------------------------------------------
-    OPTIONAL PUJA ROOM
+    PUJA ROOM
+
+    Mainly an India-oriented preference.
+    Never automatically add it.
     ---------------------------------------------------------
   */
 
@@ -213,14 +264,19 @@ export function buildRoomProgram(requirements) {
       id: "puja",
       name: "Puja Room",
       type: "puja",
+
+      preferredNear: [
+        "living",
+        "dining"
+      ],
+
       ...ROOM_DEFAULTS.puja
     });
   }
 
-
   /*
     ---------------------------------------------------------
-    OPTIONAL STORE ROOM
+    STORE
     ---------------------------------------------------------
   */
 
@@ -229,10 +285,34 @@ export function buildRoomProgram(requirements) {
       id: "store",
       name: "Store",
       type: "store",
+
+      preferredNear: ["kitchen"],
+
       ...ROOM_DEFAULTS.store
     });
   }
 
+  /*
+    ---------------------------------------------------------
+    CIRCULATION REQUIREMENTS
+
+    We are not creating the corridor rectangle yet.
+
+    For now, this tells the future layout planner which
+    spaces must be accessible from normal circulation.
+    ---------------------------------------------------------
+  */
+
+  for (const room of rooms) {
+    if (
+      room.type === "attachedToilet" ||
+      room.type === "utility"
+    ) {
+      continue;
+    }
+
+    room.requiresCirculationAccess = true;
+  }
 
   return rooms;
 }
