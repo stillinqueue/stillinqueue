@@ -16,21 +16,181 @@ import {
 
 
 export function generateLayout(requirements) {
+  /*
+    First try the requested/default room program exactly as-is.
+  */
+  let result = generateLayoutAttempt(requirements);
+
+  if (result.success) {
+    return result;
+  }
+
+  /*
+    ---------------------------------------------------------
+    ADAPTIVE COMPACT FALLBACK
+
+    If the plan is tight and the user did NOT explicitly ask
+    for a family lounge, remove that optional room and retry.
+
+    This is practical for compact 3BHK / 4BHK Indian plots
+    such as 30x40 where a separate family lounge often makes
+    the plan unnecessarily difficult.
+
+    IMPORTANT:
+    If the user explicitly requested a family lounge,
+    we do NOT remove it automatically.
+    ---------------------------------------------------------
+  */
+
+  const preferences =
+    requirements.preferences || {};
+
+  const familyLoungeExplicit =
+    typeof preferences.familyLounge === "boolean";
+
+  const familyLoungeFailed =
+    Array.isArray(result.failedRooms) &&
+    result.failedRooms.some(
+      room =>
+        room.id === "family-lounge" ||
+        room.name === "Family Lounge"
+    );
+
+  if (
+    result.feasibility?.status === "tight" &&
+    familyLoungeFailed &&
+    !familyLoungeExplicit
+  ) {
+    const compactRequirements = {
+      ...requirements,
+
+      preferences: {
+        ...preferences,
+        familyLounge: false
+      }
+    };
+
+    const compactResult =
+      generateLayoutAttempt(
+        compactRequirements
+      );
+
+    if (compactResult.success) {
+      compactResult.adaptations = [
+        {
+          type: "removed-optional-room",
+          room: "Family Lounge",
+          reason:
+            "The buildable area is tight, so the separate family lounge was removed. Living and dining should serve as the shared family space."
+        }
+      ];
+
+      compactResult.originalFeasibility =
+        result.feasibility;
+
+      return compactResult;
+    }
+
+    result = compactResult;
+  }
+
+  /*
+    ---------------------------------------------------------
+    SECOND COMPACT FALLBACK
+
+    Utility is useful but not more important than bedrooms,
+    bathrooms, living, dining and kitchen.
+
+    If the default utility was automatically added and the
+    user did not explicitly request it, retry without it.
+    ---------------------------------------------------------
+  */
+
+  const utilityExplicit =
+    typeof preferences.utility === "boolean";
+
+  const utilityFailed =
+    Array.isArray(result.failedRooms) &&
+    result.failedRooms.some(
+      room =>
+        room.id === "utility" ||
+        room.name === "Utility"
+    );
+
+  if (
+    result.feasibility?.status === "tight" &&
+    utilityFailed &&
+    !utilityExplicit
+  ) {
+    const compactRequirements = {
+      ...requirements,
+
+      preferences: {
+        ...preferences,
+        familyLounge:
+          familyLoungeExplicit
+            ? preferences.familyLounge
+            : false,
+
+        utility: false
+      }
+    };
+
+    const compactResult =
+      generateLayoutAttempt(
+        compactRequirements
+      );
+
+    if (compactResult.success) {
+      compactResult.adaptations = [
+        {
+          type: "removed-optional-room",
+          room: "Utility",
+          reason:
+            "The buildable area is tight, so the separate utility room was removed. Utility functions can be integrated beside or within the kitchen."
+        }
+      ];
+
+      if (!familyLoungeExplicit) {
+        compactResult.adaptations.unshift({
+          type: "removed-optional-room",
+          room: "Family Lounge",
+          reason:
+            "The buildable area is tight, so the separate family lounge was removed."
+        });
+      }
+
+      compactResult.originalFeasibility =
+        result.feasibility;
+
+      return compactResult;
+    }
+
+    result = compactResult;
+  }
+
+  return result;
+}
+
+
+function generateLayoutAttempt(requirements) {
   const feasibility =
     checkPlanFeasibility(requirements);
 
   /*
-    Do not try to create a broken plan
-    when even the minimum room program
-    cannot fit.
+    Do not try to create a broken plan when even the
+    minimum room program cannot fit.
   */
-  if (feasibility.status === "infeasible") {
+  if (
+    feasibility.status === "infeasible"
+  ) {
     return {
       success: false,
       reason: "infeasible",
       feasibility,
       rooms: [],
-      circulation: []
+      circulation: [],
+      failedRooms: []
     };
   }
 
@@ -42,21 +202,26 @@ export function generateLayout(requirements) {
     getDesignProfile(country);
 
   const areaInfo =
-    calculateBuildableArea(requirements);
+    calculateBuildableArea(
+      requirements
+    );
 
   const buildable =
     areaInfo.buildable;
 
-  const roadSide = normalizeRoadSide(
-    requirements.plot?.roadSide
-  );
+  const roadSide =
+    normalizeRoadSide(
+      requirements.plot?.roadSide
+    );
 
   const rooms =
-    buildRoomProgram(requirements);
+    buildRoomProgram(
+      requirements
+    );
 
   /*
     ---------------------------------------------------------
-    1. CREATE THE MAIN CIRCULATION SPINE
+    1. CREATE MAIN CIRCULATION SPINE
     ---------------------------------------------------------
   */
 
@@ -71,9 +236,8 @@ export function generateLayout(requirements) {
     ---------------------------------------------------------
     2. FREE RECTANGLES
 
-    The corridor is reserved first.
-
-    Rooms may only use the remaining rectangles.
+    Corridor is reserved first.
+    Rooms can only use remaining space.
     ---------------------------------------------------------
   */
 
@@ -86,12 +250,7 @@ export function generateLayout(requirements) {
 
   /*
     ---------------------------------------------------------
-    3. ROOM PLACEMENT ORDER
-
-    Important rooms go first.
-
-    Bedrooms go before attached bathrooms so the toilet
-    can later be placed near its bedroom.
+    3. PLACEMENT ORDER
     ---------------------------------------------------------
   */
 
@@ -107,11 +266,14 @@ export function generateLayout(requirements) {
 
   /*
     ---------------------------------------------------------
-    4. PLACE EACH ROOM
+    4. PLACE ROOMS
     ---------------------------------------------------------
   */
 
-  for (const room of orderedRooms) {
+  for (
+    const room
+    of orderedRooms
+  ) {
     const candidate =
       findBestPlacement({
         room,
@@ -125,6 +287,7 @@ export function generateLayout(requirements) {
       failedRooms.push({
         id: room.id,
         name: room.name,
+        type: room.type,
         reason:
           "No valid rectangle could be found."
       });
@@ -135,19 +298,28 @@ export function generateLayout(requirements) {
     const placed = {
       ...room,
 
-      x: round(candidate.x),
-      y: round(candidate.y),
+      x:
+        round(candidate.x),
 
-      width: round(candidate.width),
-      height: round(candidate.height),
+      y:
+        round(candidate.y),
 
-      area: round(
-        candidate.width *
-        candidate.height
-      )
+      width:
+        round(candidate.width),
+
+      height:
+        round(candidate.height),
+
+      area:
+        round(
+          candidate.width *
+          candidate.height
+        )
     };
 
-    placedRooms.push(placed);
+    placedRooms.push(
+      placed
+    );
 
     freeRects =
       subtractPlacedRectangle(
@@ -169,11 +341,13 @@ export function generateLayout(requirements) {
     success,
 
     country,
-    unit: profile.unit,
+    unit:
+      profile.unit,
 
     roadSide,
 
-    plot: areaInfo.plot,
+    plot:
+      areaInfo.plot,
 
     setbacks:
       areaInfo.setbacks,
@@ -216,7 +390,9 @@ export function generateLayout(requirements) {
           corridor.width *
           corridor.height
         )
-    }
+    },
+
+    adaptations: []
   };
 }
 
@@ -239,10 +415,10 @@ function createMainCorridor(
     corridorDefaults.preferredWidth;
 
   /*
-    North/South road:
+    North / south road:
     vertical circulation spine.
 
-    East/West road:
+    East / west road:
     horizontal circulation spine.
   */
 
@@ -257,9 +433,14 @@ function createMainCorridor(
       );
 
     return {
-      id: "corridor-main",
-      name: "Passage",
-      type: "corridor",
+      id:
+        "corridor-main",
+
+      name:
+        "Passage",
+
+      type:
+        "corridor",
 
       x:
         buildable.x +
@@ -284,9 +465,14 @@ function createMainCorridor(
     );
 
   return {
-    id: "corridor-main",
-    name: "Passage",
-    type: "corridor",
+    id:
+      "corridor-main",
+
+    name:
+      "Passage",
+
+    type:
+      "corridor",
 
     x:
       buildable.x,
@@ -316,20 +502,17 @@ function createInitialFreeRectangles(
   corridor,
   roadSide
 ) {
-  /*
-    Divide the buildable area around the corridor.
-
-    This guarantees that no room will overlap the passage.
-  */
-
   if (
     roadSide === "north" ||
     roadSide === "south"
   ) {
     return [
       {
-        x: buildable.x,
-        y: buildable.y,
+        x:
+          buildable.x,
+
+        y:
+          buildable.y,
 
         width:
           corridor.x -
@@ -356,7 +539,9 @@ function createInitialFreeRectangles(
         height:
           buildable.height
       }
-    ].filter(isUsableRectangle);
+    ].filter(
+      isUsableRectangle
+    );
   }
 
   return [
@@ -392,7 +577,9 @@ function createInitialFreeRectangles(
         corridor.y -
         corridor.height
     }
-  ].filter(isUsableRectangle);
+  ].filter(
+    isUsableRectangle
+  );
 }
 
 
@@ -402,8 +589,12 @@ function createInitialFreeRectangles(
   =========================================================
 */
 
-function getPlacementPriority(room) {
-  switch (room.type) {
+function getPlacementPriority(
+  room
+) {
+  switch (
+    room.type
+  ) {
     case "living":
       return 10;
 
@@ -457,7 +648,9 @@ function findBestPlacement({
   placedRooms
 }) {
   const sizes =
-    getPossibleRoomSizes(room);
+    getPossibleRoomSizes(
+      room
+    );
 
   const candidates = [];
 
@@ -478,14 +671,13 @@ function findBestPlacement({
         continue;
       }
 
-      /*
-        Try four corners of each free rectangle.
-      */
-
       const positions = [
         {
-          x: freeRect.x,
-          y: freeRect.y
+          x:
+            freeRect.x,
+
+          y:
+            freeRect.y
         },
 
         {
@@ -526,8 +718,11 @@ function findBestPlacement({
         of positions
       ) {
         const candidate = {
-          x: position.x,
-          y: position.y,
+          x:
+            position.x,
+
+          y:
+            position.y,
 
           width:
             size.width,
@@ -555,13 +750,16 @@ function findBestPlacement({
     }
   }
 
-  if (!candidates.length) {
+  if (
+    !candidates.length
+  ) {
     return null;
   }
 
   candidates.sort(
     (a, b) =>
-      a.score - b.score
+      a.score -
+      b.score
   );
 
   return candidates[0];
@@ -574,7 +772,9 @@ function findBestPlacement({
   =========================================================
 */
 
-function getPossibleRoomSizes(room) {
+function getPossibleRoomSizes(
+  room
+) {
   const preferredWidth =
     Number(
       room.preferredWidth ||
@@ -588,16 +788,16 @@ function getPossibleRoomSizes(room) {
     );
 
   const minWidth =
-    Number(room.minWidth);
+    Number(
+      room.minWidth
+    );
 
   const minHeight =
-    Number(room.minHeight);
+    Number(
+      room.minHeight
+    );
 
   const sizes = [];
-
-  /*
-    Preferred dimensions.
-  */
 
   sizes.push({
     width:
@@ -609,10 +809,6 @@ function getPossibleRoomSizes(room) {
     type:
       "preferred"
   });
-
-  /*
-    Preferred rotated.
-  */
 
   if (
     preferredWidth !==
@@ -631,8 +827,54 @@ function getPossibleRoomSizes(room) {
   }
 
   /*
-    Minimum dimensions.
+    Mid-size option between preferred and minimum.
+
+    This gives the planner more flexibility than jumping
+    directly from preferred dimensions to the minimum.
   */
+
+  const midWidth =
+    round(
+      (
+        preferredWidth +
+        minWidth
+      ) / 2
+    );
+
+  const midHeight =
+    round(
+      (
+        preferredHeight +
+        minHeight
+      ) / 2
+    );
+
+  sizes.push({
+    width:
+      midWidth,
+
+    height:
+      midHeight,
+
+    type:
+      "compact"
+  });
+
+  if (
+    midWidth !==
+    midHeight
+  ) {
+    sizes.push({
+      width:
+        midHeight,
+
+      height:
+        midWidth,
+
+      type:
+        "compact"
+    });
+  }
 
   sizes.push({
     width:
@@ -644,10 +886,6 @@ function getPossibleRoomSizes(room) {
     type:
       "minimum"
   });
-
-  /*
-    Minimum rotated.
-  */
 
   if (
     minWidth !==
@@ -687,12 +925,16 @@ function scoreCandidate({
 }) {
   let score = 0;
 
-  /*
-    Prefer the requested room size.
-  */
+  if (
+    sizeType ===
+    "compact"
+  ) {
+    score += 7;
+  }
 
   if (
-    sizeType === "minimum"
+    sizeType ===
+    "minimum"
   ) {
     score += 15;
   }
@@ -723,10 +965,6 @@ function scoreCandidate({
       buildable.height
   };
 
-  /*
-    Architectural zoning preference.
-  */
-
   const target =
     getRoomTarget(
       room,
@@ -737,12 +975,8 @@ function scoreCandidate({
     distance(
       normalized,
       target
-    ) * 100;
-
-  /*
-    Directional user preference:
-    SW, SE, NW, NE etc.
-  */
+    ) *
+    100;
 
   if (
     room.preferredDirection
@@ -752,19 +986,17 @@ function scoreCandidate({
         room.preferredDirection
       );
 
-    if (directionTarget) {
+    if (
+      directionTarget
+    ) {
       score +=
         distance(
           normalized,
           directionTarget
-        ) * 80;
+        ) *
+        80;
     }
   }
-
-  /*
-    Bedrooms should preferably touch
-    an exterior building wall.
-  */
 
   if (
     room.requiresExteriorWall &&
@@ -776,12 +1008,9 @@ function scoreCandidate({
     score += 80;
   }
 
-  /*
-    Attached toilet should remain close
-    to its bedroom.
-  */
-
-  if (room.attachedTo) {
+  if (
+    room.attachedTo
+  ) {
     const parent =
       placedRooms.find(
         placed =>
@@ -789,12 +1018,15 @@ function scoreCandidate({
           room.attachedTo
       );
 
-    if (parent) {
+    if (
+      parent
+    ) {
       score +=
         rectangleDistance(
           candidate,
           parent
-        ) * 12;
+        ) *
+        12;
 
       if (
         rectanglesTouch(
@@ -806,10 +1038,6 @@ function scoreCandidate({
       }
     }
   }
-
-  /*
-    Kitchen / utility relationships.
-  */
 
   if (
     Array.isArray(
@@ -827,7 +1055,9 @@ function scoreCandidate({
             preferredId
         );
 
-      if (!neighbour) {
+      if (
+        !neighbour
+      ) {
         continue;
       }
 
@@ -835,7 +1065,8 @@ function scoreCandidate({
         rectangleDistance(
           candidate,
           neighbour
-        ) * 5;
+        ) *
+        5;
 
       if (
         rectanglesTouch(
@@ -864,7 +1095,9 @@ function getRoomTarget(
 ) {
   let depth;
 
-  switch (room.zone) {
+  switch (
+    room.zone
+  ) {
     case "public":
       depth = 0.15;
       break;
@@ -885,12 +1118,9 @@ function getRoomTarget(
       depth = 0.50;
   }
 
-  /*
-    Convert "depth from road"
-    into x/y coordinates.
-  */
-
-  switch (roadSide) {
+  switch (
+    roadSide
+  ) {
     case "south":
       return {
         x: 0.5,
@@ -921,7 +1151,7 @@ function getRoomTarget(
 
 /*
   =========================================================
-  COMPASS DIRECTION TARGETS
+  COMPASS TARGETS
   =========================================================
 */
 
@@ -929,9 +1159,14 @@ function getDirectionTarget(
   direction
 ) {
   const normalized =
-    String(direction)
+    String(
+      direction
+    )
       .toLowerCase()
-      .replace(/[\s_-]/g, "");
+      .replace(
+        /[\s_-]/g,
+        ""
+      );
 
   const directions = {
     north: {
@@ -976,7 +1211,9 @@ function getDirectionTarget(
   };
 
   return (
-    directions[normalized] ||
+    directions[
+      normalized
+    ] ||
     null
   );
 }
@@ -1027,17 +1264,16 @@ function subtractPlacedRectangle(
       placed.y +
       placed.height;
 
-    /*
-      Left remainder.
-    */
-
     if (
       placed.x >
       free.x
     ) {
       newFreeRects.push({
-        x: free.x,
-        y: free.y,
+        x:
+          free.x,
+
+        y:
+          free.y,
 
         width:
           placed.x -
@@ -1047,10 +1283,6 @@ function subtractPlacedRectangle(
           free.height
       });
     }
-
-    /*
-      Right remainder.
-    */
 
     if (
       placedRight <
@@ -1072,10 +1304,6 @@ function subtractPlacedRectangle(
       });
     }
 
-    /*
-      Top remainder.
-    */
-
     if (
       placed.y >
       free.y
@@ -1095,10 +1323,6 @@ function subtractPlacedRectangle(
           free.y
       });
     }
-
-    /*
-      Bottom remainder.
-    */
 
     if (
       placedBottom <
@@ -1130,8 +1354,8 @@ function subtractPlacedRectangle(
 
 
 /*
-  Remove rectangles completely contained
-  inside another free rectangle.
+  Remove free rectangles completely contained inside
+  another free rectangle.
 */
 
 function pruneFreeRectangles(
@@ -1140,9 +1364,13 @@ function pruneFreeRectangles(
   return rectangles.filter(
     (rect, index) => {
       return !rectangles.some(
-        (other, otherIndex) => {
+        (
+          other,
+          otherIndex
+        ) => {
           if (
-            index === otherIndex
+            index ===
+            otherIndex
           ) {
             return false;
           }
@@ -1181,7 +1409,8 @@ function rectanglesTouch(
   a,
   b
 ) {
-  const tolerance = 0.01;
+  const tolerance =
+    0.01;
 
   const horizontalTouch =
     (
@@ -1189,18 +1418,23 @@ function rectanglesTouch(
         a.x +
         a.width -
         b.x
-      ) < tolerance ||
+      ) <
+      tolerance ||
+
       Math.abs(
         b.x +
         b.width -
         a.x
-      ) < tolerance
+      ) <
+      tolerance
     ) &&
     rangesOverlap(
       a.y,
-      a.y + a.height,
+      a.y +
+      a.height,
       b.y,
-      b.y + b.height
+      b.y +
+      b.height
     );
 
   const verticalTouch =
@@ -1209,18 +1443,23 @@ function rectanglesTouch(
         a.y +
         a.height -
         b.y
-      ) < tolerance ||
+      ) <
+      tolerance ||
+
       Math.abs(
         b.y +
         b.height -
         a.y
-      ) < tolerance
+      ) <
+      tolerance
     ) &&
     rangesOverlap(
       a.x,
-      a.x + a.width,
+      a.x +
+      a.width,
       b.x,
-      b.x + b.width
+      b.x +
+      b.width
     );
 
   return (
@@ -1237,8 +1476,14 @@ function rangesOverlap(
   b2
 ) {
   return (
-    Math.min(a2, b2) >
-    Math.max(a1, b1)
+    Math.min(
+      a2,
+      b2
+    ) >
+    Math.max(
+      a1,
+      b1
+    )
   );
 }
 
@@ -1248,12 +1493,17 @@ function rectangleContains(
   inner
 ) {
   return (
-    inner.x >= outer.x &&
-    inner.y >= outer.y &&
+    inner.x >=
+      outer.x &&
+
+    inner.y >=
+      outer.y &&
+
     inner.x +
       inner.width <=
       outer.x +
       outer.width &&
+
     inner.y +
       inner.height <=
       outer.y +
@@ -1304,18 +1554,21 @@ function touchesExteriorWall(
   room,
   buildable
 ) {
-  const tolerance = 0.01;
+  const tolerance =
+    0.01;
 
   return (
     Math.abs(
       room.x -
       buildable.x
-    ) < tolerance ||
+    ) <
+      tolerance ||
 
     Math.abs(
       room.y -
       buildable.y
-    ) < tolerance ||
+    ) <
+      tolerance ||
 
     Math.abs(
       room.x +
@@ -1324,7 +1577,8 @@ function touchesExteriorWall(
         buildable.x +
         buildable.width
       )
-    ) < tolerance ||
+    ) <
+      tolerance ||
 
     Math.abs(
       room.y +
@@ -1333,7 +1587,8 @@ function touchesExteriorWall(
         buildable.y +
         buildable.height
       )
-    ) < tolerance
+    ) <
+      tolerance
   );
 }
 
@@ -1342,8 +1597,10 @@ function isUsableRectangle(
   rect
 ) {
   return (
-    rect.width > 0.01 &&
-    rect.height > 0.01
+    rect.width >
+      0.01 &&
+    rect.height >
+      0.01
   );
 }
 
@@ -1360,12 +1617,16 @@ function removeDuplicateSizes(
         `${size.width}x${size.height}`;
 
       if (
-        seen.has(key)
+        seen.has(
+          key
+        )
       ) {
         return false;
       }
 
-      seen.add(key);
+      seen.add(
+        key
+      );
 
       return true;
     }
@@ -1378,7 +1639,8 @@ function normalizeRoadSide(
 ) {
   const value =
     String(
-      roadSide || "north"
+      roadSide ||
+      "north"
     ).toLowerCase();
 
   if (
@@ -1387,7 +1649,9 @@ function normalizeRoadSide(
       "south",
       "east",
       "west"
-    ].includes(value)
+    ].includes(
+      value
+    )
   ) {
     return value;
   }
@@ -1405,7 +1669,9 @@ function round(
 
   return (
     Math.round(
-      value * factor
-    ) / factor
+      value *
+      factor
+    ) /
+    factor
   );
 }
