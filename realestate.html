@@ -164,12 +164,20 @@
       display: flex;
       flex-direction: column;
       gap: .75rem;
-      min-height: 460px;
+      height: min(72vh, 720px);
+      min-height: 560px;
+      max-height: 720px;
+      overflow: hidden;
     }
 
     .chat-thread {
-      flex: 1;
-      overflow: auto;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      scroll-behavior: smooth;
       border-radius: 1rem;
       border: 1px solid rgba(148,163,184,.45);
       background: rgba(15,23,42,.70);
@@ -245,6 +253,33 @@
     }
     .chat-send:hover { transform: translateY(-1px); filter: brightness(1.05); box-shadow: 0 24px 60px rgba(15,23,42,.95); }
     .chat-send:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(1); transform: none; box-shadow: none; }
+
+
+    .chat-input-row,
+    .studio-actions,
+    .progress-wrap,
+    .studio-status {
+      flex: 0 0 auto;
+    }
+
+    .chat-thread::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    .chat-thread::-webkit-scrollbar-track {
+      background: rgba(15,23,42,.35);
+      border-radius: 999px;
+    }
+
+    .chat-thread::-webkit-scrollbar-thumb {
+      background: rgba(148,163,184,.45);
+      border-radius: 999px;
+      border: 2px solid rgba(15,23,42,.35);
+    }
+
+    .chat-thread::-webkit-scrollbar-thumb:hover {
+      background: rgba(191,219,254,.65);
+    }
 
     /* ===== Action buttons ===== */
     .studio-actions { display: flex; gap: .65rem; flex-wrap: wrap; margin-top: .15rem; }
@@ -355,7 +390,7 @@
 
     .viewer-canvas svg {
       display: block;
-      width: min(92vw, 980px);
+      width: min(96vw, 1180px);
       max-width: none;
       max-height: none;
       height: auto;
@@ -514,7 +549,11 @@
     }
 
     @media (max-width: 1040px) { .agents-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-    @media (max-width: 900px)  { .studio-layout { grid-template-columns: minmax(0,1fr); } .viewer-stage { min-height: 360px; } }
+    @media (max-width: 900px)  {
+      .studio-layout { grid-template-columns: minmax(0,1fr); }
+      .viewer-stage { min-height: 360px; }
+      .chat-shell { height: 620px; min-height: 520px; max-height: 620px; }
+    }
     @media (max-width: 768px)  {
       .site-header { padding-inline: 1.25rem; }
       .hero { padding-inline: 1.5rem; }
@@ -728,7 +767,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "openai-planner-v4";
+      const REAL_ESTATE_VERSION = "openai-planner-v5";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -1649,13 +1688,13 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         const facing = plan?.production?.facing || "E";
         const roadLabel = `${directionName(facing).toUpperCase()} ROAD`;
         if (facing === "E") {
-          textEl(plotW + pad * 0.45, plotH / 2, roadLabel, 0.3, 800);
+          textEl(plotW + pad * 0.45, plotH / 2, roadLabel, 0.46, 850);
         } else if (facing === "W") {
-          textEl(-pad * 0.45, plotH / 2, roadLabel, 0.3, 800);
+          textEl(-pad * 0.45, plotH / 2, roadLabel, 0.46, 850);
         } else if (facing === "N") {
-          textEl(plotW / 2, -pad * 0.55, roadLabel, 0.3, 800);
+          textEl(plotW / 2, -pad * 0.55, roadLabel, 0.46, 850);
         } else {
-          textEl(plotW / 2, plotH + pad * 0.7, roadLabel, 0.3, 800);
+          textEl(plotW / 2, plotH + pad * 0.7, roadLabel, 0.46, 850);
         }
 
         // Setback/building envelope
@@ -1682,13 +1721,13 @@ Click “Render Concept 1” to generate the technical blueprint.`;
             "stroke-width": 0.045,
             "stroke-dasharray": "0.12 0.08"
           });
-          textEl(o.x + o.w/2, o.y + o.h/2, o.name || "Parking", 0.24, 700);
+          textEl(o.x + o.w/2, o.y + o.h/2, o.name || "Parking", 0.38, 800);
           if (o.dimensions_ft) {
             textEl(
               o.x + o.w/2,
               o.y + o.h/2 + 0.32,
               `${o.dimensions_ft.w}' × ${o.dimensions_ft.h}'`,
-              0.18, 500
+              0.28, 650
             );
           }
         });
@@ -1728,20 +1767,20 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           const cx = room.x + room.w / 2;
           const cy = room.y + room.h / 2;
 
-          const nameSize = clamp(Math.min(room.w, room.h) * 0.10, 0.18, 0.32);
-          textEl(cx, cy - nameSize * 0.45, room.name, nameSize, 750, "middle", g);
+          const nameSize = clamp(Math.min(room.w, room.h) * 0.15, 0.34, 0.58);
+          textEl(cx, cy - nameSize * 0.48, room.name, nameSize, 800, "middle", g);
 
           if (room.dimensions_ft) {
             textEl(
               cx, cy + nameSize * 0.7,
               `${room.dimensions_ft.w}' × ${room.dimensions_ft.h}'`,
-              Math.max(0.16, nameSize * 0.68), 600, "middle", g
+              Math.max(0.27, nameSize * 0.72), 700, "middle", g
             );
             const area = Math.round(room.dimensions_ft.w * room.dimensions_ft.h);
             textEl(
               cx, cy + nameSize * 1.45,
               `${area} sq.ft.`,
-              Math.max(0.14, nameSize * 0.58), 450, "middle", g
+              Math.max(0.23, nameSize * 0.60), 600, "middle", g
             );
           }
         });
@@ -1837,13 +1876,13 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         add("line", { x1:0, y1:dimY, x2:plotW, y2:dimY, stroke:"#475569", "stroke-width":0.03 });
         add("line", { x1:0, y1:dimY-0.12, x2:0, y2:dimY+0.12, stroke:"#475569", "stroke-width":0.03 });
         add("line", { x1:plotW, y1:dimY-0.12, x2:plotW, y2:dimY+0.12, stroke:"#475569", "stroke-width":0.03 });
-        textEl(plotW/2, dimY-0.15, `${plotWidthFt}'-0"`, 0.26, 700);
+        textEl(plotW/2, dimY-0.18, `${plotWidthFt}'-0"`, 0.40, 800);
 
         const dimX = -pad * 0.42;
         add("line", { x1:dimX, y1:0, x2:dimX, y2:plotH, stroke:"#475569", "stroke-width":0.03 });
         add("line", { x1:dimX-0.12, y1:0, x2:dimX+0.12, y2:0, stroke:"#475569", "stroke-width":0.03 });
         add("line", { x1:dimX-0.12, y1:plotH, x2:dimX+0.12, y2:plotH, stroke:"#475569", "stroke-width":0.03 });
-        const vt = textEl(dimX-0.18, plotH/2, `${plotDepthFt}'-0"`, 0.26, 700);
+        const vt = textEl(dimX-0.22, plotH/2, `${plotDepthFt}'-0"`, 0.40, 800);
         vt.setAttribute("transform", `rotate(-90 ${dimX-0.18} ${plotH/2})`);
 
         // North arrow
@@ -1852,13 +1891,13 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         const ng = add("g", { transform:`translate(${nx} ${ny})` });
         add("line", { x1:0, y1:0.38, x2:0, y2:-0.35, stroke:"#0f172a", "stroke-width":0.05 }, ng);
         add("path", { d:"M 0 -0.48 L -0.14 -0.18 L 0.14 -0.18 Z", fill:"#0f172a" }, ng);
-        textEl(0, -0.62, "N", 0.26, 800, "middle", ng);
+        textEl(0, -0.68, "N", 0.40, 900, "middle", ng);
 
         // Title block
-        textEl(plotW/2, plotH + pad*0.5, plan?.meta?.title || "Architectural Concept", 0.34, 800);
+        textEl(plotW/2, plotH + pad*0.48, plan?.meta?.title || "Architectural Concept", 0.48, 850);
         textEl(plotW/2, plotH + pad*0.76,
           `${directionName(facing)} facing · ${floorLabel(plan?.meta?.floors || 1)} · ${REAL_ESTATE_VERSION} · Concept plan — verify with licensed architect/engineer`,
-          0.19, 500
+          0.28, 600
         );
 
         return new XMLSerializer().serializeToString(svg);
@@ -1989,7 +2028,7 @@ Click “Render Concept 1” to generate the technical blueprint.`;
       // ---------------------------
       // SVG Viewer: zoom / pan / rotate
       // ---------------------------
-      let view = { scale: 1, rotate: 0, tx: 0, ty: 0, dragging: false, lastX: 0, lastY: 0 };
+      let view = { scale: 1.18, rotate: 0, tx: 0, ty: 0, dragging: false, lastX: 0, lastY: 0 };
 
       function applyTransform() {
         if (!viewerCanvas) return;
@@ -2017,7 +2056,7 @@ Click “Render Concept 1” to generate the technical blueprint.`;
 
       function rotateBy(deg) { view.rotate = (view.rotate + deg) % 360; applyTransform(); }
       function resetView(silent=false) {
-        view.scale = 1; view.rotate = 0; view.tx = 0; view.ty = 0; applyTransform();
+        view.scale = 1.18; view.rotate = 0; view.tx = 0; view.ty = 0; applyTransform();
         if (!silent) setStatus("View reset ✅");
       }
 
