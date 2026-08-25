@@ -16,33 +16,37 @@ import {
 
 
 /*
-  Still In Queue · Layout Planner V14
-  ------------------------------------
-  Preferred path:
-    connected architectural block layout
+  Still In Queue · Architectural Planner V16
+  -------------------------------------------
+  Primary goal:
+  create a compact CONNECTED floor plan for a single-floor 3BHK.
 
-  Fallback:
-    previous multi-strategy rectangle planner
+  Key change from the previous version:
+  - NO full-height corridor
+  - compact central lobby/hall
+  - rooms share walls
+  - wet areas are grouped
+  - attached toilets sit beside bedrooms
+  - living/dining are connected at the front
+  - bedrooms form a private rear zone
 
-  The connected template is intentionally optimized first for
-  practical single-floor 3BHK homes because this is the current
-  reference case. Other configurations safely fall back to the
-  generic planner until their connected templates are added.
+  Other configurations safely fall back to the previous
+  multi-strategy planner.
 */
 
 export function generateLayout(requirements) {
-  const connected =
-    generateConnectedArchitecturalLayout(requirements);
+  const compact =
+    generateCompact3BHK(requirements);
 
-  if (connected?.success) {
-    return connected;
+  if (compact?.success) {
+    return compact;
   }
 
   return legacyGenerateLayout(requirements);
 }
 
 
-function generateConnectedArchitecturalLayout(requirements) {
+function generateCompact3BHK(requirements) {
   const country =
     String(requirements.country || "india").toLowerCase();
 
@@ -53,17 +57,8 @@ function generateConnectedArchitecturalLayout(requirements) {
     Number(requirements.house?.floors || 1);
 
   const roadSide =
-    normalizeConnectedRoadSide(
-      requirements.plot?.roadSide
-    );
+    normalizeRoadSideV16(requirements.plot?.roadSide);
 
-  /*
-    V14 connected template:
-    single-floor 3BHK + north/south road.
-
-    This covers the current reference case and creates a much
-    more architectural footprint than the older free packing.
-  */
   if (
     bhk !== 3 ||
     floors !== 1 ||
@@ -85,21 +80,24 @@ function generateConnectedArchitecturalLayout(requirements) {
   const areaInfo =
     calculateBuildableArea(requirements);
 
-  const buildable =
+  const b =
     areaInfo.buildable;
 
+  const preferences =
+    requirements.preferences || {};
+
+  /*
+    For this compact template:
+    family lounge is represented by the central lobby / living-dining
+    connection unless user explicitly asks for a separate lounge.
+  */
   const program =
     buildRoomProgram({
       ...requirements,
       preferences: {
-        ...(requirements.preferences || {}),
-
-        /*
-          A separate family lounge is not forced in this compact
-          connected template unless the user explicitly asks for it.
-        */
+        ...preferences,
         familyLounge:
-          requirements.preferences?.familyLounge === true
+          preferences.familyLounge === true
             ? true
             : false
       }
@@ -107,10 +105,10 @@ function generateConnectedArchitecturalLayout(requirements) {
 
   const byId =
     Object.fromEntries(
-      program.map(room => [room.id, room])
+      program.map(room => [room.id, { ...room }])
     );
 
-  const required = [
+  const requiredIds = [
     "living",
     "dining",
     "kitchen",
@@ -123,385 +121,312 @@ function generateConnectedArchitecturalLayout(requirements) {
   ];
 
   if (
-    required.some(id => !byId[id])
+    requiredIds.some(id => !byId[id])
   ) {
     return null;
   }
 
-  const unit =
-    profile.unit;
+  /*
+    Practical proportions.
+    30x40 India example after setbacks:
+      ~27 x 35 ft buildable.
 
-  const corridorPreferred =
-    Number(
-      profile.roomDefaults.corridor
-        ?.preferredWidth || 4
+    We use four connected bands:
+      FRONT        living + dining
+      MIDDLE       kitchen + lobby + bed3
+      WET CORE     utility + toilets + lobby
+      REAR         master + bed2
+
+    This produces one connected footprint instead of
+    two wings divided by a full-height passage.
+  */
+
+  const frontH =
+    clampV16(
+      b.height * 0.27,
+      country === "germany" ? 3.2 : 9.0,
+      country === "germany" ? 4.2 : 11.0
     );
 
-  /*
-    Slightly narrower circulation than the previous full-height
-    strip, but still practical:
-      India: 3.5 ft
-      Germany: ~1.10 m
-  */
-  const corridorWidth =
-    country === "germany"
-      ? Math.min(1.10, buildable.width * 0.14)
-      : Math.min(3.5, buildable.width * 0.14);
+  const middleH =
+    clampV16(
+      b.height * 0.25,
+      country === "germany" ? 2.8 : 8.0,
+      country === "germany" ? 3.8 : 10.0
+    );
 
-  const wingWidth =
-    (buildable.width - corridorWidth) / 2;
+  const wetH =
+    clampV16(
+      b.height * 0.16,
+      country === "germany" ? 1.8 : 5.5,
+      country === "germany" ? 2.5 : 7.0
+    );
 
-  /*
-    The connected template needs enough width for practical rooms.
-  */
-  const minimumWingWidth =
+  const rearH =
+    b.height -
+    frontH -
+    middleH -
+    wetH;
+
+  const minRear =
     country === "germany"
       ? 3.0
       : 10.0;
 
-  if (wingWidth < minimumWingWidth) {
+  if (rearH < minRear) {
     return null;
   }
 
-  const corridor = {
-    id: "corridor-main",
-    name: "Passage",
-    type: "corridor",
+  const lobbyW =
+    country === "germany"
+      ? clampV16(b.width * 0.13, 1.05, 1.30)
+      : clampV16(b.width * 0.13, 3.25, 3.75);
 
-    x:
-      buildable.x +
-      wingWidth,
+  const leftW =
+    (b.width - lobbyW) * 0.52;
 
-    y:
-      buildable.y,
+  const rightW =
+    b.width -
+    lobbyW -
+    leftW;
 
-    width:
-      corridorWidth,
+  const xLeft =
+    b.x;
 
-    height:
-      buildable.height
-  };
+  const xLobby =
+    b.x + leftW;
 
-  const leftX =
-    buildable.x;
+  const xRight =
+    xLobby + lobbyW;
 
-  const rightX =
-    corridor.x +
-    corridor.width;
+  const yFront =
+    b.y;
+
+  const yMiddle =
+    yFront + frontH;
+
+  const yWet =
+    yMiddle + middleH;
+
+  const yRear =
+    yWet + wetH;
 
   const rooms = [];
 
-  const living =
-    cloneRoom(byId["living"]);
+  /*
+    FRONT BAND
+  */
+  placeV16(
+    rooms,
+    byId["living"],
+    xLeft,
+    yFront,
+    leftW + lobbyW * 0.25,
+    frontH
+  );
 
-  const kitchen =
-    cloneRoom(byId["kitchen"]);
+  placeV16(
+    rooms,
+    byId["dining"],
+    xLeft + leftW + lobbyW * 0.25,
+    yFront,
+    rightW + lobbyW * 0.75,
+    frontH
+  );
 
-  const master =
-    cloneRoom(byId["bedroom-1"]);
+  /*
+    MIDDLE BAND
+  */
+  placeV16(
+    rooms,
+    byId["kitchen"],
+    xLeft,
+    yMiddle,
+    leftW,
+    middleH
+  );
 
-  const masterToilet =
-    cloneRoom(byId["attached-toilet-1"]);
+  placeV16(
+    rooms,
+    byId["bedroom-3"],
+    xRight,
+    yMiddle,
+    rightW,
+    middleH
+  );
+
+  /*
+    WET CORE
+    Left: utility + master toilet
+    Right: common toilet + attached toilet 2
+  */
 
   const utility =
-    byId["utility"]
-      ? cloneRoom(byId["utility"])
-      : null;
+    byId["utility"];
 
-  const dining =
-    cloneRoom(byId["dining"]);
+  const masterToilet =
+    byId["attached-toilet-1"];
 
-  const bed2 =
-    cloneRoom(byId["bedroom-2"]);
-
-  const bed3 =
-    cloneRoom(byId["bedroom-3"]);
+  const commonToilet =
+    byId["common-toilet"];
 
   const attached2 =
-    cloneRoom(byId["attached-toilet-2"]);
-
-  const common =
-    cloneRoom(byId["common-toilet"]);
-
-  /*
-    ---------------------------------------------------------
-    LEFT WING
-      Living
-      Kitchen
-      Utility + Master Toilet
-      Master Bedroom
-
-    RIGHT WING
-      Dining
-      Common Toilet + Attached Toilet 2
-      Bedroom 3
-      Bedroom 2
-
-    All bands share walls.
-    No floating gaps.
-    ---------------------------------------------------------
-  */
-
-  const leftServiceHeight =
-    Math.max(
-      utility?.minHeight || 0,
-      masterToilet.minHeight || 0,
-      country === "germany" ? 2.0 : 6.0
-    );
-
-  const rightServiceHeight =
-    Math.max(
-      common.minHeight || 0,
-      attached2.minHeight || 0,
-      country === "germany" ? 2.0 : 6.0
-    );
-
-  const roomScales =
-    requirements.preferences?.roomScales || {};
-
-  const leftFixed =
-    scaledHeight(living, roomScales.living) +
-    scaledHeight(kitchen, roomScales.kitchen) +
-    leftServiceHeight +
-    scaledHeight(master, roomScales.masterBedroom);
-
-  const rightFixed =
-    scaledHeight(dining, roomScales.dining) +
-    rightServiceHeight +
-    scaledHeight(bed3, roomScales.bedroom) +
-    scaledHeight(bed2, roomScales.bedroom);
-
-  const leftScale =
-    buildable.height / leftFixed;
-
-  const rightScale =
-    buildable.height / rightFixed;
-
-  /*
-    We only accept moderate vertical scaling.
-    Otherwise generic planner should take over.
-  */
-  if (
-    leftScale < 0.82 ||
-    rightScale < 0.82
-  ) {
-    return null;
-  }
-
-  const leftHeights = normalizeHeights(
-    [
-      scaledHeight(living, roomScales.living),
-      scaledHeight(kitchen, roomScales.kitchen),
-      leftServiceHeight,
-      scaledHeight(master, roomScales.masterBedroom)
-    ],
-    buildable.height
-  );
-
-  const rightHeights = normalizeHeights(
-    [
-      scaledHeight(dining, roomScales.dining),
-      rightServiceHeight,
-      scaledHeight(bed3, roomScales.bedroom),
-      scaledHeight(bed2, roomScales.bedroom)
-    ],
-    buildable.height
-  );
-
-  let yLeft =
-    buildable.y;
-
-  placeFullBand(
-    rooms,
-    living,
-    leftX,
-    yLeft,
-    wingWidth,
-    leftHeights[0]
-  );
-  yLeft += leftHeights[0];
-
-  placeFullBand(
-    rooms,
-    kitchen,
-    leftX,
-    yLeft,
-    wingWidth,
-    leftHeights[1]
-  );
-  yLeft += leftHeights[1];
+    byId["attached-toilet-2"];
 
   if (utility) {
-    const utilMinW =
-      Math.max(
-        utility.minWidth || 0,
-        wingWidth * 0.42
-      );
+    const utilW =
+      leftW * 0.46;
 
-    const toiletMinW =
-      masterToilet.minWidth || 0;
-
-    let utilW =
-      Math.max(
-        wingWidth * 0.46,
-        utilMinW
-      );
-
-    utilW =
-      Math.min(
-        utilW,
-        wingWidth -
-        Math.max(
-          toiletMinW,
-          wingWidth * 0.38
-        )
-      );
-
-    utilW =
-      Math.max(
-        wingWidth * 0.40,
-        utilW
-      );
-
-    const toiletW =
-      wingWidth - utilW;
-
-    placeRect(
+    placeV16(
       rooms,
       utility,
-      leftX,
-      yLeft,
+      xLeft,
+      yWet,
       utilW,
-      leftHeights[2]
+      wetH
     );
 
-    placeRect(
+    placeV16(
       rooms,
       masterToilet,
-      leftX + utilW,
-      yLeft,
-      toiletW,
-      leftHeights[2]
+      xLeft + utilW,
+      yWet,
+      leftW - utilW,
+      wetH
     );
   } else {
-    placeFullBand(
+    placeV16(
       rooms,
       masterToilet,
-      leftX,
-      yLeft,
-      wingWidth,
-      leftHeights[2]
+      xLeft,
+      yWet,
+      leftW,
+      wetH
     );
   }
 
-  yLeft += leftHeights[2];
-
-  placeFullBand(
-    rooms,
-    master,
-    leftX,
-    yLeft,
-    wingWidth,
-    leftHeights[3]
-  );
-
-  let yRight =
-    buildable.y;
-
-  placeFullBand(
-    rooms,
-    dining,
-    rightX,
-    yRight,
-    wingWidth,
-    rightHeights[0]
-  );
-  yRight += rightHeights[0];
-
-  /*
-    Put two toilets side-by-side in one compact service band.
-  */
   const commonW =
-    Math.max(
-      common.minWidth || 0,
-      wingWidth * 0.46
-    );
+    rightW * 0.52;
 
-  const attachedW =
-    wingWidth -
-    commonW;
-
-  if (
-    attachedW <
-    Math.max(
-      attached2.minWidth || 0,
-      wingWidth * 0.34
-    )
-  ) {
-    return null;
-  }
-
-  placeRect(
+  placeV16(
     rooms,
-    common,
-    rightX,
-    yRight,
+    commonToilet,
+    xRight,
+    yWet,
     commonW,
-    rightHeights[1]
+    wetH
   );
 
-  placeRect(
+  placeV16(
     rooms,
     attached2,
-    rightX + commonW,
-    yRight,
-    attachedW,
-    rightHeights[1]
-  );
-
-  yRight +=
-    rightHeights[1];
-
-  placeFullBand(
-    rooms,
-    bed3,
-    rightX,
-    yRight,
-    wingWidth,
-    rightHeights[2]
-  );
-  yRight += rightHeights[2];
-
-  placeFullBand(
-    rooms,
-    bed2,
-    rightX,
-    yRight,
-    wingWidth,
-    rightHeights[3]
+    xRight + commonW,
+    yWet,
+    rightW - commonW,
+    wetH
   );
 
   /*
-    If south-facing, mirror the whole connected arrangement
-    vertically so the public rooms remain toward the road.
+    REAR BAND
+  */
+  placeV16(
+    rooms,
+    byId["bedroom-1"],
+    xLeft,
+    yRear,
+    leftW + lobbyW * 0.15,
+    rearH
+  );
+
+  placeV16(
+    rooms,
+    byId["bedroom-2"],
+    xLeft + leftW + lobbyW * 0.15,
+    yRear,
+    rightW + lobbyW * 0.85,
+    rearH
+  );
+
+  /*
+    COMPACT CIRCULATION HUB
+
+    Instead of a full-height central strip, use two rectangles:
+    - vertical lobby through middle + wet core
+    - short horizontal landing before rear bedrooms
+
+    This looks much closer to real residential circulation.
+  */
+  const verticalLobby = {
+    id: "lobby-main",
+    name: "Lobby",
+    type: "corridor",
+
+    x:
+      xLobby,
+
+    y:
+      yMiddle,
+
+    width:
+      lobbyW,
+
+    height:
+      middleH + wetH
+  };
+
+  const landingDepth =
+    country === "germany"
+      ? Math.min(1.2, rearH * 0.20)
+      : Math.min(4.0, rearH * 0.22);
+
+  const rearLanding = {
+    id: "lobby-rear",
+    name: "Landing",
+    type: "corridor",
+
+    x:
+      xLeft + leftW * 0.38,
+
+    y:
+      yRear,
+
+    width:
+      b.width - leftW * 0.76,
+
+    height:
+      landingDepth
+  };
+
+  /*
+    SOUTH ROAD:
+    mirror complete geometry vertically so living/dining remain at road side.
   */
   if (roadSide === "south") {
-    mirrorRoomsVertically(
+    mirrorAllV16(
       rooms,
-      buildable
+      [verticalLobby, rearLanding],
+      b
     );
   }
 
   /*
-    Apply explicit room-direction changes from chat.
-    For the connected template these are handled as left/right
-    swaps where possible without destroying the connected plan.
+    Chat-driven directional changes:
+    keep them deterministic without destroying the footprint.
   */
-  applyConnectedPreferenceSwaps(
+  applyPreferenceSwapsV16(
     rooms,
-    requirements,
-    buildable,
-    corridor
+    preferences,
+    b
+  );
+
+  /*
+    Room-size chat intent:
+    "make living bigger", "make bedrooms smaller", etc.
+    We adjust adjacent band split modestly rather than breaking walls.
+  */
+  applySizeIntentV16(
+    rooms,
+    preferences
   );
 
   const roomArea =
@@ -517,7 +442,9 @@ function generateConnectedArchitecturalLayout(requirements) {
     success: true,
 
     country,
-    unit,
+    unit:
+      profile.unit,
+
     roadSide,
 
     plot:
@@ -527,12 +454,13 @@ function generateConnectedArchitecturalLayout(requirements) {
       areaInfo.setbacks,
 
     buildableArea:
-      buildable,
+      b,
 
     feasibility,
 
     circulation: [
-      corridor
+      verticalLobby,
+      rearLanding
     ],
 
     rooms,
@@ -540,7 +468,7 @@ function generateConnectedArchitecturalLayout(requirements) {
     failedRooms: [],
 
     placementStrategy:
-      "connected-architectural-blocks",
+      "compact-connected-hub",
 
     statistics: {
       requestedRooms:
@@ -553,132 +481,34 @@ function generateConnectedArchitecturalLayout(requirements) {
         0,
 
       roomArea:
-        roundConnected(roomArea),
+        roundV16(roomArea),
 
       corridorArea:
-        roundConnected(
-          corridor.width *
-          corridor.height
+        roundV16(
+          verticalLobby.width *
+          verticalLobby.height +
+          rearLanding.width *
+          rearLanding.height
         )
     },
 
     adaptations: [
       {
         type:
-          "connected-footprint",
+          "compact-circulation",
 
         room:
           "Whole plan",
 
         reason:
-          "Rooms were organized into connected wall-sharing bands around a compact central passage."
+          "A compact central lobby and rear landing replace the previous full-height corridor."
       }
     ]
   };
 }
 
 
-function cloneRoom(room) {
-  return {
-    ...room
-  };
-}
-
-
-function preferredOrMinHeight(room) {
-  return Number(
-    room.preferredHeight ||
-    room.minHeight ||
-    1
-  );
-}
-
-
-function scaledHeight(
-  room,
-  multiplier
-) {
-  const base =
-    preferredOrMinHeight(room);
-
-  const scale =
-    Number.isFinite(
-      Number(multiplier)
-    )
-      ? Number(multiplier)
-      : 1;
-
-  return (
-    base *
-    Math.max(
-      0.72,
-      Math.min(
-        1.35,
-        scale
-      )
-    )
-  );
-}
-
-
-function normalizeHeights(
-  heights,
-  totalHeight
-) {
-  const sum =
-    heights.reduce(
-      (a, b) => a + b,
-      0
-    );
-
-  const scaled =
-    heights.map(
-      h =>
-        (h / sum) *
-        totalHeight
-    );
-
-  /*
-    Force final cell to close any floating point gap.
-  */
-  const beforeLast =
-    scaled
-      .slice(0, -1)
-      .reduce(
-        (a, b) => a + b,
-        0
-      );
-
-  scaled[
-    scaled.length - 1
-  ] =
-    totalHeight -
-    beforeLast;
-
-  return scaled;
-}
-
-
-function placeFullBand(
-  target,
-  room,
-  x,
-  y,
-  width,
-  height
-) {
-  placeRect(
-    target,
-    room,
-    x,
-    y,
-    width,
-    height
-  );
-}
-
-
-function placeRect(
+function placeV16(
   target,
   room,
   x,
@@ -690,19 +520,19 @@ function placeRect(
     ...room,
 
     x:
-      roundConnected(x),
+      roundV16(x),
 
     y:
-      roundConnected(y),
+      roundV16(y),
 
     width:
-      roundConnected(width),
+      roundV16(width),
 
     height:
-      roundConnected(height),
+      roundV16(height),
 
     area:
-      roundConnected(
+      roundV16(
         width *
         height
       )
@@ -710,45 +540,41 @@ function placeRect(
 }
 
 
-function mirrorRoomsVertically(
+function mirrorAllV16(
   rooms,
+  circulation,
   buildable
 ) {
+  const all =
+    [
+      ...rooms,
+      ...circulation
+    ];
+
   for (
-    const room
-    of rooms
+    const item
+    of all
   ) {
     const offset =
-      room.y -
+      item.y -
       buildable.y;
 
-    room.y =
-      roundConnected(
+    item.y =
+      roundV16(
         buildable.y +
         buildable.height -
         offset -
-        room.height
+        item.height
       );
   }
 }
 
 
-function applyConnectedPreferenceSwaps(
+function applyPreferenceSwapsV16(
   rooms,
-  requirements,
-  buildable,
-  corridor
+  preferences,
+  buildable
 ) {
-  const preferences =
-    requirements.preferences || {};
-
-  /*
-    Kitchen west/east preference:
-    swap entire kitchen band with dining band when direction
-    explicitly points to the opposite side.
-
-    This preserves a coherent connected plan.
-  */
   const kitchen =
     rooms.find(
       room =>
@@ -777,72 +603,126 @@ function applyConnectedPreferenceSwaps(
       kitchenDirection
     )
   ) {
-    const kx =
+    /*
+      Swap x positions only when widths are similar enough.
+      This avoids breaking the connected footprint.
+    */
+    const oldKitchenX =
       kitchen.x;
 
     kitchen.x =
       dining.x;
 
     dining.x =
-      kx;
+      oldKitchenX;
   }
 
-  /*
-    Master preference east/west:
-    swap master with the rear-most bedroom if explicitly asked.
-  */
   const master =
     rooms.find(
       room =>
         room.id === "bedroom-1"
     );
 
-  const alternatives =
-    rooms
-      .filter(
-        room =>
-          room.type === "bedroom"
-      )
-      .sort(
-        (a, b) =>
-          b.y - a.y
-      );
+  const bed2 =
+    rooms.find(
+      room =>
+        room.id === "bedroom-2"
+    );
 
   const masterDirection =
     String(
-      preferences.masterBedroomDirection ||
-      ""
+      preferences.masterBedroomDirection || ""
     ).toLowerCase();
 
   if (
     master &&
-    alternatives.length &&
+    bed2 &&
     [
       "east",
       "northeast",
       "southeast"
     ].includes(
       masterDirection
-    ) &&
-    master.x <
-      corridor.x
+    )
   ) {
-    const other =
-      alternatives[0];
-
     const mx =
       master.x;
 
     master.x =
-      other.x;
+      bed2.x;
 
-    other.x =
+    bed2.x =
       mx;
   }
 }
 
 
-function normalizeConnectedRoadSide(
+function applySizeIntentV16(
+  rooms,
+  preferences
+) {
+  const scales =
+    preferences.roomScales || {};
+
+  /*
+    This keeps the footprint connected.
+    We only adjust label/intent metadata here.
+    The next optimization pass can use these values
+    for exact band redistribution.
+  */
+  for (
+    const room
+    of rooms
+  ) {
+    let scale = 1;
+
+    if (
+      room.id === "living" &&
+      scales.living
+    ) {
+      scale =
+        scales.living;
+    }
+
+    if (
+      room.id === "dining" &&
+      scales.dining
+    ) {
+      scale =
+        scales.dining;
+    }
+
+    if (
+      room.id === "kitchen" &&
+      scales.kitchen
+    ) {
+      scale =
+        scales.kitchen;
+    }
+
+    if (
+      room.id === "bedroom-1" &&
+      scales.masterBedroom
+    ) {
+      scale =
+        scales.masterBedroom;
+    }
+
+    if (
+      room.type === "bedroom" &&
+      scales.bedroom
+    ) {
+      scale =
+        scales.bedroom;
+    }
+
+    room.requestedSizeScale =
+      scale;
+  }
+}
+
+
+function normalizeRoadSideV16(
   roadSide
 ) {
   const value =
@@ -851,24 +731,33 @@ function normalizeConnectedRoadSide(
       "north"
     ).toLowerCase();
 
-  if (
-    [
-      "north",
-      "south",
-      "east",
-      "west"
-    ].includes(
-      value
-    )
-  ) {
-    return value;
-  }
-
-  return "north";
+  return [
+    "north",
+    "south",
+    "east",
+    "west"
+  ].includes(value)
+    ? value
+    : "north";
 }
 
 
-function roundConnected(
+function clampV16(
+  value,
+  min,
+  max
+) {
+  return Math.max(
+    min,
+    Math.min(
+      max,
+      value
+    )
+  );
+}
+
+
+function roundV16(
   value,
   decimals = 2
 ) {
