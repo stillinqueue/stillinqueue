@@ -390,6 +390,70 @@
       margin-top: .35rem;
     }
 
+
+    /* ===== Preview tabs ===== */
+    .preview-tabs {
+      display: flex;
+      gap: .5rem;
+      margin-bottom: .9rem;
+      border-bottom: 1px solid rgba(148,163,184,.25);
+      padding-bottom: .7rem;
+    }
+
+    .preview-tab {
+      padding: .55rem 1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,.55);
+      background: rgba(15,23,42,.75);
+      color: #cbd5e1;
+      cursor: pointer;
+      font-size: .82rem;
+      transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+    }
+
+    .preview-tab:hover {
+      background: rgba(30,64,175,.55);
+      transform: translateY(-1px);
+    }
+
+    .preview-tab.active {
+      background: linear-gradient(135deg, #2563eb, #0ea5e9);
+      border-color: rgba(191,219,254,.95);
+      color: #020617;
+      font-weight: 700;
+    }
+
+    .preview-placeholder {
+      color: rgba(100,116,139,.9);
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .preview-3d-placeholder {
+      min-height: 420px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(148,163,184,.9);
+      text-align: center;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+
+    .preview-3d-icon {
+      font-size: 3rem;
+      color: #38bdf8;
+      margin-bottom: .7rem;
+    }
+
+    .blueprint-stage {
+      background: #f8fafc;
+    }
+
+    .blueprint-stage .viewer-canvas {
+      filter: drop-shadow(0 12px 26px rgba(15,23,42,.18));
+    }
+
     .site-footer {
       border-top: 1px solid rgba(148,163,184,.25);
       padding: 1.7rem 5vw 2.1rem;
@@ -530,33 +594,54 @@
 
       <!-- RIGHT: Preview -->
       <div class="studio-preview">
-        <div class="viewer-toolbar">
-          <div>
-            <div class="studio-label" style="margin-bottom:.35rem;">Preview (SVG)</div>
-            <div class="viewer-hint">Mouse wheel to zoom · Drag to pan · Use rotate buttons</div>
-          </div>
-
-          <div class="viewer-controls">
-            <button class="viewer-pill" id="zoomIn">Zoom +</button>
-            <button class="viewer-pill" id="zoomOut">Zoom −</button>
-            <button class="viewer-pill" id="rotateLeft">⟲ Rotate</button>
-            <button class="viewer-pill" id="rotateRight">⟳ Rotate</button>
-            <button class="viewer-pill" id="resetView">Reset</button>
-            <button class="viewer-pill" id="toggle3d">3D View (beta)</button>
-          </div>
+        <div class="preview-tabs">
+          <button class="preview-tab active" id="tabBlueprint">Blueprint</button>
+          <button class="preview-tab" id="tab3d">3D Preview</button>
         </div>
 
-        <div class="viewer-stage" id="viewerStage" aria-label="SVG viewer">
-          <div class="viewer-canvas" id="viewerCanvas">
-            <div id="preview" style="color: rgba(148,163,184,.8); padding: 1rem;">
-              Preview will appear here after rendering.
+        <div id="blueprintPanel">
+          <div class="viewer-toolbar">
+            <div>
+              <div class="studio-label" style="margin-bottom:.35rem;">Blueprint Preview</div>
+              <div class="viewer-hint">Mouse wheel to zoom · Drag to pan · Use rotate buttons</div>
+            </div>
+            <div class="viewer-controls">
+              <button class="viewer-pill" id="zoomIn">Zoom +</button>
+              <button class="viewer-pill" id="zoomOut">Zoom −</button>
+              <button class="viewer-pill" id="rotateLeft">⟲ Rotate</button>
+              <button class="viewer-pill" id="rotateRight">⟳ Rotate</button>
+              <button class="viewer-pill" id="resetView">Reset</button>
             </div>
           </div>
+
+          <div class="viewer-stage blueprint-stage" id="viewerStage" aria-label="SVG blueprint viewer">
+            <div class="viewer-canvas" id="viewerCanvas">
+              <div id="preview" class="preview-placeholder">Blueprint will appear here after rendering.</div>
+            </div>
+          </div>
+
+          <div class="legend" id="legend"></div>
         </div>
 
-        <div class="legend" id="legend"></div>
-        <div class="viewer-3d-note" id="viewNote" style="display:none;">
-          3D is a preview-only visualization (PDF export still uses the backend).
+        <div id="preview3dPanel" style="display:none;">
+          <div class="viewer-toolbar">
+            <div>
+              <div class="studio-label" style="margin-bottom:.35rem;">3D Preview</div>
+              <div class="viewer-hint">Concept visualization based on the current plan. Detailed furniture comes later.</div>
+            </div>
+          </div>
+
+          <div class="viewer-stage">
+            <div id="preview3d" class="preview-3d-placeholder">
+              <div>
+                <div class="preview-3d-icon">◇</div>
+                <strong>3D preview is the next stage.</strong>
+                <div style="margin-top:.45rem;">
+                  The technical blueprint is rendered separately so we can build a proper 3D view from the same plan data.
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -590,8 +675,12 @@
       const progressFill = document.getElementById("progressFill");
       const progressText = document.getElementById("progressText");
       const legendEl = document.getElementById("legend");
-      const toggle3dBtn = document.getElementById("toggle3d");
-      const viewNote = document.getElementById("viewNote");
+
+      const tabBlueprint = document.getElementById("tabBlueprint");
+      const tab3d = document.getElementById("tab3d");
+      const blueprintPanel = document.getElementById("blueprintPanel");
+      const preview3dPanel = document.getElementById("preview3dPanel");
+      const preview3d = document.getElementById("preview3d");
 
       // Viewer
       const viewerStage  = document.getElementById("viewerStage");
@@ -638,7 +727,6 @@
       let draftPlan = null; // plan object (NOT payload wrapper)
       let lastPdfBase64 = null;
       let isConfirmed = false;
-      let is3D = false;
 
       const layoutState = {
         stage: 1,
@@ -1086,143 +1174,335 @@ I’ll use sensible preliminary defaults for setbacks, walls, doors and windows.
       }
 
       function applySvgThemeAndOverlay(svgString, plan) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(svgString, "image/svg+xml");
-        const svg = doc.documentElement;
+        const plotW = Number(plan?.plot?.w || 1);
+        const plotH = Number(plan?.plot?.h || 1);
 
-        svg.setAttribute("style", "background: transparent;");
+        const pad = Math.max(plotW, plotH) * 0.08;
+        const viewX = -pad;
+        const viewY = -pad;
+        const viewW = plotW + pad * 2;
+        const viewH = plotH + pad * 2;
 
-        // Normalize existing strokes/text for dark UI
-        svg.querySelectorAll("*").forEach(el => {
-          const tag = el.tagName.toLowerCase();
-          if (tag === "rect" || tag === "path" || tag === "line" || tag === "polyline" || tag === "polygon") {
-            if (!el.getAttribute("stroke")) el.setAttribute("stroke", "rgba(226,232,240,.92)");
-            el.setAttribute("stroke-width", el.getAttribute("stroke-width") || "2");
-            el.setAttribute("vector-effect", "non-scaling-stroke");
-          }
-          if (tag === "text") {
-            el.setAttribute("fill", "rgba(226,232,240,.95)");
-            el.setAttribute("font-family", "Inter, system-ui, sans-serif");
-            el.setAttribute("paint-order", "stroke");
-            el.setAttribute("stroke", "rgba(2,6,23,.65)");
-            el.setAttribute("stroke-width", "3");
-          }
-        });
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("xmlns", svgNS);
+        svg.setAttribute("viewBox", `${viewX} ${viewY} ${viewW} ${viewH}`);
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+        svg.setAttribute("role", "img");
+        svg.setAttribute("aria-label", "Technical floor plan blueprint");
+        svg.setAttribute("style", "background:#ffffff;");
 
-        // Add subtle grid background
-        const defs = doc.createElementNS("http://www.w3.org/2000/svg", "defs");
-        const pattern = doc.createElementNS("http://www.w3.org/2000/svg", "pattern");
-        pattern.setAttribute("id", "sqGrid");
-        pattern.setAttribute("width", "1");
-        pattern.setAttribute("height", "1");
-        pattern.setAttribute("patternUnits", "userSpaceOnUse");
-        const gridLine = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-        gridLine.setAttribute("d", "M 1 0 L 0 0 0 1");
-        gridLine.setAttribute("fill", "none");
-        gridLine.setAttribute("stroke", "rgba(148,163,184,.18)");
-        gridLine.setAttribute("stroke-width", "0.05");
-        pattern.appendChild(gridLine);
-        defs.appendChild(pattern);
-        svg.insertBefore(defs, svg.firstChild);
+        const defs = document.createElementNS(svgNS, "defs");
 
-        const bgRect = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
-        bgRect.setAttribute("x", "-9999");
-        bgRect.setAttribute("y", "-9999");
-        bgRect.setAttribute("width", "19999");
-        bgRect.setAttribute("height", "19999");
-        bgRect.setAttribute("fill", "url(#sqGrid)");
-        svg.insertBefore(bgRect, svg.firstChild);
+        const smallGrid = document.createElementNS(svgNS, "pattern");
+        smallGrid.setAttribute("id", "sqSmallGrid");
+        smallGrid.setAttribute("width", "0.5");
+        smallGrid.setAttribute("height", "0.5");
+        smallGrid.setAttribute("patternUnits", "userSpaceOnUse");
 
-        // Overlay rooms from plan (professional color + dims + simple doors)
-        const overlay = doc.createElementNS("http://www.w3.org/2000/svg", "g");
-        overlay.setAttribute("id", "sqOverlay");
-        overlay.setAttribute("opacity", "0.95");
+        const gridPath = document.createElementNS(svgNS, "path");
+        gridPath.setAttribute("d", "M 0.5 0 L 0 0 0 0.5");
+        gridPath.setAttribute("fill", "none");
+        gridPath.setAttribute("stroke", "#e5e7eb");
+        gridPath.setAttribute("stroke-width", "0.015");
+        smallGrid.appendChild(gridPath);
+        defs.appendChild(smallGrid);
 
-        for (const r of (plan?.rooms || [])) {
-          const fill = roomColor(r.name);
+        const marker = document.createElementNS(svgNS, "marker");
+        marker.setAttribute("id", "sqDimArrow");
+        marker.setAttribute("viewBox", "0 0 10 10");
+        marker.setAttribute("refX", "5");
+        marker.setAttribute("refY", "5");
+        marker.setAttribute("markerWidth", "4");
+        marker.setAttribute("markerHeight", "4");
+        marker.setAttribute("orient", "auto-start-reverse");
 
-          const rect = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
-          rect.setAttribute("x", String(r.x));
-          rect.setAttribute("y", String(r.y));
-          rect.setAttribute("width", String(r.w));
-          rect.setAttribute("height", String(r.h));
-          rect.setAttribute("fill", fill);
-          rect.setAttribute("fill-opacity", "0.18");
-          rect.setAttribute("stroke", fill);
-          rect.setAttribute("stroke-opacity", "0.75");
-          rect.setAttribute("stroke-width", "0.08");
+        const markerPath = document.createElementNS(svgNS, "path");
+        markerPath.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+        markerPath.setAttribute("fill", "#475569");
+        marker.appendChild(markerPath);
+        defs.appendChild(marker);
+
+        svg.appendChild(defs);
+
+        const background = document.createElementNS(svgNS, "rect");
+        background.setAttribute("x", String(viewX));
+        background.setAttribute("y", String(viewY));
+        background.setAttribute("width", String(viewW));
+        background.setAttribute("height", String(viewH));
+        background.setAttribute("fill", "#ffffff");
+        svg.appendChild(background);
+
+        const grid = document.createElementNS(svgNS, "rect");
+        grid.setAttribute("x", "0");
+        grid.setAttribute("y", "0");
+        grid.setAttribute("width", String(plotW));
+        grid.setAttribute("height", String(plotH));
+        grid.setAttribute("fill", "url(#sqSmallGrid)");
+        svg.appendChild(grid);
+
+        const boundary = document.createElementNS(svgNS, "rect");
+        boundary.setAttribute("x", "0");
+        boundary.setAttribute("y", "0");
+        boundary.setAttribute("width", String(plotW));
+        boundary.setAttribute("height", String(plotH));
+        boundary.setAttribute("fill", "none");
+        boundary.setAttribute("stroke", "#0f172a");
+        boundary.setAttribute("stroke-width", String(Math.max(0.12, Math.min(plotW, plotH) * 0.012)));
+        boundary.setAttribute("vector-effect", "non-scaling-stroke");
+        svg.appendChild(boundary);
+
+        const setbacks = plan?.setbacks || {};
+        const left = Number(setbacks.left || 0);
+        const right = Number(setbacks.right || 0);
+        const front = Number(setbacks.front || 0);
+        const back = Number(setbacks.back || 0);
+
+        if (left || right || front || back) {
+          const setRect = document.createElementNS(svgNS, "rect");
+          setRect.setAttribute("x", String(left));
+          setRect.setAttribute("y", String(front));
+          setRect.setAttribute("width", String(Math.max(0, plotW - left - right)));
+          setRect.setAttribute("height", String(Math.max(0, plotH - front - back)));
+          setRect.setAttribute("fill", "none");
+          setRect.setAttribute("stroke", "#94a3b8");
+          setRect.setAttribute("stroke-width", "0.06");
+          setRect.setAttribute("stroke-dasharray", "0.25 0.18");
+          setRect.setAttribute("vector-effect", "non-scaling-stroke");
+          svg.appendChild(setRect);
+        }
+
+        const rooms = Array.isArray(plan?.rooms) ? plan.rooms : [];
+        const roomStroke = Math.max(0.08, Math.min(plotW, plotH) * 0.007);
+
+        rooms.forEach((room, i) => {
+          const x = Number(room.x || 0);
+          const y = Number(room.y || 0);
+          const w = Math.max(0.01, Number(room.w || 0));
+          const h = Math.max(0.01, Number(room.h || 0));
+
+          const group = document.createElementNS(svgNS, "g");
+          const rect = document.createElementNS(svgNS, "rect");
+          rect.setAttribute("x", String(x));
+          rect.setAttribute("y", String(y));
+          rect.setAttribute("width", String(w));
+          rect.setAttribute("height", String(h));
+          rect.setAttribute("fill", "#f8fafc");
+          rect.setAttribute("stroke", "#111827");
+          rect.setAttribute("stroke-width", String(roomStroke));
           rect.setAttribute("vector-effect", "non-scaling-stroke");
-          overlay.appendChild(rect);
+          group.appendChild(rect);
 
-          const cx = r.x + r.w / 2;
-          const cy = r.y + r.h / 2;
+          const inset = Math.min(w, h) * 0.025;
+          if (w > inset * 4 && h > inset * 4) {
+            const inner = document.createElementNS(svgNS, "rect");
+            inner.setAttribute("x", String(x + inset));
+            inner.setAttribute("y", String(y + inset));
+            inner.setAttribute("width", String(Math.max(0.01, w - inset * 2)));
+            inner.setAttribute("height", String(Math.max(0.01, h - inset * 2)));
+            inner.setAttribute("fill", "none");
+            inner.setAttribute("stroke", "#64748b");
+            inner.setAttribute("stroke-width", "0.025");
+            inner.setAttribute("vector-effect", "non-scaling-stroke");
+            group.appendChild(inner);
+          }
 
-          const title = doc.createElementNS("http://www.w3.org/2000/svg", "text");
+          const clipId = `sqRoomClip${i}`;
+          const clip = document.createElementNS(svgNS, "clipPath");
+          clip.setAttribute("id", clipId);
+
+          const clipRect = document.createElementNS(svgNS, "rect");
+          clipRect.setAttribute("x", String(x + inset));
+          clipRect.setAttribute("y", String(y + inset));
+          clipRect.setAttribute("width", String(Math.max(0.01, w - inset * 2)));
+          clipRect.setAttribute("height", String(Math.max(0.01, h - inset * 2)));
+          clip.appendChild(clipRect);
+          defs.appendChild(clip);
+
+          const cx = x + w / 2;
+          const cy = y + h / 2;
+          const roomMin = Math.min(w, h);
+          const titleSize = Math.max(0.18, Math.min(0.42, roomMin * 0.13));
+          const subSize = Math.max(0.12, Math.min(0.26, roomMin * 0.085));
+
+          const labels = document.createElementNS(svgNS, "g");
+          labels.setAttribute("clip-path", `url(#${clipId})`);
+
+          const title = document.createElementNS(svgNS, "text");
           title.setAttribute("x", String(cx));
-          title.setAttribute("y", String(cy - 0.15));
+          title.setAttribute("y", String(cy - titleSize * 0.25));
           title.setAttribute("text-anchor", "middle");
           title.setAttribute("dominant-baseline", "central");
-          title.textContent = r.name || "Room";
-          overlay.appendChild(title);
+          title.setAttribute("font-family", "Inter, Arial, sans-serif");
+          title.setAttribute("font-size", String(titleSize));
+          title.setAttribute("font-weight", "700");
+          title.setAttribute("fill", "#0f172a");
+          title.textContent = room.name || `Room ${i + 1}`;
+          labels.appendChild(title);
 
-          const dims = doc.createElementNS("http://www.w3.org/2000/svg", "text");
-          dims.setAttribute("x", String(cx));
-          dims.setAttribute("y", String(cy + 0.20));
-          dims.setAttribute("text-anchor", "middle");
-          dims.setAttribute("dominant-baseline", "central");
-          dims.setAttribute("font-size", "0.14");
-          dims.textContent = `${Number(r.w).toFixed(2)} × ${Number(r.h).toFixed(2)}`;
-          overlay.appendChild(dims);
+          const details = document.createElementNS(svgNS, "text");
+          details.setAttribute("x", String(cx));
+          details.setAttribute("y", String(cy + titleSize * 0.75));
+          details.setAttribute("text-anchor", "middle");
+          details.setAttribute("dominant-baseline", "central");
+          details.setAttribute("font-family", "Inter, Arial, sans-serif");
+          details.setAttribute("font-size", String(subSize));
+          details.setAttribute("fill", "#475569");
+          details.textContent = `${w.toFixed(2)} × ${h.toFixed(2)} m · ${(w * h).toFixed(1)} m²`;
+          labels.appendChild(details);
 
-          // Simple door symbol (preview only): bottom-center
-          const doorW = Math.min(0.9, r.w * 0.22);
-          const doorX = r.x + (r.w - doorW) / 2;
-          const doorY = r.y + r.h;
-          const door = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-          door.setAttribute("d", `M ${doorX} ${doorY} L ${doorX + doorW} ${doorY} M ${doorX} ${doorY} A ${doorW} ${doorW} 0 0 1 ${doorX + doorW} ${doorY - doorW}`);
-          door.setAttribute("stroke", "rgba(226,232,240,.92)");
-          door.setAttribute("stroke-width", "0.08");
-          door.setAttribute("fill", "none");
-          door.setAttribute("vector-effect", "non-scaling-stroke");
-          overlay.appendChild(door);
-        }
+          group.appendChild(labels);
 
-        // Plot boundary highlight
-        if (plan?.plot?.w && plan?.plot?.h) {
-          const b = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
-          b.setAttribute("x", "0");
-          b.setAttribute("y", "0");
-          b.setAttribute("width", String(plan.plot.w));
-          b.setAttribute("height", String(plan.plot.h));
-          b.setAttribute("fill", "none");
-          b.setAttribute("stroke", "rgba(226,232,240,.95)");
-          b.setAttribute("stroke-width", "0.12");
-          b.setAttribute("vector-effect", "non-scaling-stroke");
-          overlay.appendChild(b);
-        }
+          const doorW = Math.min(0.9, Math.max(0.55, w * 0.22));
+          if (w > 1.2 && h > 1.2) {
+            const doorX = x + (w - doorW) / 2;
+            const doorY = y + h;
 
-        svg.appendChild(overlay);
-        return new XMLSerializer().serializeToString(svg);
-      }
+            const opening = document.createElementNS(svgNS, "line");
+            opening.setAttribute("x1", String(doorX));
+            opening.setAttribute("y1", String(doorY));
+            opening.setAttribute("x2", String(doorX + doorW));
+            opening.setAttribute("y2", String(doorY));
+            opening.setAttribute("stroke", "#ffffff");
+            opening.setAttribute("stroke-width", String(roomStroke * 1.7));
+            opening.setAttribute("vector-effect", "non-scaling-stroke");
+            group.appendChild(opening);
 
-      function toIsometric(svgString) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(svgString, "image/svg+xml");
-        const svg = doc.documentElement;
+            const leaf = document.createElementNS(svgNS, "line");
+            leaf.setAttribute("x1", String(doorX));
+            leaf.setAttribute("y1", String(doorY));
+            leaf.setAttribute("x2", String(doorX));
+            leaf.setAttribute("y2", String(doorY - doorW));
+            leaf.setAttribute("stroke", "#334155");
+            leaf.setAttribute("stroke-width", "0.045");
+            leaf.setAttribute("vector-effect", "non-scaling-stroke");
+            group.appendChild(leaf);
 
-        const overlay = svg.querySelector("#sqOverlay");
-        if (!overlay) return svgString;
+            const arc = document.createElementNS(svgNS, "path");
+            arc.setAttribute("d", `M ${doorX} ${doorY - doorW} A ${doorW} ${doorW} 0 0 1 ${doorX + doorW} ${doorY}`);
+            arc.setAttribute("fill", "none");
+            arc.setAttribute("stroke", "#94a3b8");
+            arc.setAttribute("stroke-width", "0.035");
+            arc.setAttribute("vector-effect", "non-scaling-stroke");
+            group.appendChild(arc);
+          }
 
-        const clone = overlay.cloneNode(true);
-        clone.setAttribute("opacity", "0.35");
-        clone.setAttribute("transform", "translate(-0.35,-0.35)");
-
-        clone.querySelectorAll("rect").forEach(r => {
-          r.setAttribute("fill-opacity", "0.08");
-          r.setAttribute("stroke-opacity", "0.55");
+          svg.appendChild(group);
         });
 
-        overlay.parentNode.insertBefore(clone, overlay);
+        const dimOffset = pad * 0.48;
+        const dimY = -dimOffset;
+
+        const dimH = document.createElementNS(svgNS, "line");
+        dimH.setAttribute("x1", "0");
+        dimH.setAttribute("y1", String(dimY));
+        dimH.setAttribute("x2", String(plotW));
+        dimH.setAttribute("y2", String(dimY));
+        dimH.setAttribute("stroke", "#475569");
+        dimH.setAttribute("stroke-width", "0.035");
+        dimH.setAttribute("marker-start", "url(#sqDimArrow)");
+        dimH.setAttribute("marker-end", "url(#sqDimArrow)");
+        dimH.setAttribute("vector-effect", "non-scaling-stroke");
+        svg.appendChild(dimH);
+
+        const dimHText = document.createElementNS(svgNS, "text");
+        dimHText.setAttribute("x", String(plotW / 2));
+        dimHText.setAttribute("y", String(dimY - 0.18));
+        dimHText.setAttribute("text-anchor", "middle");
+        dimHText.setAttribute("font-family", "Inter, Arial, sans-serif");
+        dimHText.setAttribute("font-size", "0.28");
+        dimHText.setAttribute("font-weight", "600");
+        dimHText.setAttribute("fill", "#334155");
+        dimHText.textContent = `${plotW.toFixed(2)} m`;
+        svg.appendChild(dimHText);
+
+        const dimX = -dimOffset;
+
+        const dimV = document.createElementNS(svgNS, "line");
+        dimV.setAttribute("x1", String(dimX));
+        dimV.setAttribute("y1", "0");
+        dimV.setAttribute("x2", String(dimX));
+        dimV.setAttribute("y2", String(plotH));
+        dimV.setAttribute("stroke", "#475569");
+        dimV.setAttribute("stroke-width", "0.035");
+        dimV.setAttribute("marker-start", "url(#sqDimArrow)");
+        dimV.setAttribute("marker-end", "url(#sqDimArrow)");
+        dimV.setAttribute("vector-effect", "non-scaling-stroke");
+        svg.appendChild(dimV);
+
+        const dimVText = document.createElementNS(svgNS, "text");
+        dimVText.setAttribute("x", String(dimX - 0.18));
+        dimVText.setAttribute("y", String(plotH / 2));
+        dimVText.setAttribute("text-anchor", "middle");
+        dimVText.setAttribute("font-family", "Inter, Arial, sans-serif");
+        dimVText.setAttribute("font-size", "0.28");
+        dimVText.setAttribute("font-weight", "600");
+        dimVText.setAttribute("fill", "#334155");
+        dimVText.setAttribute("transform", `rotate(-90 ${dimX - 0.18} ${plotH / 2})`);
+        dimVText.textContent = `${plotH.toFixed(2)} m`;
+        svg.appendChild(dimVText);
+
+        const northX = plotW - Math.max(0.8, pad * 0.6);
+        const northY = Math.max(0.8, pad * 0.7);
+        const north = document.createElementNS(svgNS, "g");
+        north.setAttribute("transform", `translate(${northX} ${northY})`);
+
+        const northLine = document.createElementNS(svgNS, "line");
+        northLine.setAttribute("x1", "0");
+        northLine.setAttribute("y1", "0.45");
+        northLine.setAttribute("x2", "0");
+        northLine.setAttribute("y2", "-0.38");
+        northLine.setAttribute("stroke", "#0f172a");
+        northLine.setAttribute("stroke-width", "0.06");
+        north.appendChild(northLine);
+
+        const northTip = document.createElementNS(svgNS, "path");
+        northTip.setAttribute("d", "M 0 -0.5 L -0.16 -0.18 L 0.16 -0.18 Z");
+        northTip.setAttribute("fill", "#0f172a");
+        north.appendChild(northTip);
+
+        const northText = document.createElementNS(svgNS, "text");
+        northText.setAttribute("x", "0");
+        northText.setAttribute("y", "-0.7");
+        northText.setAttribute("text-anchor", "middle");
+        northText.setAttribute("font-family", "Inter, Arial, sans-serif");
+        northText.setAttribute("font-size", "0.3");
+        northText.setAttribute("font-weight", "800");
+        northText.setAttribute("fill", "#0f172a");
+        northText.textContent = "N";
+        north.appendChild(northText);
+        svg.appendChild(north);
+
+        const title = document.createElementNS(svgNS, "text");
+        title.setAttribute("x", String(plotW / 2));
+        title.setAttribute("y", String(plotH + pad * 0.62));
+        title.setAttribute("text-anchor", "middle");
+        title.setAttribute("font-family", "Inter, Arial, sans-serif");
+        title.setAttribute("font-size", "0.34");
+        title.setAttribute("font-weight", "700");
+        title.setAttribute("fill", "#0f172a");
+        title.textContent = plan?.meta?.title || "Concept Floor Plan";
+        svg.appendChild(title);
+
+        const subtitle = document.createElementNS(svgNS, "text");
+        subtitle.setAttribute("x", String(plotW / 2));
+        subtitle.setAttribute("y", String(plotH + pad * 0.9));
+        subtitle.setAttribute("text-anchor", "middle");
+        subtitle.setAttribute("font-family", "Inter, Arial, sans-serif");
+        subtitle.setAttribute("font-size", "0.22");
+        subtitle.setAttribute("fill", "#64748b");
+
+        const facing = plan?.production?.facing
+          ? `Facing: ${directionName(plan.production.facing)}`
+          : "Facing: not set";
+
+        const floors = plan?.meta?.floors
+          ? ` · ${floorLabel(plan.meta.floors)}`
+          : "";
+
+        subtitle.textContent = `${facing}${floors} · Concept drawing — not for construction`;
+        svg.appendChild(subtitle);
+
         return new XMLSerializer().serializeToString(svg);
       }
 
@@ -1539,9 +1819,9 @@ I’ll use sensible preliminary defaults for setbacks, walls, doors and windows.
 
           const rawSvg = data.svg || "";
           let themed = rawSvg ? applySvgThemeAndOverlay(rawSvg, payload.plan) : "(No SVG returned)";
-          if (is3D && rawSvg) themed = toIsometric(themed);
 
           preview.innerHTML = themed || "(No SVG returned)";
+          showBlueprintTab();
           lastPdfBase64 = data.pdf_base64 || null;
 
           layoutState.rendered = true;
@@ -1650,15 +1930,29 @@ For this prototype, the current renderer PDF is now available${canDownload ? "" 
       viewerStage?.addEventListener("pointercancel", onPointerUp);
       viewerStage?.addEventListener("wheel", onWheel, { passive: false });
 
-      toggle3dBtn?.addEventListener("click", () => {
-        is3D = !is3D;
-        toggle3dBtn.textContent = is3D ? "3D View: ON" : "3D View (beta)";
-        if (viewNote) viewNote.style.display = is3D ? "block" : "none";
-        setStatus(is3D
-          ? "3D preview enabled (beta). Re-render to apply 3D."
-          : "3D preview disabled. Re-render to return to 2D."
-        );
-      });
+
+
+
+      // ---------------------------
+      // Preview tabs
+      // ---------------------------
+      function showBlueprintTab() {
+        tabBlueprint?.classList.add("active");
+        tab3d?.classList.remove("active");
+        if (blueprintPanel) blueprintPanel.style.display = "block";
+        if (preview3dPanel) preview3dPanel.style.display = "none";
+        requestAnimationFrame(() => applyTransform());
+      }
+
+      function show3dTab() {
+        tab3d?.classList.add("active");
+        tabBlueprint?.classList.remove("active");
+        if (blueprintPanel) blueprintPanel.style.display = "none";
+        if (preview3dPanel) preview3dPanel.style.display = "block";
+      }
+
+      tabBlueprint?.addEventListener("click", showBlueprintTab);
+      tab3d?.addEventListener("click", show3dTab);
 
       // ---------------------------
       // Boot
@@ -1667,6 +1961,7 @@ For this prototype, the current renderer PDF is now available${canDownload ? "" 
       layoutState.rendered = false;
       layoutState.confirmed = false;
       applyTransform();
+      showBlueprintTab();
       updateLayoutButtons();
 
       addMessage("assistant",
