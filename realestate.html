@@ -682,6 +682,18 @@ const layoutState = {
   confirmed: false
 };
 
+function isConceptReady() {
+  return Boolean(
+    layoutState.plot.width &&
+    layoutState.plot.depth &&
+    layoutState.facing &&
+    layoutState.bedrooms &&
+    layoutState.floors
+  );
+}
+
+function setStatus(html) { statusEl.innerHTML = html; }
+
 function setStatus(html) { statusEl.innerHTML = html; }
 
       function setStatus(html) { statusEl.innerHTML = html; }
