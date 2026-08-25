@@ -781,7 +781,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "constraint-blueprint-v2";
+      const REAL_ESTATE_VERSION = "connected-blueprint-chat-v1";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -2668,6 +2668,289 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         };
       }
 
+      function applyUserChatDesignOverrides(
+        preferences
+      ) {
+        /*
+          This is a local safety net around the OpenAI state.
+
+          OpenAI remains the main interpreter, but these rules make
+          common design-change requests immediately deterministic.
+
+          Examples:
+          - "move kitchen to northeast"
+          - "master bedroom southwest"
+          - "remove utility"
+          - "add puja room"
+          - "make living room bigger"
+          - "make bedrooms smaller"
+        */
+
+        const userTexts =
+          messages
+            .filter(
+              message =>
+                message.role === "user"
+            )
+            .map(
+              message =>
+                String(
+                  message.content || ""
+                )
+            );
+
+        const latestValue = (
+          patterns,
+          values
+        ) => {
+          let result = null;
+
+          for (
+            const content
+            of userTexts
+          ) {
+            patterns.forEach(
+              (
+                pattern,
+                index
+              ) => {
+                if (
+                  pattern.test(
+                    content
+                  )
+                ) {
+                  result =
+                    values[index];
+                }
+              }
+            );
+          }
+
+          return result;
+        };
+
+        const directionPatterns = [
+          /\bnorth[\s-]*east\b|\bnortheast\b|\bne\b/i,
+          /\bsouth[\s-]*east\b|\bsoutheast\b|\bse\b/i,
+          /\bsouth[\s-]*west\b|\bsouthwest\b|\bsw\b/i,
+          /\bnorth[\s-]*west\b|\bnorthwest\b|\bnw\b/i,
+          /\bnorth\b|\bn\b/i,
+          /\beast\b|\be\b/i,
+          /\bsouth\b|\bs\b/i,
+          /\bwest\b|\bw\b/i
+        ];
+
+        const directionValues = [
+          "northeast",
+          "southeast",
+          "southwest",
+          "northwest",
+          "north",
+          "east",
+          "south",
+          "west"
+        ];
+
+        const lastMatchingDirection = (
+          roomRegex
+        ) => {
+          let result = null;
+
+          for (
+            const content
+            of userTexts
+          ) {
+            if (
+              !roomRegex.test(
+                content
+              )
+            ) {
+              continue;
+            }
+
+            directionPatterns.forEach(
+              (
+                pattern,
+                index
+              ) => {
+                if (
+                  pattern.test(
+                    content
+                  )
+                ) {
+                  result =
+                    directionValues[index];
+                }
+              }
+            );
+          }
+
+          return result;
+        };
+
+        const kitchenDirection =
+          lastMatchingDirection(
+            /\bkitchen\b/i
+          );
+
+        if (
+          kitchenDirection
+        ) {
+          preferences.kitchenDirection =
+            kitchenDirection;
+        }
+
+        const masterDirection =
+          lastMatchingDirection(
+            /\bmaster(?:\s+bed(?:room)?)?\b|\bmaster bedroom\b/i
+          );
+
+        if (
+          masterDirection
+        ) {
+          preferences.masterBedroomDirection =
+            masterDirection;
+        }
+
+        /*
+          Optional spaces - latest matching instruction wins.
+        */
+        for (
+          const content
+          of userTexts
+        ) {
+          if (
+            /\b(?:remove|delete|without|no)\b.*\bfamily\s*(?:lounge|room)\b/i
+              .test(content)
+          ) {
+            preferences.familyLounge =
+              false;
+          } else if (
+            /\b(?:add|include|want|need|with)\b.*\bfamily\s*(?:lounge|room)\b/i
+              .test(content)
+          ) {
+            preferences.familyLounge =
+              true;
+          }
+
+          if (
+            /\b(?:remove|delete|without|no)\b.*\butility\b/i
+              .test(content)
+          ) {
+            preferences.utility =
+              false;
+          } else if (
+            /\b(?:add|include|want|need|with)\b.*\butility\b/i
+              .test(content)
+          ) {
+            preferences.utility =
+              true;
+          }
+
+          if (
+            /\b(?:remove|delete|without|no)\b.*\b(?:puja|pooja)\b/i
+              .test(content)
+          ) {
+            preferences.puja =
+              false;
+          } else if (
+            /\b(?:add|include|want|need|with)\b.*\b(?:puja|pooja)\b/i
+              .test(content)
+          ) {
+            preferences.puja =
+              true;
+          }
+
+          if (
+            /\b(?:remove|delete|without|no)\b.*\bstore\b/i
+              .test(content)
+          ) {
+            preferences.store =
+              false;
+          } else if (
+            /\b(?:add|include|want|need|with)\b.*\bstore\b/i
+              .test(content)
+          ) {
+            preferences.store =
+              true;
+          }
+        }
+
+        /*
+          Relative room sizing.
+
+          This intentionally changes proportions rather than claiming
+          exact dimensions the user did not provide.
+        */
+        preferences.roomScales =
+          preferences.roomScales ||
+          {};
+
+        const applySizeIntent = (
+          roomRegex,
+          key
+        ) => {
+          for (
+            const content
+            of userTexts
+          ) {
+            if (
+              !roomRegex.test(
+                content
+              )
+            ) {
+              continue;
+            }
+
+            if (
+              /\b(?:bigger|larger|increase|more spacious|spacious)\b/i
+                .test(content)
+            ) {
+              preferences.roomScales[
+                key
+              ] = 1.18;
+            }
+
+            if (
+              /\b(?:smaller|reduce|compact|less space)\b/i
+                .test(content)
+            ) {
+              preferences.roomScales[
+                key
+              ] = 0.86;
+            }
+          }
+        };
+
+        applySizeIntent(
+          /\bliving(?:\s+room)?\b/i,
+          "living"
+        );
+
+        applySizeIntent(
+          /\bdining\b/i,
+          "dining"
+        );
+
+        applySizeIntent(
+          /\bkitchen\b/i,
+          "kitchen"
+        );
+
+        applySizeIntent(
+          /\bmaster(?:\s+bedroom)?\b/i,
+          "masterBedroom"
+        );
+
+        applySizeIntent(
+          /\bbedrooms?\b/i,
+          "bedroom"
+        );
+
+        return preferences;
+      }
+
+
       function buildConstraintPlannerRequirements() {
         const unit = String(layoutState.plot.unit || "ft").toLowerCase();
 
@@ -2789,6 +3072,10 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           preferences.masterBedroomDirection =
             preferences.masterBedroomDirection || "southwest";
         }
+
+        applyUserChatDesignOverrides(
+          preferences
+        );
 
         return {
           country,
