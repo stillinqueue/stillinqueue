@@ -427,10 +427,10 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                 "plot": {
                     "type": "object",
                     "properties": {
-                        "width": {"type": ["number", "None"]},
-                        "depth": {"type": ["number", "None"]},
+                        "width": {"type": ["number", "null"]},
+                        "depth": {"type": ["number", "null"]},
                         "unit": {
-                            "type": ["string", "None"],
+                            "type": ["string", "null"],
                             "enum": ["ft", "m", None],
                         },
                     },
@@ -438,23 +438,23 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                     "additionalProperties": False,
                 },
                 "facing": {
-                    "type": ["string", "None"],
+                    "type": ["string", "null"],
                     "enum": ["N", "NE", "E", "SE", "S", "SW", "W", "NW", None],
                 },
-                "bedrooms": {"type": ["integer", "None"]},
-                "floors": {"type": ["integer", "None"]},
-                "floor_description": {"type": ["string", "None"]},
+                "bedrooms": {"type": ["integer", "null"]},
+                "floors": {"type": ["integer", "null"]},
+                "floor_description": {"type": ["string", "null"]},
                 "planning_style": {
-                    "type": ["string", "None"],
+                    "type": ["string", "null"],
                     "enum": ["practical", "vastu", "modern", "accessible", None],
                 },
-                "bathrooms": {"type": ["integer", "None"]},
-                "parking_spaces": {"type": ["integer", "None"]},
+                "bathrooms": {"type": ["integer", "null"]},
+                "parking_spaces": {"type": ["integer", "null"]},
                 "road_side": {
-                    "type": ["string", "None"],
+                    "type": ["string", "null"],
                     "enum": ["N", "NE", "E", "SE", "S", "SW", "W", "NW", None],
                 },
-                "site_context": {"type": ["string", "None"]},
+                "site_context": {"type": ["string", "null"]},
                 "special_requirements": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -495,7 +495,7 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
         "concept_ready": {"type": "boolean"},
         "proposal_ready": {"type": "boolean"},
         "proposal": {
-            "type": ["object", "None"],
+            "type": ["object", "null"],
             "properties": {
                 "summary": {"type": "string"},
                 "assumptions": {
@@ -512,11 +512,11 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                         "type": "object",
                         "properties": {
                             "name": {"type": "string"},
-                            "width_ft": {"type": ["number", "None"]},
-                            "depth_ft": {"type": ["number", "None"]},
-                            "area_sqft": {"type": ["number", "None"]},
-                            "preferred_zone": {"type": ["string", "None"]},
-                            "notes": {"type": ["string", "None"]},
+                            "width_ft": {"type": ["number", "null"]},
+                            "depth_ft": {"type": ["number", "null"]},
+                            "area_sqft": {"type": ["number", "null"]},
+                            "preferred_zone": {"type": ["string", "null"]},
+                            "notes": {"type": ["string", "null"]},
                         },
                         "required": [
                             "name",
