@@ -454,6 +454,56 @@
       filter: drop-shadow(0 12px 26px rgba(15,23,42,.18));
     }
 
+
+    .blueprint-subtabs {
+      display: flex;
+      gap: .5rem;
+      margin: .1rem 0 .8rem;
+      padding-bottom: .65rem;
+      border-bottom: 1px solid rgba(148,163,184,.18);
+    }
+
+    .blueprint-subtab {
+      padding: .48rem .9rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,.45);
+      background: rgba(15,23,42,.72);
+      color: #cbd5e1;
+      cursor: pointer;
+      font-size: .8rem;
+    }
+
+    .blueprint-subtab.active {
+      background: rgba(14,165,233,.18);
+      border-color: rgba(56,189,248,.9);
+      color: #e0f2fe;
+      font-weight: 700;
+    }
+
+    .buyer-stage {
+      min-height: 620px;
+      border-radius: 1rem;
+      overflow: auto;
+      background: linear-gradient(180deg, #f8fafc, #eef6ee);
+      border: 1px solid rgba(148,163,184,.45);
+      padding: 1rem;
+    }
+
+    .buyer-canvas {
+      width: min(100%, 1200px);
+      min-height: 580px;
+      margin: 0 auto;
+    }
+
+    .buyer-canvas svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #ffffff;
+      border-radius: .8rem;
+      box-shadow: 0 18px 40px rgba(15,23,42,.18);
+    }
+
     .site-footer {
       border-top: 1px solid rgba(148,163,184,.25);
       padding: 1.7rem 5vw 2.1rem;
@@ -563,7 +613,7 @@
     <div class="studio-layout">
       <!-- LEFT: Chat -->
       <div class="studio-panel">
-        <div class="studio-label">AI Layout Agent (Prototype Chat)</div>
+        <div class="studio-label">AI Layout Agent · OpenAI Connected</div>
 
         <div class="chat-shell">
           <div class="chat-thread" id="chatThread" aria-live="polite"></div>
@@ -601,27 +651,49 @@
         </div>
 
         <div id="blueprintPanel">
-          <div class="viewer-toolbar">
-            <div>
-              <div class="studio-label" style="margin-bottom:.35rem;">Blueprint Preview</div>
-              <div class="viewer-hint">Mouse wheel to zoom · Drag to pan · Use rotate buttons</div>
-            </div>
-            <div class="viewer-controls">
-              <button class="viewer-pill" id="zoomIn">Zoom +</button>
-              <button class="viewer-pill" id="zoomOut">Zoom −</button>
-              <button class="viewer-pill" id="rotateLeft">⟲ Rotate</button>
-              <button class="viewer-pill" id="rotateRight">⟳ Rotate</button>
-              <button class="viewer-pill" id="resetView">Reset</button>
-            </div>
+          <div class="blueprint-subtabs">
+            <button class="blueprint-subtab active" id="tabEngineer">Engineer Drawing</button>
+            <button class="blueprint-subtab" id="tabBuyer">Buyer Plan</button>
           </div>
 
-          <div class="viewer-stage blueprint-stage" id="viewerStage" aria-label="SVG blueprint viewer">
-            <div class="viewer-canvas" id="viewerCanvas">
-              <div id="preview" class="preview-placeholder">Blueprint will appear here after rendering.</div>
+          <div id="engineerPanel">
+            <div class="viewer-toolbar">
+              <div>
+                <div class="studio-label" style="margin-bottom:.35rem;">Engineer Drawing</div>
+                <div class="viewer-hint">Vector technical plan · zoomable · printable · dimensions, openings, setbacks and orientation</div>
+              </div>
+              <div class="viewer-controls">
+                <button class="viewer-pill" id="zoomIn">Zoom +</button>
+                <button class="viewer-pill" id="zoomOut">Zoom −</button>
+                <button class="viewer-pill" id="rotateLeft">⟲ Rotate</button>
+                <button class="viewer-pill" id="rotateRight">⟳ Rotate</button>
+                <button class="viewer-pill" id="resetView">Reset</button>
+              </div>
             </div>
+
+            <div class="viewer-stage blueprint-stage" id="viewerStage" aria-label="Engineer SVG viewer">
+              <div class="viewer-canvas" id="viewerCanvas">
+                <div id="preview" class="preview-placeholder">Engineer drawing will appear here after rendering.</div>
+              </div>
+            </div>
+
+            <div class="legend" id="legend"></div>
           </div>
 
-          <div class="legend" id="legend"></div>
+          <div id="buyerPanel" style="display:none;">
+            <div class="viewer-toolbar">
+              <div>
+                <div class="studio-label" style="margin-bottom:.35rem;">Buyer Plan</div>
+                <div class="viewer-hint">Presentation view · room names, areas, furniture cues, circulation and easier visual understanding</div>
+              </div>
+            </div>
+
+            <div class="buyer-stage" id="buyerStage">
+              <div id="buyerPreview" class="buyer-canvas">
+                <div class="preview-placeholder">Buyer plan will appear after rendering.</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div id="preview3dPanel" style="display:none;">
@@ -656,12 +728,10 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "space-planner-v3";
+      const REAL_ESTATE_VERSION = "openai-planner-v4";
 
-      // OPTIONAL: If/when you connect your OpenAI agent backend, set this to your server endpoint.
-      // Example backend: POST /api/realestate/chat  { messages: [...] }  -> { reply: "...", plan?: {...} }
-      // For now, this page works without it (local mini-agent).
-      const CHAT_API = ""; // e.g. "https://your-domain.com/api/realestate/chat";
+      // Real OpenAI-powered requirement agent
+      const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
 
       // Elements
       const chatThread = document.getElementById("chatThread");
@@ -684,6 +754,12 @@
       const blueprintPanel = document.getElementById("blueprintPanel");
       const preview3dPanel = document.getElementById("preview3dPanel");
       const preview3d = document.getElementById("preview3d");
+
+      const tabEngineer = document.getElementById("tabEngineer");
+      const tabBuyer = document.getElementById("tabBuyer");
+      const engineerPanel = document.getElementById("engineerPanel");
+      const buyerPanel = document.getElementById("buyerPanel");
+      const buyerPreview = document.getElementById("buyerPreview");
 
       // Viewer
       const viewerStage  = document.getElementById("viewerStage");
@@ -730,6 +806,8 @@
       let draftPlan = null; // plan object (NOT payload wrapper)
       let lastPdfBase64 = null;
       let isConfirmed = false;
+      let aiState = null;
+      let aiProposal = null;
 
       const layoutState = {
         stage: 1,
@@ -1074,9 +1152,13 @@ Click “Accept Proposal” to generate the architectural layout, or describe ch
         addMessage("assistant",
 `Proposal accepted.
 
-I’ll now use this program as the source of truth for the floor plan.
+The OpenAI requirement state and proposal are now locked as the source for this concept.
 
-Click “Render Concept 1” to generate the technical blueprint.`);
+Click “Render Concept 1” to generate:
+• Engineer Drawing
+• Buyer Plan
+
+The 3D Preview will use the same geometry in the next stage.`);
         setStatus(`Proposal accepted ✅ Render Concept 1 is now enabled. <span style="opacity:.65;">${REAL_ESTATE_VERSION}</span>`);
       }
 
@@ -1261,6 +1343,134 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         chatThread.appendChild(meta);
         chatThread.appendChild(bubble);
         chatThread.scrollTop = chatThread.scrollHeight;
+      }
+
+
+      function syncLayoutStateFromAI(state, proposal) {
+        aiState = state || aiState;
+        aiProposal = proposal ?? aiProposal;
+
+        const s = aiState || {};
+        const p = s.plot || {};
+
+        layoutState.plot.width = p.width ?? layoutState.plot.width;
+        layoutState.plot.depth = p.depth ?? layoutState.plot.depth;
+        layoutState.plot.unit = p.unit || layoutState.plot.unit || "ft";
+        layoutState.facing = s.facing ?? layoutState.facing;
+        layoutState.bedrooms = s.bedrooms ?? layoutState.bedrooms;
+        layoutState.floors = s.floors ?? layoutState.floors;
+        layoutState.planningStyle = s.planning_style ?? layoutState.planningStyle;
+        layoutState.bathrooms = s.bathrooms ?? layoutState.bathrooms;
+        layoutState.parking = s.parking_spaces ?? layoutState.parking;
+
+        if (proposal) {
+          layoutState.proposalReady = true;
+          layoutState.proposalAccepted = false;
+          layoutState.proposal = convertAIProposalToPlannerProposal(proposal, s);
+        } else if (!isConceptReady()) {
+          layoutState.proposalReady = false;
+          layoutState.proposalAccepted = false;
+          layoutState.proposal = null;
+        }
+
+        layoutState.rendered = false;
+        layoutState.confirmed = false;
+        isConfirmed = false;
+        lastPdfBase64 = null;
+        updateLayoutButtons();
+      }
+
+      function convertAIProposalToPlannerProposal(proposal, state) {
+        const plotW = Number(state?.plot?.width || layoutState.plot.width || 0);
+        const plotD = Number(state?.plot?.depth || layoutState.plot.depth || 0);
+        const setbacks = defaultSetbacksFt(plotW, plotD);
+
+        const preferred = preferredRoomSizes(state?.bedrooms || layoutState.bedrooms || 3);
+
+        const spaces = Array.isArray(proposal?.spaces) ? proposal.spaces : [];
+
+        const findSpace = (...names) => {
+          return spaces.find(sp => {
+            const n = String(sp?.name || "").toLowerCase();
+            return names.some(x => n.includes(x));
+          });
+        };
+
+        const copySize = (target, space) => {
+          if (!space) return;
+          if (Number(space.width_ft) > 0) target.w = Number(space.width_ft);
+          if (Number(space.depth_ft) > 0) target.d = Number(space.depth_ft);
+        };
+
+        copySize(preferred.living, findSpace("living"));
+        copySize(preferred.dining, findSpace("dining"));
+        copySize(preferred.kitchen, findSpace("kitchen"));
+        copySize(preferred.master, findSpace("master bedroom"));
+        copySize(preferred.bedroom, findSpace("bedroom 2", "bedroom 3"));
+        copySize(preferred.attachedBath, findSpace("attached bath", "master bath"));
+        copySize(preferred.commonBath, findSpace("common bath", "bathroom"));
+
+        const buildW = Math.max(24, plotW - setbacks.left - setbacks.right);
+        const buildD = Math.max(30, plotD - setbacks.front - setbacks.rear);
+        const frontBand = clamp(buildD * 0.30, 14, 20);
+        const middleBand = clamp(buildD * 0.27, 12, 18);
+        const rearBand = Math.max(14, buildD - frontBand - middleBand);
+
+        return {
+          source: "openai",
+          summary: proposal?.summary || "",
+          assumptions: proposal?.assumptions || [],
+          designStrategy: proposal?.design_strategy || [],
+          engineerNotes: proposal?.engineer_notes || [],
+          buyerNotes: proposal?.buyer_notes || [],
+          spaces,
+          plot: {
+            width: plotW,
+            depth: plotD,
+            unit: state?.plot?.unit || "ft"
+          },
+          facing: state?.facing || layoutState.facing,
+          floors: state?.floors || layoutState.floors,
+          bedrooms: state?.bedrooms || layoutState.bedrooms,
+          bathrooms: state?.bathrooms || layoutState.bathrooms || 2,
+          parking: state?.parking_spaces || layoutState.parking || 1,
+          planningStyle: state?.planning_style || layoutState.planningStyle || "practical",
+          setbacks,
+          buildable: { width: round1(buildW), depth: round1(buildD) },
+          preferred,
+          bands: {
+            front: round1(frontBand),
+            middle: round1(middleBand),
+            rear: round1(rearBand)
+          }
+        };
+      }
+
+      function aiProposalText() {
+        const p = aiProposal;
+        if (!p) return "";
+
+        const lines = [];
+        if (p.summary) lines.push(p.summary);
+
+        if (Array.isArray(p.spaces) && p.spaces.length) {
+          lines.push("", "SPACE PROGRAM");
+          p.spaces.forEach(sp => {
+            const dims = sp.width_ft && sp.depth_ft
+              ? `${sp.width_ft}' × ${sp.depth_ft}'`
+              : "";
+            const area = sp.area_sqft ? ` · ${sp.area_sqft} sq.ft.` : "";
+            lines.push(`• ${sp.name}${dims ? " — " + dims : ""}${area}`);
+          });
+        }
+
+        if (Array.isArray(p.design_strategy) && p.design_strategy.length) {
+          lines.push("", "DESIGN STRATEGY");
+          p.design_strategy.forEach(x => lines.push(`• ${x}`));
+        }
+
+        lines.push("", "Review the proposal, then click “Accept Proposal” when you are happy with the concept.");
+        return lines.join("\\n");
       }
 
       function getPlanPayloadForRender() {
@@ -1654,6 +1864,128 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         return new XMLSerializer().serializeToString(svg);
       }
 
+
+      function renderBuyerPlan(plan) {
+        if (!buyerPreview || !plan) return;
+
+        const plotW = Number(plan?.plot?.w || 1);
+        const plotH = Number(plan?.plot?.h || 1);
+        const pad = Math.max(plotW, plotH) * 0.08;
+        const ns = "http://www.w3.org/2000/svg";
+
+        const svg = document.createElementNS(ns, "svg");
+        svg.setAttribute("viewBox", `${-pad} ${-pad} ${plotW + pad*2} ${plotH + pad*2}`);
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+        svg.setAttribute("aria-label", "Buyer presentation floor plan");
+
+        const add = (tag, attrs={}, parent=svg) => {
+          const el = document.createElementNS(ns, tag);
+          Object.entries(attrs).forEach(([k,v]) => el.setAttribute(k, String(v)));
+          parent.appendChild(el);
+          return el;
+        };
+
+        const label = (x, y, txt, size, weight=600, fill="#0f172a", parent=svg) => {
+          const t = add("text", {
+            x, y,
+            "text-anchor":"middle",
+            "font-family":"Inter, Arial, sans-serif",
+            "font-size":size,
+            "font-weight":weight,
+            fill
+          }, parent);
+          t.textContent = txt;
+          return t;
+        };
+
+        add("rect", { x:-pad, y:-pad, width:plotW+pad*2, height:plotH+pad*2, fill:"#f8fafc" });
+        add("rect", { x:0, y:0, width:plotW, height:plotH, fill:"#eef7ee", stroke:"#64748b", "stroke-width":0.05 });
+
+        (plan?.outdoor || []).forEach(o => {
+          const fill = o.type === "parking" ? "#e2e8f0" : "#dcfce7";
+          add("rect", { x:o.x, y:o.y, width:o.w, height:o.h, fill, stroke:"#94a3b8", "stroke-width":0.035, rx:0.12 });
+          label(o.x+o.w/2, o.y+o.h/2, o.name || "Outdoor", 0.25, 700);
+        });
+
+        const fills = {
+          living:"#dbeafe",
+          dining:"#e0f2fe",
+          kitchen:"#dcfce7",
+          bedroom:"#ede9fe",
+          bath:"#fef3c7",
+          utility:"#ecfccb",
+          pooja:"#ccfbf1",
+          circulation:"#f8fafc"
+        };
+
+        (plan?.rooms || []).forEach((r, i) => {
+          const fill = fills[r.type] || "#ffffff";
+          add("rect", {
+            x:r.x, y:r.y, width:r.w, height:r.h,
+            fill, stroke:"#334155", "stroke-width":0.055,
+            rx:0.06
+          });
+
+          const cx = r.x+r.w/2, cy = r.y+r.h/2;
+          const size = clamp(Math.min(r.w,r.h)*0.095, 0.18, 0.32);
+          label(cx, cy-size*0.35, r.name, size, 800);
+
+          if (r.dimensions_ft) {
+            label(cx, cy+size*0.55,
+              `${r.dimensions_ft.w}' × ${r.dimensions_ft.h}'`,
+              Math.max(0.15,size*0.66), 600, "#475569"
+            );
+          }
+
+          // Simple furniture cues for buyer understanding.
+          if (r.type === "bedroom" && r.w > 2 && r.h > 2) {
+            const fw = Math.min(r.w*0.48, 1.8);
+            const fh = Math.min(r.h*0.42, 2.0);
+            add("rect", {
+              x:cx-fw/2, y:cy+size*1.1-fh/2, width:fw, height:fh,
+              fill:"#ffffff", stroke:"#94a3b8", "stroke-width":0.025, rx:0.08
+            });
+            add("rect", {
+              x:cx-fw/2+0.08, y:cy+size*1.1-fh/2+0.08, width:fw-0.16, height:fh*0.22,
+              fill:"#f8fafc", stroke:"#cbd5e1", "stroke-width":0.018
+            });
+          }
+
+          if (r.type === "living" && r.w > 2.2 && r.h > 2.2) {
+            const sw = Math.min(r.w*0.52, 2.3);
+            add("rect", {
+              x:cx-sw/2, y:cy+size*1.05, width:sw, height:0.62,
+              fill:"#ffffff", stroke:"#94a3b8", "stroke-width":0.025, rx:0.12
+            });
+          }
+
+          if (r.type === "dining" && r.w > 2 && r.h > 2) {
+            add("rect", {
+              x:cx-0.75, y:cy+size*0.85, width:1.5, height:0.75,
+              fill:"#ffffff", stroke:"#94a3b8", "stroke-width":0.025, rx:0.08
+            });
+          }
+
+          if (r.type === "kitchen" && r.w > 2 && r.h > 2) {
+            add("rect", {
+              x:r.x+0.16, y:r.y+0.16, width:Math.max(0.4,r.w-0.32), height:0.35,
+              fill:"#ffffff", stroke:"#86efac", "stroke-width":0.02
+            });
+          }
+        });
+
+        const facing = plan?.production?.facing || "N";
+        label(plotW/2, -pad*0.45, `${directionName(facing).toUpperCase()} FACING`, 0.3, 800, "#0f172a");
+
+        label(plotW/2, plotH+pad*0.45,
+          "Buyer Presentation Plan · Concept visualization · dimensions to be verified",
+          0.22, 600, "#475569"
+        );
+
+        buyerPreview.innerHTML = "";
+        buyerPreview.appendChild(svg);
+      }
+
       // ---------------------------
       // SVG Viewer: zoom / pan / rotate
       // ---------------------------
@@ -2022,52 +2354,59 @@ Click “Render Concept 1” to generate the technical blueprint.`;
 
         chatSend.disabled = true;
         chatInput.disabled = true;
+        setStatus("OpenAI is interpreting your requirements...");
 
         try {
-          if (CHAT_API) {
-            const res = await fetch(CHAT_API, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ messages }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error || ("Chat failed (HTTP " + res.status + ")"));
+          const historyForApi = messages
+            .slice(0, -1)
+            .slice(-12)
+            .map(m => ({ role: m.role, content: m.content }));
 
-            addMessage("assistant", data.reply || "Okay.");
-            if (data.plan && typeof data.plan === "object") {
-              draftPlan = data.plan;
-              setStatus("Draft updated ✅ Click <strong>Render Layout</strong> to preview.");
-            } else {
-              setStatus("Message received ✅ Click <strong>Render Layout</strong> when ready.");
-            }
+          const res = await fetch(CHAT_API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: text,
+              state: aiState,
+              history: historyForApi
+            })
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            const detail = data?.detail || data?.error || `Chat failed (HTTP ${res.status})`;
+            throw new Error(detail);
+          }
+
+          syncLayoutStateFromAI(data.state, data.proposal);
+
+          let reply = data.reply || "Okay.";
+          if (data.proposal_ready && data.proposal) {
+            reply += "\\n\\n" + aiProposalText();
+          }
+
+          addMessage("assistant", reply);
+
+          if (!data.concept_ready) {
+            const missing = Array.isArray(data.missing_fields) ? data.missing_fields : [];
+            setStatus(
+              missing.length
+                ? `OpenAI · still needed: <strong>${missing.join(", ")}</strong>.`
+                : "OpenAI · requirements are still being refined."
+            );
+          } else if (data.proposal_ready && !layoutState.proposalAccepted) {
+            setStatus("OpenAI proposal ready ✅ Review it, then click <strong>Accept Proposal</strong>.");
           } else {
-            const out = localAgentReply(text);
-            addMessage("assistant", out.reply);
-
-            if (!isConceptReady()) {
-              const missing = getMissingConceptFields();
-              setStatus(`Stage 1 · Concept — still needed: <strong>${missing.join(", ")}</strong>.`);
-            } else if (!layoutState.proposalAccepted) {
-              setStatus("Space proposal ready ✅ Review it, then click <strong>Accept Proposal</strong>.");
-            } else {
-              setStatus("Proposal accepted ✅ Click <strong>Render Concept 1</strong>.");
-            }
-
-            updateLayoutButtons();
+            setStatus("Requirements understood ✅ Continue refining or accept the proposal.");
           }
 
-          if (isConfirmed) {
-            isConfirmed = false;
-            layoutState.confirmed = false;
-            layoutState.rendered = false;
-            updateLayoutButtons();
-            setStatus("Requirements changed. Please render the updated concept again before confirmation.");
-          }
+          updateLayoutButtons();
 
         } catch (err) {
           console.error(err);
-          addMessage("assistant", "Sorry — I hit a problem. Try again.");
-          setStatus("<span style='color:#fca5a5;'>Chat error.</span> Check console.");
+          addMessage("assistant", "I couldn’t reach the AI planning service. Please try again.");
+          setStatus(`<span style='color:#fca5a5;'>OpenAI chat error:</span> ${String(err.message || err)}`);
         } finally {
           chatSend.disabled = false;
           chatInput.disabled = false;
@@ -2103,7 +2442,9 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           // Render the technical SVG locally from the structured plan.
           const localSvg = applySvgThemeAndOverlay("", plan);
           preview.innerHTML = localSvg;
+          renderBuyerPlan(plan);
           showBlueprintTab();
+          showEngineerSubtab();
           renderLegend(plan);
 
           layoutState.rendered = true;
@@ -2126,7 +2467,9 @@ This blueprint now uses:
 • parking zone
 • overall plot dimensions
 
-Review it in the Blueprint tab.
+Review both views under Blueprint:
+• Engineer Drawing — technical/vector view
+• Buyer Plan — easier presentation view
 
 You can still change requirements in chat. Any change will invalidate the current proposal and generate a new one.`);
 
@@ -2224,6 +2567,25 @@ For this prototype, the current renderer PDF is now available${canDownload ? "" 
 
 
 
+
+      function showEngineerSubtab() {
+        tabEngineer?.classList.add("active");
+        tabBuyer?.classList.remove("active");
+        if (engineerPanel) engineerPanel.style.display = "block";
+        if (buyerPanel) buyerPanel.style.display = "none";
+        requestAnimationFrame(() => applyTransform());
+      }
+
+      function showBuyerSubtab() {
+        tabBuyer?.classList.add("active");
+        tabEngineer?.classList.remove("active");
+        if (engineerPanel) engineerPanel.style.display = "none";
+        if (buyerPanel) buyerPanel.style.display = "block";
+      }
+
+      tabEngineer?.addEventListener("click", showEngineerSubtab);
+      tabBuyer?.addEventListener("click", showBuyerSubtab);
+
       // ---------------------------
       // Preview tabs
       // ---------------------------
@@ -2255,10 +2617,11 @@ For this prototype, the current renderer PDF is now available${canDownload ? "" 
       layoutState.confirmed = false;
       applyTransform();
       showBlueprintTab();
+      showEngineerSubtab();
       updateLayoutButtons();
 
       addMessage("assistant",
-`Layout Agent ${REAL_ESTATE_VERSION}
+`Layout Agent ${REAL_ESTATE_VERSION} · OpenAI
 
 Hi! Tell me about the property you'd like to design.
 
@@ -2274,9 +2637,10 @@ Stage 1 only needs:
 • plot facing
 • number of floors
 
-Then I’ll propose a space program before anything is rendered.
+OpenAI will dynamically understand your replies, typos, shorthand and changes.
 
-You can refine the proposal, accept it, and only then generate the technical blueprint.`);
+Once the minimum requirements are known, it will propose a space program for review.
+After you accept it, the app generates separate Engineer Drawing and Buyer Plan views.`);
 
       setStatus(`Stage 1 · Concept — start with your plot size. <span style="opacity:.65;">${REAL_ESTATE_VERSION}</span>`);
     })();
