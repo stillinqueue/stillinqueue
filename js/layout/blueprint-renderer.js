@@ -21,6 +21,7 @@ export function renderBlueprintLayout(layout, container, options = {}) {
   const rooms = Array.isArray(layout.rooms) ? layout.rooms : [];
   const circulation = Array.isArray(layout.circulation) ? layout.circulation : [];
   const entrances = Array.isArray(layout.entrances) ? layout.entrances : [];
+  const interiorDoors = Array.isArray(layout.interiorDoors) ? layout.interiorDoors : [];
 
   const plotW = Number(plot.width);
   const plotH = Number(plot.height);
@@ -83,7 +84,9 @@ export function renderBlueprintLayout(layout, container, options = {}) {
   drawNorthArrow(svg, plotW, pad, base);
 
   // Passage/corridor background
-  circulation.forEach(c => {
+  circulation
+    .filter(c => !c.overlay)
+    .forEach(c => {
     add(svg, "rect", {
       x: c.x,
       y: c.y,
@@ -142,6 +145,54 @@ export function renderBlueprintLayout(layout, container, options = {}) {
     });
   });
 
+  /*
+    Overlay passages cut visibly into the bedroom zone.
+    These are drawn after room rectangles so the extension is
+    actually visible, not hidden behind bedroom fills.
+  */
+  circulation
+    .filter(c => c.overlay)
+    .forEach(c => {
+      add(svg, "rect", {
+        x: c.x,
+        y: c.y,
+        width: c.width,
+        height: c.height,
+        fill: "#ffffff",
+        stroke: "#000000",
+        "stroke-width": base * 0.30
+      });
+
+      const cx =
+        c.x +
+        c.width / 2;
+
+      const cy =
+        c.y +
+        c.height / 2;
+
+      const label =
+        text(
+          svg,
+          cx,
+          cy,
+          "HALL",
+          base * 1.15,
+          700,
+          "#000000"
+        );
+
+      if (
+        c.height >
+        c.width * 1.7
+      ) {
+        label.setAttribute(
+          "transform",
+          `rotate(-90 ${cx} ${cy})`
+        );
+      }
+    });
+
   // Furniture first
   rooms.forEach(room => drawFurniture(svg, room, base));
 
@@ -149,6 +200,16 @@ export function renderBlueprintLayout(layout, container, options = {}) {
   rooms.forEach(room => {
     drawRoomDoor(svg, room, roomMap, circulation, base);
     drawExteriorWindows(svg, room, buildable, base);
+  });
+
+  // Explicit prompt-driven internal bedroom doors
+  interiorDoors.forEach(door => {
+    drawExplicitInteriorDoor(
+      svg,
+      door,
+      rooms,
+      base
+    );
   });
 
   // Main exterior entrance
@@ -196,6 +257,7 @@ export function renderBuyerLayout(layout, container, options = {}) {
   const rooms = Array.isArray(layout.rooms) ? layout.rooms : [];
   const circulation = Array.isArray(layout.circulation) ? layout.circulation : [];
   const entrances = Array.isArray(layout.entrances) ? layout.entrances : [];
+  const interiorDoors = Array.isArray(layout.interiorDoors) ? layout.interiorDoors : [];
 
   const plotW = Number(plot.width);
   const plotH = Number(plot.height);
@@ -264,10 +326,33 @@ export function renderBuyerLayout(layout, container, options = {}) {
     drawFurniture(svg, room, base, true);
   });
 
+  circulation
+    .filter(c => c.overlay)
+    .forEach(c => {
+      add(svg, "rect", {
+        x: c.x,
+        y: c.y,
+        width: c.width,
+        height: c.height,
+        fill: "#ffffff",
+        stroke: "#000000",
+        "stroke-width": base * 0.24
+      });
+    });
+
   rooms.forEach(room => {
     drawRoomDoor(svg, room, roomMap, circulation, base, true);
     drawExteriorWindows(svg, room, buildable, base, true);
     drawRoomLabel(svg, room, unit, base, true);
+  });
+
+  interiorDoors.forEach(door => {
+    drawExplicitInteriorDoor(
+      svg,
+      door,
+      rooms,
+      base
+    );
   });
 
   entrances.forEach(entrance => {
@@ -381,6 +466,134 @@ function drawRoomLabel(svg, room, unit, base, buyer = false) {
     500,
     buyer ? "#111111" : "#111111"
   );
+}
+
+
+function drawExplicitInteriorDoor(
+  svg,
+  door,
+  rooms,
+  base
+) {
+  const room =
+    rooms.find(
+      item =>
+        item.id ===
+        door.roomId
+    );
+
+  if (!room) {
+    return;
+  }
+
+  const width =
+    Number(
+      door.width || 3
+    );
+
+  const side =
+    String(
+      door.side || "east"
+    ).toLowerCase();
+
+  const gapStroke =
+    base * 1.65;
+
+  const lineStroke =
+    base * 0.34;
+
+  const arcStroke =
+    base * 0.26;
+
+  if (
+    side === "east" ||
+    side === "west"
+  ) {
+    const x =
+      side === "east"
+        ? room.x +
+          room.width
+        : room.x;
+
+    const centerY =
+      Number(
+        door.y ||
+        (
+          room.y +
+          room.height / 2
+        )
+      );
+
+    const y1 =
+      centerY -
+      width / 2;
+
+    const y2 =
+      centerY +
+      width / 2;
+
+    add(svg, "line", {
+      x1: x,
+      y1,
+      x2: x,
+      y2,
+      stroke: "#ffffff",
+      "stroke-width": gapStroke
+    });
+
+    const inward =
+      side === "east"
+        ? -1
+        : 1;
+
+    const opposite =
+      door.swing === "right";
+
+    const hingeY =
+      opposite
+        ? y1
+        : y2;
+
+    const leafX =
+      x +
+      inward *
+      width;
+
+    add(svg, "line", {
+      x1: x,
+      y1: hingeY,
+      x2: leafX,
+      y2: hingeY,
+      stroke: "#000000",
+      "stroke-width": lineStroke
+    });
+
+    const arcEndY =
+      opposite
+        ? y2
+        : y1;
+
+    add(svg, "path", {
+      d:
+        `M ${leafX} ${hingeY} ` +
+        `A ${width} ${width} 0 0 ${
+          side === "east"
+            ? (
+                opposite
+                  ? 0
+                  : 1
+              )
+            : (
+                opposite
+                  ? 1
+                  : 0
+              )
+        } ${x} ${arcEndY}`,
+      fill: "none",
+      stroke: "#000000",
+      "stroke-width": arcStroke
+    });
+  }
 }
 
 
