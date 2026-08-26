@@ -1,8 +1,4 @@
 import {
-  getDesignProfile
-} from "./plan-schema.js";
-
-import {
   buildRoomProgram
 } from "./room-program.js";
 
@@ -12,37 +8,47 @@ import {
 
 
 export function checkPlanFeasibility(requirements) {
-  const country = String(
-    requirements.country || "india"
-  ).toLowerCase();
-
-  const profile = getDesignProfile(country);
+  const country =
+    String(
+      requirements.country ||
+      "india"
+    ).toLowerCase();
 
   const roomProgram =
-    buildRoomProgram(requirements);
+    buildRoomProgram(
+      requirements
+    );
 
   const areaInfo =
-    calculateBuildableArea(requirements);
+    calculateBuildableArea(
+      requirements
+    );
 
-  const unit = profile.unit;
-
-  /*
-    ---------------------------------------------------------
-    1. CALCULATE MINIMUM ROOM AREA
-    ---------------------------------------------------------
-  */
+  const unit =
+    String(
+      requirements.plot?.unit ||
+      areaInfo.plot?.unit ||
+      "ft"
+    ).toLowerCase();
 
   let minimumRoomArea = 0;
   let preferredRoomArea = 0;
 
   const roomBreakdown = [];
 
-  for (const room of roomProgram) {
+  for (
+    const room
+    of roomProgram
+  ) {
     const minWidth =
-      Number(room.minWidth || 0);
+      Number(
+        room.minWidth || 0
+      );
 
     const minHeight =
-      Number(room.minHeight || 0);
+      Number(
+        room.minHeight || 0
+      );
 
     const preferredWidth =
       Number(
@@ -59,117 +65,67 @@ export function checkPlanFeasibility(requirements) {
       );
 
     const minArea =
-      minWidth * minHeight;
+      minWidth *
+      minHeight;
 
     const preferredArea =
-      preferredWidth * preferredHeight;
+      preferredWidth *
+      preferredHeight;
 
-    minimumRoomArea += minArea;
-    preferredRoomArea += preferredArea;
+    minimumRoomArea +=
+      minArea;
+
+    preferredRoomArea +=
+      preferredArea;
 
     roomBreakdown.push({
-      id: room.id,
-      name: room.name,
-      type: room.type,
+      id:
+        room.id,
+
+      name:
+        room.name,
+
+      type:
+        room.type,
 
       minimumArea:
         round(minArea),
 
       preferredArea:
-        round(preferredArea)
+        round(
+          preferredArea
+        )
     });
   }
-
-
-  /*
-    ---------------------------------------------------------
-    2. ADD CIRCULATION ALLOWANCE
-
-    The room areas alone are not enough.
-
-    We also need space for:
-    - corridors
-    - door approach
-    - internal movement
-    - small transition areas
-
-    India and Germany use slightly different assumptions.
-    ---------------------------------------------------------
-  */
 
   const circulationFactor =
     country === "germany"
       ? 0.14
       : 0.12;
 
-  const minimumCirculationArea =
-    minimumRoomArea * circulationFactor;
-
-  const preferredCirculationArea =
-    preferredRoomArea * circulationFactor;
-
-
-  /*
-    ---------------------------------------------------------
-    3. ADD WALL / STRUCTURE ALLOWANCE
-
-    Internal + external walls also consume space.
-    ---------------------------------------------------------
-  */
-
   const wallFactor =
     country === "germany"
       ? 0.12
       : 0.10;
 
-  const minimumWallArea =
-    minimumRoomArea * wallFactor;
-
-  const preferredWallArea =
-    preferredRoomArea * wallFactor;
-
-
-  /*
-    ---------------------------------------------------------
-    4. ESTIMATE TOTAL REQUIRED AREA
-    ---------------------------------------------------------
-  */
-
   const estimatedMinimumArea =
-    minimumRoomArea +
-    minimumCirculationArea +
-    minimumWallArea;
+    minimumRoomArea *
+    (
+      1 +
+      circulationFactor +
+      wallFactor
+    );
 
   const estimatedPreferredArea =
-    preferredRoomArea +
-    preferredCirculationArea +
-    preferredWallArea;
-
-
-  /*
-    ---------------------------------------------------------
-    5. AVAILABLE BUILDABLE AREA
-    ---------------------------------------------------------
-  */
+    preferredRoomArea *
+    (
+      1 +
+      circulationFactor +
+      wallFactor
+    );
 
   const availableArea =
     areaInfo.buildable.area;
-
-
-  /*
-    ---------------------------------------------------------
-    6. DETERMINE FEASIBILITY LEVEL
-
-    comfortable:
-      preferred program fits
-
-    tight:
-      minimum fits but preferred does not
-
-    infeasible:
-      even minimum program does not fit
-    ---------------------------------------------------------
-  */
 
   let status;
 
@@ -177,113 +133,40 @@ export function checkPlanFeasibility(requirements) {
     availableArea >=
     estimatedPreferredArea
   ) {
-    status = "comfortable";
+    status =
+      "comfortable";
   } else if (
     availableArea >=
     estimatedMinimumArea
   ) {
-    status = "tight";
+    status =
+      "tight";
   } else {
-    status = "infeasible";
+    status =
+      "infeasible";
   }
-
-
-  /*
-    ---------------------------------------------------------
-    7. FIT RATIOS
-    ---------------------------------------------------------
-  */
-
-  const minimumUsagePercent =
-    availableArea > 0
-      ? (
-          estimatedMinimumArea /
-          availableArea
-        ) * 100
-      : 0;
-
-  const preferredUsagePercent =
-    availableArea > 0
-      ? (
-          estimatedPreferredArea /
-          availableArea
-        ) * 100
-      : 0;
-
-
-  /*
-    ---------------------------------------------------------
-    8. GENERATE WARNINGS
-    ---------------------------------------------------------
-  */
 
   const warnings = [];
 
-
-  if (status === "tight") {
+  if (
+    status === "tight"
+  ) {
     warnings.push(
-      "The requested plan can fit, but some rooms may need to use minimum dimensions."
+      "The requested plan fits only with compact room dimensions."
     );
   }
 
-
-  if (status === "infeasible") {
+  if (
+    status === "infeasible"
+  ) {
     warnings.push(
-      "The requested room program does not fit within the available buildable area using the selected design standards."
+      "The requested room program does not fit inside the available buildable area."
     );
   }
-
-
-  /*
-    ---------------------------------------------------------
-    Country-specific planning warnings
-    ---------------------------------------------------------
-  */
-
-  if (country === "germany") {
-    const bedrooms =
-      roomProgram.filter(
-        room =>
-          room.type === "bedroom" ||
-          room.type === "masterBedroom"
-      );
-
-    if (bedrooms.length >= 4) {
-      warnings.push(
-        "For larger German residential layouts, daylight, exterior-wall access, circulation and local building rules may further reduce usable planning flexibility."
-      );
-    }
-  }
-
-
-  if (country === "india") {
-    const bhk =
-      Number(
-        requirements.house?.bhk || 1
-      );
-
-    if (
-      bhk >= 4 &&
-      availableArea <
-        estimatedPreferredArea
-    ) {
-      warnings.push(
-        "For this larger BHK configuration, consider reducing optional spaces or using multiple floors if local regulations allow."
-      );
-    }
-  }
-
-
-  /*
-    ---------------------------------------------------------
-    9. RETURN FULL ANALYSIS
-    ---------------------------------------------------------
-  */
 
   return {
     country,
     unit,
-
     status,
 
     buildableArea: {
@@ -299,34 +182,13 @@ export function checkPlanFeasibility(requirements) {
 
     roomArea: {
       minimum:
-        round(minimumRoomArea),
+        round(
+          minimumRoomArea
+        ),
 
       preferred:
-        round(preferredRoomArea)
-    },
-
-    allowances: {
-      circulationFactor,
-      wallFactor,
-
-      minimumCirculationArea:
         round(
-          minimumCirculationArea
-        ),
-
-      preferredCirculationArea:
-        round(
-          preferredCirculationArea
-        ),
-
-      minimumWallArea:
-        round(
-          minimumWallArea
-        ),
-
-      preferredWallArea:
-        round(
-          preferredWallArea
+          preferredRoomArea
         )
     },
 
@@ -345,16 +207,25 @@ export function checkPlanFeasibility(requirements) {
     usage: {
       minimumPercent:
         round(
-          minimumUsagePercent
+          (
+            estimatedMinimumArea /
+            availableArea
+          ) *
+          100
         ),
 
       preferredPercent:
         round(
-          preferredUsagePercent
+          (
+            estimatedPreferredArea /
+            availableArea
+          ) *
+          100
         )
     },
 
-    rooms: roomBreakdown,
+    rooms:
+      roomBreakdown,
 
     warnings
   };
@@ -370,7 +241,9 @@ function round(
 
   return (
     Math.round(
-      value * factor
-    ) / factor
+      value *
+      factor
+    ) /
+    factor
   );
 }
