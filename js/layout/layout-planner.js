@@ -86,6 +86,24 @@ function generateCompact3BHK(requirements) {
   const preferences =
     requirements.preferences || {};
 
+  const roomScales =
+    preferences.roomScales || {};
+
+  const livingScale =
+    clampV16(Number(roomScales.living || 1), 0.82, 1.25);
+
+  const diningScale =
+    clampV16(Number(roomScales.dining || 1), 0.82, 1.25);
+
+  const kitchenScale =
+    clampV16(Number(roomScales.kitchen || 1), 0.82, 1.25);
+
+  const masterScale =
+    clampV16(Number(roomScales.masterBedroom || 1), 0.82, 1.25);
+
+  const bedroomScale =
+    clampV16(Number(roomScales.bedroom || 1), 0.82, 1.25);
+
   /*
     For this compact template:
     family lounge is represented by the central lobby / living-dining
@@ -143,14 +161,30 @@ function generateCompact3BHK(requirements) {
 
   const frontH =
     clampV16(
-      b.height * 0.27,
+      b.height *
+        0.27 *
+        Math.max(
+          0.90,
+          Math.min(
+            1.12,
+            (livingScale + diningScale) / 2
+          )
+        ),
       country === "germany" ? 3.2 : 9.0,
       country === "germany" ? 4.2 : 11.0
     );
 
   const middleH =
     clampV16(
-      b.height * 0.25,
+      b.height *
+        0.25 *
+        Math.max(
+          0.90,
+          Math.min(
+            1.10,
+            (kitchenScale + bedroomScale) / 2
+          )
+        ),
       country === "germany" ? 2.8 : 8.0,
       country === "germany" ? 3.8 : 10.0
     );
@@ -182,12 +216,35 @@ function generateCompact3BHK(requirements) {
       ? clampV16(b.width * 0.13, 1.05, 1.30)
       : clampV16(b.width * 0.13, 3.25, 3.75);
 
+  const leftWeight =
+    1.04 *
+    (
+      livingScale +
+      kitchenScale +
+      masterScale
+    ) / 3;
+
+  const rightWeight =
+    (
+      diningScale +
+      bedroomScale +
+      bedroomScale
+    ) / 3;
+
+  const usableWingWidth =
+    b.width -
+    lobbyW;
+
   const leftW =
-    (b.width - lobbyW) * 0.52;
+    usableWingWidth *
+    leftWeight /
+    (
+      leftWeight +
+      rightWeight
+    );
 
   const rightW =
-    b.width -
-    lobbyW -
+    usableWingWidth -
     leftW;
 
   const xLeft =
@@ -420,14 +477,103 @@ function generateCompact3BHK(requirements) {
   );
 
   /*
-    Room-size chat intent:
-    "make living bigger", "make bedrooms smaller", etc.
-    We adjust adjacent band split modestly rather than breaking walls.
+    MAIN ENTRANCE + FOYER
+    A normal residential plan must have an exterior entrance.
   */
-  applySizeIntentV16(
-    rooms,
-    preferences
-  );
+  const livingRoom =
+    rooms.find(
+      room =>
+        room.id === "living"
+    );
+
+  const entranceDoorWidth =
+    country === "germany"
+      ? 1.0
+      : 3.5;
+
+  const entranceMargin =
+    country === "germany"
+      ? 0.45
+      : 1.5;
+
+  const entranceCenterX =
+    clampV16(
+      xLobby -
+        entranceDoorWidth * 0.15,
+      livingRoom.x +
+        entranceMargin +
+        entranceDoorWidth / 2,
+      livingRoom.x +
+        livingRoom.width -
+        entranceMargin -
+        entranceDoorWidth / 2
+    );
+
+  const mainEntrance = {
+    id: "main-entrance",
+    name: "Main Entrance",
+    type: "entrance",
+    roomId: "living",
+    side: roadSide,
+    width: entranceDoorWidth,
+    x: roundV16(entranceCenterX),
+    y: roundV16(
+      roadSide === "north"
+        ? livingRoom.y
+        : livingRoom.y +
+          livingRoom.height
+    )
+  };
+
+  const foyerDepth =
+    country === "germany"
+      ? 1.35
+      : 4.5;
+
+  const foyerWidth =
+    country === "germany"
+      ? 1.65
+      : 5.5;
+
+  const foyer = {
+    id: "entry-foyer",
+    name: "Entry",
+    type: "foyer",
+
+    x: roundV16(
+      clampV16(
+        entranceCenterX -
+          foyerWidth / 2,
+        livingRoom.x,
+        livingRoom.x +
+          livingRoom.width -
+          foyerWidth
+      )
+    ),
+
+    y: roundV16(
+      roadSide === "north"
+        ? livingRoom.y
+        : livingRoom.y +
+          livingRoom.height -
+          foyerDepth
+    ),
+
+    width: roundV16(
+      Math.min(
+        foyerWidth,
+        livingRoom.width
+      )
+    ),
+
+    height: roundV16(
+      Math.min(
+        foyerDepth,
+        livingRoom.height * 0.45
+      )
+    )
+  };
+
 
   const roomArea =
     rooms.reduce(
@@ -460,7 +606,12 @@ function generateCompact3BHK(requirements) {
 
     circulation: [
       verticalLobby,
-      rearLanding
+      rearLanding,
+      foyer
+    ],
+
+    entrances: [
+      mainEntrance
     ],
 
     rooms,
@@ -468,7 +619,7 @@ function generateCompact3BHK(requirements) {
     failedRooms: [],
 
     placementStrategy:
-      "compact-connected-hub",
+      "architectural-connected-entry-v1",
 
     statistics: {
       requestedRooms:
