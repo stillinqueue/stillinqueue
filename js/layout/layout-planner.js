@@ -35,14 +35,870 @@ import {
 */
 
 export function generateLayout(requirements) {
-  const compact =
-    generateCompact3BHK(requirements);
+  const bhk =
+    Number(
+      requirements.house?.bhk ||
+      1
+    );
 
-  if (compact?.success) {
+  if (
+    bhk >= 4 &&
+    bhk <= 5
+  ) {
+    const large =
+      generateLargeConnectedLayout(
+        requirements
+      );
+
+    if (
+      large?.success
+    ) {
+      return large;
+    }
+  }
+
+  const compact =
+    generateCompact3BHK(
+      requirements
+    );
+
+  if (
+    compact?.success
+  ) {
     return compact;
   }
 
-  return legacyGenerateLayout(requirements);
+  return legacyGenerateLayout(
+    requirements
+  );
+}
+
+
+function generateLargeConnectedLayout(
+  requirements
+) {
+  const country =
+    String(
+      requirements.country ||
+      "india"
+    ).toLowerCase();
+
+  const bhk =
+    Number(
+      requirements.house?.bhk ||
+      4
+    );
+
+  const floors =
+    Number(
+      requirements.house?.floors ||
+      1
+    );
+
+  const roadSide =
+    normalizeRoadSideV16(
+      requirements.plot?.roadSide
+    );
+
+  if (
+    floors !== 1 ||
+    !["north", "south"].includes(
+      roadSide
+    )
+  ) {
+    return null;
+  }
+
+  const areaInfo =
+    calculateBuildableArea(
+      requirements
+    );
+
+  const feasibility =
+    checkPlanFeasibility(
+      requirements
+    );
+
+  if (
+    feasibility.status ===
+    "infeasible"
+  ) {
+    return null;
+  }
+
+  const profile =
+    getDesignProfile(
+      country
+    );
+
+  const b =
+    areaInfo.buildable;
+
+  const program =
+    buildRoomProgram(
+      requirements
+    );
+
+  const byId =
+    Object.fromEntries(
+      program.map(
+        room => [
+          room.id,
+          {
+            ...room
+          }
+        ]
+      )
+    );
+
+  const living =
+    byId.living;
+
+  const dining =
+    byId.dining;
+
+  const family =
+    byId["family-lounge"];
+
+  const kitchen =
+    byId.kitchen;
+
+  const utility =
+    byId.utility;
+
+  const bedrooms =
+    program.filter(
+      room =>
+        room.type ===
+          "masterBedroom" ||
+        room.type ===
+          "bedroom"
+    );
+
+  const wetRooms =
+    program.filter(
+      room =>
+        room.type ===
+          "attachedToilet" ||
+        room.type ===
+          "commonToilet"
+    );
+
+  const extras =
+    program.filter(
+      room =>
+        [
+          "puja",
+          "store"
+        ].includes(
+          room.type
+        )
+    );
+
+  if (
+    !living ||
+    !dining ||
+    !kitchen ||
+    bedrooms.length !== bhk
+  ) {
+    return null;
+  }
+
+  /*
+    Connected zoning:
+      FRONT  = living + family lounge
+      SOCIAL = kitchen + dining + family / optional
+      WET    = utility + bathrooms + optional
+      PRIVATE= bedrooms in 2 rows
+
+    No floating rectangles and no full-height passage.
+  */
+
+  const frontH =
+    b.height *
+    0.22;
+
+  const socialH =
+    b.height *
+    0.18;
+
+  const wetH =
+    b.height *
+    0.12;
+
+  const privateH =
+    b.height -
+    frontH -
+    socialH -
+    wetH;
+
+  if (
+    privateH <= 0
+  ) {
+    return null;
+  }
+
+  const hallW =
+    country === "germany"
+      ? Math.min(
+          1.25,
+          b.width * 0.08
+        )
+      : Math.min(
+          4.0,
+          b.width * 0.08
+        );
+
+  const rooms = [];
+
+  const roomScales =
+    requirements.preferences
+      ?.roomScales ||
+    {};
+
+  const familyScale =
+    Number(
+      roomScales.familyLounge ||
+      1
+    );
+
+  const livingScale =
+    Number(
+      roomScales.living ||
+      1
+    );
+
+  const familyShare =
+    family
+      ? clampLarge(
+          0.40 *
+            familyScale /
+            Math.max(
+              0.7,
+              (
+                familyScale +
+                livingScale
+              ) /
+              2
+            ),
+          0.32,
+          0.55
+        )
+      : 0;
+
+  const livingShare =
+    family
+      ? 1 -
+        familyShare
+      : 0.62;
+
+  if (
+    family
+  ) {
+    placeLarge(
+      rooms,
+      living,
+      b.x,
+      b.y,
+      b.width *
+        livingShare,
+      frontH
+    );
+
+    placeLarge(
+      rooms,
+      family,
+      b.x +
+        b.width *
+        livingShare,
+      b.y,
+      b.width *
+        familyShare,
+      frontH
+    );
+  } else {
+    placeLarge(
+      rooms,
+      living,
+      b.x,
+      b.y,
+      b.width *
+        0.62,
+      frontH
+    );
+
+    placeLarge(
+      rooms,
+      dining,
+      b.x +
+        b.width *
+        0.62,
+      b.y,
+      b.width *
+        0.38,
+      frontH
+    );
+  }
+
+  const ySocial =
+    b.y +
+    frontH;
+
+  const socialLeft =
+    b.width *
+    0.34;
+
+  const socialMiddle =
+    b.width *
+    0.30;
+
+  const socialRight =
+    b.width -
+    socialLeft -
+    socialMiddle;
+
+  placeLarge(
+    rooms,
+    kitchen,
+    b.x,
+    ySocial,
+    socialLeft,
+    socialH
+  );
+
+  if (
+    family
+  ) {
+    placeLarge(
+      rooms,
+      dining,
+      b.x +
+        socialLeft,
+      ySocial,
+      socialMiddle,
+      socialH
+    );
+  }
+
+  /*
+    Right social block:
+    if family is already in front, keep a flexible social/foyer
+    block; otherwise dining occupies it.
+  */
+  const socialFlexRoom =
+    extras.length
+      ? extras.shift()
+      : null;
+
+  if (
+    socialFlexRoom
+  ) {
+    placeLarge(
+      rooms,
+      socialFlexRoom,
+      b.x +
+        socialLeft +
+        socialMiddle,
+      ySocial,
+      socialRight,
+      socialH
+    );
+  }
+
+  const yWet =
+    ySocial +
+    socialH;
+
+  const serviceRooms = [
+    ...(utility
+      ? [
+          utility
+        ]
+      : []),
+    ...wetRooms,
+    ...extras
+  ];
+
+  if (
+    !serviceRooms.length
+  ) {
+    return null;
+  }
+
+  const serviceW =
+    b.width /
+    serviceRooms.length;
+
+  serviceRooms.forEach(
+    (
+      room,
+      index
+    ) => {
+      placeLarge(
+        rooms,
+        room,
+        b.x +
+          serviceW *
+          index,
+        yWet,
+        index ===
+          serviceRooms.length -
+          1
+          ? (
+              b.x +
+              b.width
+            ) -
+            (
+              b.x +
+              serviceW *
+              index
+            )
+          : serviceW,
+        wetH
+      );
+    }
+  );
+
+  const yPrivate =
+    yWet +
+    wetH;
+
+  const row1Count =
+    Math.ceil(
+      bedrooms.length /
+      2
+    );
+
+  const row2Count =
+    bedrooms.length -
+    row1Count;
+
+  const row1H =
+    privateH /
+    2;
+
+  const row2H =
+    privateH -
+    row1H;
+
+  const row1 =
+    bedrooms.slice(
+      0,
+      row1Count
+    );
+
+  const row2 =
+    bedrooms.slice(
+      row1Count
+    );
+
+  row1.forEach(
+    (
+      room,
+      index
+    ) => {
+      const w =
+        b.width /
+        row1.length;
+
+      placeLarge(
+        rooms,
+        room,
+        b.x +
+          w *
+          index,
+        yPrivate,
+        index ===
+          row1.length -
+          1
+          ? (
+              b.x +
+              b.width
+            ) -
+            (
+              b.x +
+              w *
+              index
+            )
+          : w,
+        row1H
+      );
+    }
+  );
+
+  row2.forEach(
+    (
+      room,
+      index
+    ) => {
+      const w =
+        b.width /
+        row2.length;
+
+      placeLarge(
+        rooms,
+        room,
+        b.x +
+          w *
+          index,
+        yPrivate +
+          row1H,
+        index ===
+          row2.length -
+          1
+          ? (
+              b.x +
+              b.width
+            ) -
+            (
+              b.x +
+              w *
+              index
+            )
+          : w,
+        row2H
+      );
+    }
+  );
+
+  /*
+    Compact hall from social zone into private rooms.
+  */
+  const hallX =
+    b.x +
+    b.width /
+    2 -
+    hallW /
+    2;
+
+  const hall = {
+    id:
+      "central-hall",
+
+    name:
+      "Hall",
+
+    type:
+      "corridor",
+
+    overlay:
+      true,
+
+    x:
+      hallX,
+
+    y:
+      ySocial,
+
+    width:
+      hallW,
+
+    height:
+      privateH *
+        0.58 +
+      socialH +
+      wetH
+  };
+
+  /*
+    Main entrance into front living/family zone.
+  */
+  const entranceRoom =
+    living;
+
+  const entranceWidth =
+    country === "germany"
+      ? 1.05
+      : 4.0;
+
+  const entranceRoomPlaced =
+    rooms.find(
+      room =>
+        room.id ===
+        entranceRoom.id
+    );
+
+  const mainEntrance = {
+    id:
+      "main-entrance",
+
+    name:
+      "Main Entrance",
+
+    type:
+      "entrance",
+
+    roomId:
+      entranceRoom.id,
+
+    side:
+      roadSide,
+
+    width:
+      entranceWidth,
+
+    x:
+      entranceRoomPlaced.x +
+      entranceRoomPlaced.width *
+      0.72,
+
+    y:
+      roadSide ===
+        "north"
+        ? entranceRoomPlaced.y
+        : entranceRoomPlaced.y +
+          entranceRoomPlaced.height
+  };
+
+  /*
+    Explicit bedroom doors onto central hall where feasible.
+  */
+  const interiorDoors =
+    bedrooms.map(
+      (
+        bedroom,
+        index
+      ) => {
+        const placed =
+          rooms.find(
+            room =>
+              room.id ===
+              bedroom.id
+          );
+
+        const centerX =
+          placed.x +
+          placed.width /
+          2;
+
+        const side =
+          centerX <
+          hallX
+            ? "east"
+            : "west";
+
+        return {
+          id:
+            `${bedroom.id}-entry`,
+
+          roomId:
+            bedroom.id,
+
+          side,
+
+          y:
+            placed.y +
+            Math.min(
+              placed.height *
+                0.28,
+              country ===
+                "germany"
+                ? 1.4
+                : 5
+            ),
+
+          width:
+            country ===
+              "germany"
+              ? 0.90
+              : 3.0,
+
+          swing:
+            index %
+              2 ===
+            0
+              ? "left"
+              : "right"
+        };
+      }
+    );
+
+  if (
+    roadSide ===
+    "south"
+  ) {
+    mirrorLarge(
+      rooms,
+      [
+        hall
+      ],
+      b
+    );
+  }
+
+  return {
+    success:
+      true,
+
+    country,
+
+    unit:
+      String(
+        requirements.plot?.unit ||
+        profile.unit ||
+        "ft"
+      ).toLowerCase(),
+
+    roadSide,
+
+    plot:
+      areaInfo.plot,
+
+    setbacks:
+      areaInfo.setbacks,
+
+    buildableArea:
+      b,
+
+    feasibility,
+
+    circulation: [
+      hall
+    ],
+
+    entrances: [
+      mainEntrance
+    ],
+
+    interiorDoors,
+
+    rooms,
+
+    failedRooms: [],
+
+    placementStrategy:
+      "large-connected-family-v19",
+
+    statistics: {
+      requestedRooms:
+        rooms.length,
+
+      placedRooms:
+        rooms.length,
+
+      failedRooms:
+        0,
+
+      roomArea:
+        roundLarge(
+          rooms.reduce(
+            (
+              sum,
+              room
+            ) =>
+              sum +
+              room.width *
+              room.height,
+            0
+          )
+        ),
+
+      corridorArea:
+        roundLarge(
+          hall.width *
+          hall.height
+        )
+    },
+
+    adaptations: []
+  };
+}
+
+
+function placeLarge(
+  target,
+  room,
+  x,
+  y,
+  width,
+  height
+) {
+  if (
+    !room
+  ) {
+    return;
+  }
+
+  target.push({
+    ...room,
+
+    x:
+      roundLarge(x),
+
+    y:
+      roundLarge(y),
+
+    width:
+      roundLarge(width),
+
+    height:
+      roundLarge(height),
+
+    area:
+      roundLarge(
+        width *
+        height
+      )
+  });
+}
+
+
+function mirrorLarge(
+  rooms,
+  circulation,
+  buildable
+) {
+  for (
+    const item
+    of [
+      ...rooms,
+      ...circulation
+    ]
+  ) {
+    const offset =
+      item.y -
+      buildable.y;
+
+    item.y =
+      roundLarge(
+        buildable.y +
+        buildable.height -
+        offset -
+        item.height
+      );
+  }
+}
+
+
+function clampLarge(
+  value,
+  min,
+  max
+) {
+  return Math.max(
+    min,
+    Math.min(
+      max,
+      value
+    )
+  );
+}
+
+
+function roundLarge(
+  value,
+  decimals = 2
+) {
+  const factor =
+    10 ** decimals;
+
+  return (
+    Math.round(
+      value *
+      factor
+    ) /
+    factor
+  );
 }
 
 
