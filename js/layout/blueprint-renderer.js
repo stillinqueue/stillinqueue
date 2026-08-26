@@ -614,14 +614,12 @@ function drawMainEntrance(
 
   const width =
     Number(
-      entrance.width ||
-      3.5
+      entrance.width || 3.5
     );
 
   const side =
     String(
-      entrance.side ||
-      "north"
+      entrance.side || "north"
     ).toLowerCase();
 
   const stroke =
@@ -641,18 +639,11 @@ function drawMainEntrance(
           room.height;
 
     const centerX =
-      Math.max(
-        room.x +
-          width,
-        Math.min(
+      Number(
+        entrance.x ||
+        (
           room.x +
-            room.width -
-            width,
-          Number(
-            entrance.x ||
-            room.x +
-            room.width / 2
-          )
+          room.width / 2
         )
       );
 
@@ -717,102 +708,7 @@ function drawMainEntrance(
       800,
       "#000000"
     );
-
-    return;
   }
-
-  const x =
-    side === "east"
-      ? room.x +
-        room.width
-      : room.x;
-
-  const centerY =
-    Math.max(
-      room.y +
-        width,
-      Math.min(
-        room.y +
-          room.height -
-          width,
-        Number(
-          entrance.y ||
-          room.y +
-          room.height / 2
-        )
-      )
-    );
-
-  const y1 =
-    centerY -
-    width / 2;
-
-  const y2 =
-    centerY +
-    width / 2;
-
-  add(svg, "line", {
-    x1: x,
-    y1,
-    x2: x,
-    y2,
-    stroke: "#ffffff",
-    "stroke-width": gapStroke,
-    "stroke-linecap": "butt"
-  });
-
-  const inward =
-    side === "east"
-      ? -1
-      : 1;
-
-  const leafX =
-    x +
-    inward *
-    width;
-
-  add(svg, "line", {
-    x1: x,
-    y1,
-    x2: leafX,
-    y2: y1,
-    stroke: "#000000",
-    "stroke-width": stroke
-  });
-
-  add(svg, "path", {
-    d:
-      `M ${leafX} ${y1} ` +
-      `A ${width} ${width} 0 0 ${side === "east" ? 1 : 0} ${x} ${y2}`,
-    fill: "none",
-    stroke: "#000000",
-    "stroke-width": base * 0.28
-  });
-
-  const labelX =
-    side === "east"
-      ? x -
-        width -
-        base * 0.7
-      : x +
-        width +
-        base * 0.7;
-
-  const label =
-    text(
-      svg,
-      labelX,
-      centerY,
-      "ENTRY",
-      base * 1.15,
-      800,
-      "#000000"
-    );
-
-  label.setAttribute(
-    "transform",
-    `rotate(-90 ${labelX} ${centerY})`
-  );
 }
 
 
