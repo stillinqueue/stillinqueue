@@ -781,7 +781,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "generic-connected-chat-v19";
+      const REAL_ESTATE_VERSION = "ai-native-chat-v21";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -2614,30 +2614,50 @@ Click “Render Concept 1” to generate the technical blueprint.`;
               ).toLowerCase()
             );
 
-          let reply =
-            data.reply ||
-            "Okay.";
+          /*
+            IMPORTANT:
+            The assistant message shown to the user must come from
+            OpenAI. Do NOT replace it with a locally hard-coded
+            "Updated concept" template.
 
-          if (
-            hadExistingConcept &&
-            data.concept_ready
-          ) {
-            reply =
-              buildClearUpdatedConceptReply(
-                text,
-                data,
-                previousCountry,
-                nextCountry
-              );
-          }
+            Local deterministic parsing still runs separately and
+            changes planner requirements such as:
+            - room-size changes
+            - dining below family lounge
+            - direct common-toilet access
+            - passage / bedroom-entry changes
+            - country profile selection
+
+            But the conversational response remains the model's own
+            response from data.reply.
+          */
+          let reply =
+            String(
+              data.reply ||
+              "Okay."
+            ).trim();
 
           if (
             data.proposal_ready &&
             data.proposal
           ) {
-            reply +=
-              "\n\n" +
+            const proposalText =
               aiProposalText();
+
+            /*
+              Avoid duplicating the proposal when the backend/model
+              already included it in data.reply.
+            */
+            if (
+              proposalText &&
+              !reply.includes(
+                proposalText
+              )
+            ) {
+              reply +=
+                "\n\n" +
+                proposalText;
+            }
           }
 
           addMessage(
@@ -2945,6 +2965,10 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           preferences.roomScales ||
           {};
 
+        preferences.layoutDirectives =
+          preferences.layoutDirectives ||
+          {};
+
         const applySizeIntent = (
           roomRegex,
           key
@@ -3010,6 +3034,44 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           /\bbedrooms?\b/i,
           "bedroom"
         );
+
+        /*
+          High-value layout directives that the deterministic
+          planner can actually honor in geometry.
+        */
+        for (
+          const content
+          of userTexts
+        ) {
+          if (
+            /\bdining\b/i.test(content) &&
+            /\b(?:below|under|beneath)\b/i.test(content) &&
+            /\bfamily\s*(?:lounge|living|room)\b/i.test(content)
+          ) {
+            preferences.layoutDirectives.diningBelowFamily =
+              true;
+          }
+
+          if (
+            (
+              /\bcommon\s*(?:bath|bathroom|toilet|wc|washroom)\b/i.test(content) &&
+              /\b(?:separate|independent|direct|own)\b/i.test(content) &&
+              /\b(?:entry|entrance|access|door)\b/i.test(content)
+            ) ||
+            (
+              /\bcommon\s*(?:bath|bathroom|toilet|wc|washroom)\b/i.test(content) &&
+              /\bonly\s+way\b/i.test(content) &&
+              /\battached\s*(?:bath|bathroom|toilet|wc)\b/i.test(content)
+            ) ||
+            (
+              /\bno\s+other\s+(?:entry|entrance|access|door)\b/i.test(content) &&
+              /\bcommon\s*(?:bath|bathroom|toilet|wc|washroom)\b/i.test(content)
+            )
+          ) {
+            preferences.layoutDirectives.commonToiletIndependentAccess =
+              true;
+          }
+        }
 
         /*
           Circulation / bedroom-entry changes.
@@ -3214,6 +3276,37 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         ) {
           changes.push(
             "Puja room added to the requested program."
+          );
+        }
+
+        if (
+          /\bdining\b/i.test(text) &&
+          /\b(?:below|under|beneath)\b/i.test(text) &&
+          /\bfamily\s*(?:lounge|living|room)\b/i.test(text)
+        ) {
+          changes.push(
+            "Dining area will be positioned below the Family Lounge in the next render."
+          );
+        }
+
+        if (
+          (
+            /\bcommon\s*(?:bath|bathroom|toilet|wc|washroom)\b/i.test(text) &&
+            /\b(?:separate|independent|direct|own)\b/i.test(text) &&
+            /\b(?:entry|entrance|access|door)\b/i.test(text)
+          ) ||
+          (
+            /\bcommon\s*(?:bath|bathroom|toilet|wc|washroom)\b/i.test(text) &&
+            /\bonly\s+way\b/i.test(text) &&
+            /\battached\s*(?:bath|bathroom|toilet|wc)\b/i.test(text)
+          ) ||
+          (
+            /\bno\s+other\s+(?:entry|entrance|access|door)\b/i.test(text) &&
+            /\bcommon\s*(?:bath|bathroom|toilet|wc|washroom)\b/i.test(text)
+          )
+        ) {
+          changes.push(
+            "Common toilet will get an independent access door instead of relying on an attached toilet route."
           );
         }
 
@@ -3646,8 +3739,6 @@ Buyer Plan uses the same geometry with a softer presentation style.${adaptations
           setStatus(
             "Architectural concept ready — review the entrance, circulation and room relationships, then confirm."
           );
-
-          updateLayoutButtons();
 
           updateLayoutButtons();
 
@@ -4084,3 +4175,39 @@ After you accept it, the app generates separate Engineer Drawing and Buyer Plan 
       let any = false;
       for (let i=0; i<MAX; i++) {
         const p = P[i];
+        if (!p || p.ttl <= 0) continue;
+
+        any = true;
+
+        p.vx += (Math.random()-0.5) * NOISE;
+        p.vy += (Math.random()-0.5) * NOISE;
+
+        p.vx *= FRICTION;
+        p.vy = p.vy * FRICTION + GRAVITY;
+        p.x += p.vx; p.y += p.vy;
+
+        p.ttl -= dt;
+        const t = Math.max(0, p.ttl / p.life);
+        const alpha = t;
+        const r = p.base * (0.7 + 1.8*(1 - t));
+
+        if (p.type === 'dot') drawBubble(p.x, p.y, r, p.color, alpha);
+        else drawStar5(p.x, p.y, r * p.starScale, Math.min(1, alpha*0.9));
+      }
+
+      if (any) {
+        lastNonEmptyAt = now;
+        showCanvas();
+      } else {
+        if (now - lastNonEmptyAt > 220) hideCanvas();
+      }
+
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    document.addEventListener('visibilitychange', () => { lastFrame = performance.now(); });
+  })();
+  </script>
+</body>
+</html>
