@@ -22,8 +22,111 @@ export function buildRoomProgram(requirements) {
   const profile =
     getDesignProfile(country);
 
+  const plotUnit =
+    String(
+      requirements.plot?.unit ||
+      profile.unit ||
+      "ft"
+    ).toLowerCase();
+
+  const profileUnit =
+    String(
+      profile.unit ||
+      plotUnit
+    ).toLowerCase();
+
+  const unitFactor =
+    profileUnit === plotUnit
+      ? 1
+      : profileUnit === "m" &&
+        plotUnit === "ft"
+        ? 3.28084
+        : profileUnit === "ft" &&
+          plotUnit === "m"
+          ? 0.3048
+          : 1;
+
   const ROOM_DEFAULTS =
-    profile.roomDefaults;
+    Object.fromEntries(
+      Object.entries(
+        profile.roomDefaults
+      ).map(
+        ([key, value]) => [
+          key,
+          {
+            ...value,
+
+            ...(value.minWidth != null
+              ? {
+                  minWidth:
+                    value.minWidth *
+                    unitFactor
+                }
+              : {}),
+
+            ...(value.minHeight != null
+              ? {
+                  minHeight:
+                    value.minHeight *
+                    unitFactor
+                }
+              : {}),
+
+            ...(value.preferredWidth != null
+              ? {
+                  preferredWidth:
+                    value.preferredWidth *
+                    unitFactor
+                }
+              : {}),
+
+            ...(value.preferredHeight != null
+              ? {
+                  preferredHeight:
+                    value.preferredHeight *
+                    unitFactor
+                }
+              : {})
+          }
+        ]
+      )
+    );
+
+  const roomScales =
+    preferences.roomScales || {};
+
+  const withScale = (
+    defaults,
+    scaleKey
+  ) => {
+    const scale =
+      Math.max(
+        0.75,
+        Math.min(
+          1.35,
+          Number(
+            roomScales[scaleKey] ||
+            1
+          )
+        )
+      );
+
+    return {
+      ...defaults,
+
+      preferredWidth:
+        defaults.preferredWidth != null
+          ? defaults.preferredWidth *
+            scale
+          : defaults.preferredWidth,
+
+      preferredHeight:
+        defaults.preferredHeight != null
+          ? defaults.preferredHeight *
+            scale
+          : defaults.preferredHeight
+    };
+  };
 
   /*
     ---------------------------------------------------------
@@ -96,7 +199,7 @@ export function buildRoomProgram(requirements) {
 
     requiresCirculationAccess: true,
 
-    ...ROOM_DEFAULTS.living
+    ...withScale(ROOM_DEFAULTS.living, "living")
   });
 
 
@@ -141,7 +244,7 @@ export function buildRoomProgram(requirements) {
 
       requiresCirculationAccess: true,
 
-      ...ROOM_DEFAULTS.familyLounge
+      ...withScale(ROOM_DEFAULTS.familyLounge, "familyLounge")
     });
   }
 
@@ -164,7 +267,7 @@ export function buildRoomProgram(requirements) {
 
     requiresCirculationAccess: true,
 
-    ...ROOM_DEFAULTS.dining
+    ...withScale(ROOM_DEFAULTS.dining, "dining")
   });
 
 
@@ -191,7 +294,7 @@ export function buildRoomProgram(requirements) {
     requiresCirculationAccess: true,
     wetArea: true,
 
-    ...ROOM_DEFAULTS.kitchen
+    ...withScale(ROOM_DEFAULTS.kitchen, "kitchen")
   });
 
 
@@ -235,11 +338,16 @@ export function buildRoomProgram(requirements) {
       requiresExteriorWall: true,
       requiresCirculationAccess: true,
 
-      ...ROOM_DEFAULTS[
+      ...withScale(
+        ROOM_DEFAULTS[
+          isMaster
+            ? "masterBedroom"
+            : "bedroom"
+        ],
         isMaster
           ? "masterBedroom"
           : "bedroom"
-      ]
+      )
     });
   }
 
