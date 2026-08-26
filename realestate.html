@@ -781,7 +781,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "architectural-entry-chat-v1";
+      const REAL_ESTATE_VERSION = "architectural-chat-v18";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -2558,6 +2558,29 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         setStatus("OpenAI is interpreting your requirements...");
 
         try {
+          const hadExistingConcept =
+            Boolean(
+              layoutState.proposalReady ||
+              layoutState.proposalAccepted ||
+              layoutState.rendered
+            );
+
+          const previousCountry =
+            resolveCountryProfileFromChat(
+              String(
+                aiState?.country ||
+                aiState?.location?.country ||
+                (
+                  String(
+                    layoutState.plot.unit ||
+                    "ft"
+                  ).toLowerCase() === "m"
+                    ? "germany"
+                    : "india"
+                )
+              ).toLowerCase()
+            );
+
           const historyForApi = messages
             .slice(0, -1)
             .slice(-12)
@@ -2582,12 +2605,45 @@ Click “Render Concept 1” to generate the technical blueprint.`;
 
           syncLayoutStateFromAI(data.state, data.proposal);
 
-          let reply = data.reply || "Okay.";
-          if (data.proposal_ready && data.proposal) {
-            reply += "\\n\\n" + aiProposalText();
+          const nextCountry =
+            resolveCountryProfileFromChat(
+              String(
+                data?.state?.country ||
+                data?.state?.location?.country ||
+                previousCountry
+              ).toLowerCase()
+            );
+
+          let reply =
+            data.reply ||
+            "Okay.";
+
+          if (
+            hadExistingConcept &&
+            data.concept_ready
+          ) {
+            reply =
+              buildClearUpdatedConceptReply(
+                text,
+                data,
+                previousCountry,
+                nextCountry
+              );
           }
 
-          addMessage("assistant", reply);
+          if (
+            data.proposal_ready &&
+            data.proposal
+          ) {
+            reply +=
+              "\n\n" +
+              aiProposalText();
+          }
+
+          addMessage(
+            "assistant",
+            reply
+          );
 
           if (!data.concept_ready) {
             const missing = Array.isArray(data.missing_fields) ? data.missing_fields : [];
@@ -2947,7 +3003,295 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           "bedroom"
         );
 
+        /*
+          Circulation / bedroom-entry changes.
+          Latest matching user instruction is preserved in the
+          deterministic planner requirements.
+        */
+        for (
+          const content
+          of userTexts
+        ) {
+          if (
+            (
+              /\b(?:extend|increase|continue|longer)\b.*\b(?:passage|hall|corridor)\b/i
+                .test(content) ||
+              /\b(?:passage|hall|corridor)\b.*\b(?:extend|increase|middle|halfway)\b/i
+                .test(content)
+            ) &&
+            /\b(?:bedroom|master|bedroom\s*2)\b/i
+              .test(content)
+          ) {
+            preferences.extendBedroomPassage =
+              true;
+          }
+
+          if (
+            /\bmaster\b.*\b(?:entry|entrance|door|access)\b/i
+              .test(content) ||
+            /\b(?:entry|entrance|door|access)\b.*\bmaster\b/i
+              .test(content)
+          ) {
+            preferences.directMasterEntry =
+              true;
+          }
+
+          if (
+            /\b(?:opposite|opposite-facing|opposite direction)\b/i
+              .test(content) &&
+            /\b(?:bedroom|entries|doors)\b/i
+              .test(content)
+          ) {
+            preferences.oppositeBedroomEntries =
+              true;
+          }
+        }
+
         return preferences;
+      }
+
+
+      function resolveCountryProfileFromChat(
+        fallbackCountry
+      ) {
+        let country =
+          String(
+            fallbackCountry || "india"
+          ).toLowerCase();
+
+        for (
+          const message
+          of messages
+        ) {
+          if (
+            message.role !== "user"
+          ) {
+            continue;
+          }
+
+          const content =
+            String(
+              message.content || ""
+            );
+
+          if (
+            /\b(?:germany|german|deutschland|deutsche?r?)\b/i
+              .test(content)
+          ) {
+            country =
+              "germany";
+          }
+
+          if (
+            /\b(?:india|indian|bharat)\b/i
+              .test(content)
+          ) {
+            country =
+              "india";
+          }
+        }
+
+        return country;
+      }
+
+
+      function buildClearUpdatedConceptReply(
+        userText,
+        data,
+        previousCountry,
+        nextCountry
+      ) {
+        const changes = [];
+        const text =
+          String(
+            userText || ""
+          );
+
+        if (
+          previousCountry !==
+          nextCountry
+        ) {
+          changes.push(
+            `Design profile switched to ${
+              nextCountry === "germany"
+                ? "Germany"
+                : "India"
+            }.`
+          );
+        }
+
+        if (
+          /\b(?:extend|increase|continue|longer)\b.*\b(?:passage|hall|corridor)\b/i
+            .test(text) ||
+          /\b(?:passage|hall|corridor)\b.*\b(?:extend|increase|middle|halfway)\b/i
+            .test(text)
+        ) {
+          changes.push(
+            "Bedroom passage extended deeper into the private bedroom zone."
+          );
+        }
+
+        if (
+          /\bmaster\b.*\b(?:entry|entrance|door|access)\b/i
+            .test(text) ||
+          /\b(?:entry|entrance|door|access)\b.*\bmaster\b/i
+            .test(text)
+        ) {
+          changes.push(
+            "A direct passage entry is assigned to the Master Bedroom."
+          );
+        }
+
+        if (
+          /\b(?:opposite|opposite-facing|opposite direction)\b/i
+            .test(text) &&
+          /\b(?:bedroom|entries|doors)\b/i
+            .test(text)
+        ) {
+          changes.push(
+            "Master Bedroom and Bedroom 2 doors are set on opposite sides of the bedroom passage."
+          );
+        }
+
+        if (
+          /\bkitchen\b/i
+            .test(text) &&
+          /\b(?:north|south|east|west|ne|nw|se|sw|northeast|northwest|southeast|southwest)\b/i
+            .test(text)
+        ) {
+          changes.push(
+            "Kitchen location preference updated."
+          );
+        }
+
+        if (
+          /\bmaster\b/i
+            .test(text) &&
+          /\b(?:north|south|east|west|ne|nw|se|sw|northeast|northwest|southeast|southwest)\b/i
+            .test(text)
+        ) {
+          changes.push(
+            "Master Bedroom location preference updated."
+          );
+        }
+
+        if (
+          /\b(?:bigger|larger|increase|more spacious|spacious|smaller|reduce|compact)\b/i
+            .test(text)
+        ) {
+          changes.push(
+            "Requested room-size proportions updated."
+          );
+        }
+
+        if (
+          /\b(?:remove|delete|without|no)\b.*\butility\b/i
+            .test(text)
+        ) {
+          changes.push(
+            "Utility room removed from the requested program."
+          );
+        } else if (
+          /\b(?:add|include|want|need|with)\b.*\butility\b/i
+            .test(text)
+        ) {
+          changes.push(
+            "Utility room added to the requested program."
+          );
+        }
+
+        if (
+          /\b(?:add|include|want|need|with)\b.*\b(?:puja|pooja)\b/i
+            .test(text)
+        ) {
+          changes.push(
+            "Puja room added to the requested program."
+          );
+        }
+
+        if (
+          !changes.length
+        ) {
+          changes.push(
+            "Your latest planning instruction has been applied to the requirement model."
+          );
+        }
+
+        const state =
+          data?.state || {};
+
+        const plot =
+          state.plot || {};
+
+        const summary = [];
+
+        if (
+          plot.width &&
+          (
+            plot.depth ||
+            plot.height
+          )
+        ) {
+          summary.push(
+            `${plot.width} × ${
+              plot.depth ||
+              plot.height
+            } ${
+              plot.unit ||
+              layoutState.plot.unit ||
+              "ft"
+            }`
+          );
+        }
+
+        if (
+          state.bedrooms ||
+          layoutState.bedrooms
+        ) {
+          summary.push(
+            `${
+              state.bedrooms ||
+              layoutState.bedrooms
+            }BHK`
+          );
+        }
+
+        if (
+          state.facing ||
+          layoutState.facing
+        ) {
+          summary.push(
+            `${
+              directionName(
+                state.facing ||
+                layoutState.facing
+              )
+            } facing`
+          );
+        }
+
+        return (
+`Updated concept ✅
+
+Changes applied:
+${changes
+  .map(change => `• ${change}`)
+  .join("\n")}
+
+Current concept:
+• Profile: ${
+  nextCountry === "germany"
+    ? "Germany"
+    : "India"
+}
+${
+  summary.length
+    ? `• ${summary.join(" · ")}`
+    : ""
+}
+
+Review the revised proposal below. If it looks right, click “Accept Proposal” and then “Render Concept 1”.`
+        );
       }
 
 
@@ -2966,6 +3310,15 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         if (!["india", "germany"].includes(country)) {
           country = unit === "m" ? "germany" : "india";
         }
+
+        /*
+          The user's explicit profile request always wins over
+          an incomplete/stale OpenAI state.
+        */
+        country =
+          resolveCountryProfileFromChat(
+            country
+          );
 
         const facingMap = {
           N: "north",
