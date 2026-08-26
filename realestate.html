@@ -781,7 +781,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "architectural-chat-v18";
+      const REAL_ESTATE_VERSION = "generic-connected-chat-v19";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -2658,6 +2658,9 @@ Click “Render Concept 1” to generate the technical blueprint.`;
             setStatus("Requirements understood ✅ Continue refining or accept the proposal.");
           }
 
+          renderInProgress =
+            false;
+
           updateLayoutButtons();
 
         } catch (err) {
@@ -2981,6 +2984,11 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         applySizeIntent(
           /\bliving(?:\s+room)?\b/i,
           "living"
+        );
+
+        applySizeIntent(
+          /\bfamily\s*(?:lounge|living|room)\b/i,
+          "familyLounge"
         );
 
         applySizeIntent(
@@ -3467,7 +3475,16 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
         return map[String(code || "").toUpperCase()] || null;
       }
 
+      let renderInProgress =
+        false;
+
       async function renderNow() {
+        if (
+          renderInProgress
+        ) {
+          return;
+        }
+
         if (!layoutState.proposalAccepted) {
           addMessage(
             "assistant",
@@ -3476,6 +3493,9 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
           updateLayoutButtons();
           return;
         }
+
+        renderInProgress =
+          true;
 
         btnRender.disabled = true;
         btnConfirm.disabled = true;
@@ -3638,6 +3658,10 @@ Buyer Plan uses the same geometry with a softer presentation style.${adaptations
           console.error("Constraint planner error:", err);
 
           layoutState.rendered = false;
+
+          renderInProgress =
+            false;
+
           updateLayoutButtons();
 
           preview.innerHTML = `
@@ -4060,39 +4084,3 @@ After you accept it, the app generates separate Engineer Drawing and Buyer Plan 
       let any = false;
       for (let i=0; i<MAX; i++) {
         const p = P[i];
-        if (!p || p.ttl <= 0) continue;
-
-        any = true;
-
-        p.vx += (Math.random()-0.5) * NOISE;
-        p.vy += (Math.random()-0.5) * NOISE;
-
-        p.vx *= FRICTION;
-        p.vy = p.vy * FRICTION + GRAVITY;
-        p.x += p.vx; p.y += p.vy;
-
-        p.ttl -= dt;
-        const t = Math.max(0, p.ttl / p.life);
-        const alpha = t;
-        const r = p.base * (0.7 + 1.8*(1 - t));
-
-        if (p.type === 'dot') drawBubble(p.x, p.y, r, p.color, alpha);
-        else drawStar5(p.x, p.y, r * p.starScale, Math.min(1, alpha*0.9));
-      }
-
-      if (any) {
-        lastNonEmptyAt = now;
-        showCanvas();
-      } else {
-        if (now - lastNonEmptyAt > 220) hideCanvas();
-      }
-
-      requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-
-    document.addEventListener('visibilitychange', () => { lastFrame = performance.now(); });
-  })();
-  </script>
-</body>
-</html>
