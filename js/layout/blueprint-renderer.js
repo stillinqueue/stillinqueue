@@ -20,6 +20,7 @@ export function renderBlueprintLayout(layout, container, options = {}) {
   const buildable = layout.buildableArea;
   const rooms = Array.isArray(layout.rooms) ? layout.rooms : [];
   const circulation = Array.isArray(layout.circulation) ? layout.circulation : [];
+  const entrances = Array.isArray(layout.entrances) ? layout.entrances : [];
 
   const plotW = Number(plot.width);
   const plotH = Number(plot.height);
@@ -95,10 +96,32 @@ export function renderBlueprintLayout(layout, container, options = {}) {
 
     const cx = c.x + c.width / 2;
     const cy = c.y + c.height / 2;
-    const label = text(svg, cx, cy, "PASSAGE", base * 1.65, 600, "#111111");
+    const circulationName =
+      c.type === "foyer"
+        ? "ENTRY"
+        : c.name === "Landing"
+          ? "HALL"
+          : "PASSAGE";
 
-    if (c.height > c.width * 2.1) {
-      label.setAttribute("transform", `rotate(-90 ${cx} ${cy})`);
+    const label =
+      text(
+        svg,
+        cx,
+        cy,
+        circulationName,
+        base * 1.45,
+        700,
+        "#000000"
+      );
+
+    if (
+      c.type !== "foyer" &&
+      c.height > c.width * 2.1
+    ) {
+      label.setAttribute(
+        "transform",
+        `rotate(-90 ${cx} ${cy})`
+      );
     }
   });
 
@@ -126,6 +149,16 @@ export function renderBlueprintLayout(layout, container, options = {}) {
   rooms.forEach(room => {
     drawRoomDoor(svg, room, roomMap, circulation, base);
     drawExteriorWindows(svg, room, buildable, base);
+  });
+
+  // Main exterior entrance
+  entrances.forEach(entrance => {
+    drawMainEntrance(
+      svg,
+      entrance,
+      rooms,
+      base
+    );
   });
 
   // Labels last
@@ -162,6 +195,7 @@ export function renderBuyerLayout(layout, container, options = {}) {
   const buildable = layout.buildableArea;
   const rooms = Array.isArray(layout.rooms) ? layout.rooms : [];
   const circulation = Array.isArray(layout.circulation) ? layout.circulation : [];
+  const entrances = Array.isArray(layout.entrances) ? layout.entrances : [];
 
   const plotW = Number(plot.width);
   const plotH = Number(plot.height);
@@ -234,6 +268,15 @@ export function renderBuyerLayout(layout, container, options = {}) {
     drawRoomDoor(svg, room, roomMap, circulation, base, true);
     drawExteriorWindows(svg, room, buildable, base, true);
     drawRoomLabel(svg, room, unit, base, true);
+  });
+
+  entrances.forEach(entrance => {
+    drawMainEntrance(
+      svg,
+      entrance,
+      rooms,
+      base
+    );
   });
 
   drawRoad(svg, layout.roadSide || plot.roadSide || "north", plotW, plotH, pad, base);
@@ -338,6 +381,121 @@ function drawRoomLabel(svg, room, unit, base, buyer = false) {
     500,
     buyer ? "#111111" : "#111111"
   );
+}
+
+
+function drawMainEntrance(
+  svg,
+  entrance,
+  rooms,
+  base
+) {
+  const room =
+    rooms.find(
+      item =>
+        item.id ===
+        entrance.roomId
+    );
+
+  if (!room) return;
+
+  const width =
+    Number(
+      entrance.width || 3.5
+    );
+
+  const side =
+    String(
+      entrance.side || "north"
+    ).toLowerCase();
+
+  const stroke =
+    base * 0.36;
+
+  const gapStroke =
+    base * 1.85;
+
+  if (
+    side === "north" ||
+    side === "south"
+  ) {
+    const y =
+      side === "north"
+        ? room.y
+        : room.y +
+          room.height;
+
+    const centerX =
+      Number(
+        entrance.x ||
+        (
+          room.x +
+          room.width / 2
+        )
+      );
+
+    const x1 =
+      centerX -
+      width / 2;
+
+    const x2 =
+      centerX +
+      width / 2;
+
+    add(svg, "line", {
+      x1,
+      y1: y,
+      x2,
+      y2: y,
+      stroke: "#ffffff",
+      "stroke-width": gapStroke,
+      "stroke-linecap": "butt"
+    });
+
+    const inward =
+      side === "north"
+        ? 1
+        : -1;
+
+    const leafY =
+      y +
+      inward *
+      width;
+
+    add(svg, "line", {
+      x1,
+      y1: y,
+      x2: x1,
+      y2: leafY,
+      stroke: "#000000",
+      "stroke-width": stroke
+    });
+
+    add(svg, "path", {
+      d:
+        `M ${x1} ${leafY} ` +
+        `A ${width} ${width} 0 0 ${side === "north" ? 0 : 1} ${x2} ${y}`,
+      fill: "none",
+      stroke: "#000000",
+      "stroke-width": base * 0.28
+    });
+
+    text(
+      svg,
+      centerX,
+      side === "north"
+        ? y +
+          width +
+          base * 1.1
+        : y -
+          width -
+          base * 0.7,
+      "ENTRY",
+      base * 1.15,
+      800,
+      "#000000"
+    );
+  }
 }
 
 
