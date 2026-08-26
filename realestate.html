@@ -781,7 +781,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "ai-native-chat-v22";
+      const REAL_ESTATE_VERSION = "ai-native-chat-v21";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -3074,37 +3074,6 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         }
 
         /*
-          More architectural directives from natural-language chat.
-          OpenAI still writes the conversational reply; these values
-          make sure the deterministic renderer actually follows it.
-        */
-        for (
-          const content
-          of userTexts
-        ) {
-          if (
-            /\bcommon\s*(?:bath|bathroom|toilet|wc|washroom)\b/i.test(content) &&
-            /\b(?:passage|hall|corridor)\b/i.test(content) &&
-            /\b(?:near|beside|next|accessible|access|door|entry|entrance)\b/i.test(content)
-          ) {
-            preferences.layoutDirectives.commonToiletNearPassage =
-              true;
-
-            preferences.layoutDirectives.commonToiletIndependentAccess =
-              true;
-          }
-
-          if (
-            /\b(?:use|utili[sz]e|occupy|fill|expand)\b.*\b(?:entire|whole|available|remaining|extra)\b.*\b(?:space|area|plot)\b/i.test(content) ||
-            /\b(?:most|too much)\b.*\b(?:empty|unused|open)\b/i.test(content) ||
-            /\bexpand\b.*\b(?:built|house|layout)\b/i.test(content)
-          ) {
-            preferences.layoutDirectives.maximizeBuiltUp =
-              true;
-          }
-        }
-
-        /*
           Circulation / bedroom-entry changes.
           Latest matching user instruction is preserved in the
           deterministic planner requirements.
@@ -3504,7 +3473,7 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
           messages.some(
             message =>
               message.role === "user" &&
-              /\b\d+\s*(?:bathroom|bathrooms|bath|baths|toilet|toilets|wc|washroom|washrooms)\b/i
+              /\b(?:\d+\s*)?(?:bathroom|bathrooms|bath|baths|toilet|toilets|wc|washroom|washrooms)\b/i
                 .test(String(message.content || ""))
           );
 
@@ -4221,3 +4190,20 @@ After you accept it, the app generates separate Engineer Drawing and Buyer Plan 
         const t = Math.max(0, p.ttl / p.life);
         const alpha = t;
         const r = p.base * (0.7 + 1.8*(1 - t));
+
+        if (p.type === 'dot') drawBubble(p.x, p.y, r, p.color, alpha);
+        else drawStar5(p.x, p.y, r * p.starScale, Math.min(1, alpha*0.9));
+      }
+
+      if (any) {
+        lastNonEmptyAt = now;
+        showCanvas();
+      } else {
+        if (now - lastNonEmptyAt > 220) hideCanvas();
+      }
+
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    document.addEventListener('visibilitychange', () => { lastFrame = performance.now(); });
