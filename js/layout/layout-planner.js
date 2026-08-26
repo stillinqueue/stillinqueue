@@ -454,6 +454,109 @@ function generateCompact3BHK(requirements) {
       landingDepth
   };
 
+
+  /*
+    Bedroom passage extension.
+
+    Normal plan:
+      short connection into the private bedroom zone.
+
+    User asks:
+      "extend passage till middle of Bedroom 2"
+      -> extend to roughly half the rear bedroom depth.
+  */
+  const bedroomPassageDepth =
+    preferences.extendBedroomPassage
+      ? rearH * 0.52
+      : rearH * 0.22;
+
+  const bedroomPassage = {
+    id:
+      "bedroom-passage",
+
+    name:
+      "Bedroom Hall",
+
+    type:
+      "corridor",
+
+    overlay:
+      true,
+
+    x:
+      xLobby,
+
+    y:
+      yRear,
+
+    width:
+      lobbyW,
+
+    height:
+      bedroomPassageDepth
+  };
+
+  const bedroomEntryY =
+    roundV16(
+      yRear +
+      bedroomPassageDepth *
+      0.72
+    );
+
+  const interiorDoors = [
+    {
+      id:
+        "master-bedroom-entry",
+
+      roomId:
+        "bedroom-1",
+
+      side:
+        "east",
+
+      x:
+        xLobby,
+
+      y:
+        bedroomEntryY,
+
+      width:
+        country === "germany"
+          ? 0.90
+          : 3.0,
+
+      swing:
+        "left"
+    },
+
+    {
+      id:
+        "bedroom-2-entry",
+
+      roomId:
+        "bedroom-2",
+
+      side:
+        "west",
+
+      x:
+        xRight,
+
+      y:
+        bedroomEntryY,
+
+      width:
+        country === "germany"
+          ? 0.90
+          : 3.0,
+
+      swing:
+        preferences.oppositeBedroomEntries
+          ? "right"
+          : "left"
+    }
+  ];
+
   /*
     SOUTH ROAD:
     mirror complete geometry vertically so living/dining remain at road side.
@@ -461,9 +564,28 @@ function generateCompact3BHK(requirements) {
   if (roadSide === "south") {
     mirrorAllV16(
       rooms,
-      [verticalLobby, rearLanding],
+      [
+        verticalLobby,
+        rearLanding,
+        bedroomPassage
+      ],
       b
     );
+
+    for (
+      const door
+      of interiorDoors
+    ) {
+      door.y =
+        roundV16(
+          b.y +
+          b.height -
+          (
+            door.y -
+            b.y
+          )
+        );
+    }
   }
 
   /*
@@ -607,6 +729,7 @@ function generateCompact3BHK(requirements) {
     circulation: [
       verticalLobby,
       rearLanding,
+      bedroomPassage,
       foyer
     ],
 
@@ -614,12 +737,14 @@ function generateCompact3BHK(requirements) {
       mainEntrance
     ],
 
+    interiorDoors,
+
     rooms,
 
     failedRooms: [],
 
     placementStrategy:
-      "architectural-connected-entry-v1",
+      "architectural-prompt-responsive-v18",
 
     statistics: {
       requestedRooms:
