@@ -881,6 +881,7 @@
       let isConfirmed = false;
       let aiState = null;
       let aiProposal = null;
+      let lastShownProposalSignature = null; // avoids reprinting the full space program every turn
 
       const layoutState = {
         stage: 1,
@@ -2680,22 +2681,34 @@ Click “Render Concept 1” to generate the technical blueprint.`;
             data.proposal_ready &&
             data.proposal
           ) {
-            const proposalText =
-              aiProposalText();
+            // Only show the full space program when it's actually new/changed
+            // since we last displayed it -- otherwise the model's own short
+            // reply already covers this turn, and reprinting the whole
+            // proposal every message is exactly the robotic repetition users
+            // complained about.
+            const proposalSignature = JSON.stringify(data.proposal);
+            const proposalChanged = proposalSignature !== lastShownProposalSignature;
 
-            /*
-              Avoid duplicating the proposal when the backend/model
-              already included it in data.reply.
-            */
-            if (
-              proposalText &&
-              !reply.includes(
-                proposalText
-              )
-            ) {
-              reply +=
-                "\n\n" +
-                proposalText;
+            if (proposalChanged) {
+              const proposalText =
+                aiProposalText();
+
+              /*
+                Avoid duplicating the proposal when the backend/model
+                already included it in data.reply.
+              */
+              if (
+                proposalText &&
+                !reply.includes(
+                  proposalText
+                )
+              ) {
+                reply +=
+                  "\n\n" +
+                  proposalText;
+              }
+
+              lastShownProposalSignature = proposalSignature;
             }
           }
 
