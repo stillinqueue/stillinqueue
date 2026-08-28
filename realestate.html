@@ -927,7 +927,11 @@
         confirmed: false,
 
         // AI-understood edit directives (see backend layout_directives schema).
-        layoutDirectives: {}
+        layoutDirectives: {},
+
+        // Raw {room, preference} pairs from AI state.room_preferences, resolved
+        // into concrete adjacency swaps by js/layout/adjacency.js at render time.
+        roomPreferences: []
       };
 
       function setStatus(html) {
@@ -1451,6 +1455,10 @@ Click “Render Concept 1” to generate the technical blueprint.`;
             ...layoutState.layoutDirectives,
             ...s.layout_directives
           };
+        }
+
+        if (Array.isArray(s.room_preferences)) {
+          layoutState.roomPreferences = s.room_preferences;
         }
 
         const nextState = JSON.stringify(aiState || {});
@@ -3603,6 +3611,8 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
         applyAIDirectives(
           preferences
         );
+
+        preferences.roomAdjacency = layoutState.roomPreferences || [];
 
         return {
           country,

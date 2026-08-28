@@ -14,6 +14,10 @@ import {
   getDesignProfile
 } from "./plan-schema.js";
 
+import {
+  applyAdjacencyPairs
+} from "./adjacency.js";
+
 
 /*
   Still In Queue · Architectural Planner V16
@@ -53,7 +57,7 @@ export function generateLayout(requirements) {
     if (
       large?.success
     ) {
-      return postProcessLayout(large);
+      return postProcessLayout(large, requirements);
     }
   }
 
@@ -65,13 +69,14 @@ export function generateLayout(requirements) {
   if (
     compact?.success
   ) {
-    return postProcessLayout(compact);
+    return postProcessLayout(compact, requirements);
   }
 
   return postProcessLayout(
     legacyGenerateLayout(
       requirements
-    )
+    ),
+    requirements
   );
 }
 
@@ -94,7 +99,7 @@ export function generateLayout(requirements) {
   =========================================================
 */
 
-function postProcessLayout(layout) {
+function postProcessLayout(layout, requirements) {
   if (
     !layout ||
     !layout.success ||
@@ -113,8 +118,19 @@ function postProcessLayout(layout) {
     return layout;
   }
 
-  const originalRooms = layout.rooms.map(room => ({ ...room }));
   const rooms = layout.rooms.map(room => ({ ...room }));
+
+  // Satisfy chat-driven "place X near/adjacent to Y" requests (works across
+  // every internal strategy, including the rigid hand-built templates that
+  // otherwise ignore preferredNear entirely) before reclaiming dead space.
+  // Same-footprint swaps can never introduce overlaps, so this is folded
+  // into the "original" snapshot the growth pass falls back to on failure.
+  const roomPreferences = requirements?.preferences?.roomAdjacency;
+  if (Array.isArray(roomPreferences) && roomPreferences.length) {
+    applyAdjacencyPairs(rooms, layout.circulation, roomPreferences);
+  }
+
+  const originalRooms = rooms.map(room => ({ ...room }));
   const growable = rooms.filter(room => room.type !== "corridor");
 
   const maxGrowthRatio = room =>
