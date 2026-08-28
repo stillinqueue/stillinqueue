@@ -2,7 +2,7 @@
 
 > **“A multi-domain AI assistant hub built for everyday productivity.”**
 
-![Still In Queue Logo](SQ-Group.jpeg)
+![Still In Queue Logo](assets/SQ-Group.jpeg)
 
 Still In Queue is a young startup aiming to bring **AI-powered help** into everyday life and work — not just in software, but across learning, local services, and even physical spaces.
 
@@ -19,7 +19,7 @@ This repo holds the static website and concept blueprints for multiple “folds�
 
 ### 🧠 SQ-AI — Agents
 
-![SQ-AI](SQ-AI.jpeg)
+![SQ-AI](assets/SQ-AI.jpeg)
 
 **SQ-AI** is the AI agents fold.
 
@@ -34,7 +34,7 @@ This repo holds the static website and concept blueprints for multiple “folds�
 
 ### 📚 SQ-LP — Learning Platform
 
-![SQ-LP](SQ-EL.jpeg)
+![SQ-LP](assets/SQ-EL.jpeg)
 
 **SQ-LP** is the learning fold.
 
@@ -54,7 +54,7 @@ The idea: one place where **AI mentors** support structured content, and also co
 
 ### ☕ SQ-CC — Coffee & Creme
 
-![SQ-IC](SQ-IC.jpeg)
+![SQ-IC](assets/SQ-IC.jpeg)
 
 **SQ-CC (Coffee & Creme)** is the physical / experiential fold.
 
@@ -71,7 +71,7 @@ The idea: one place where **AI mentors** support structured content, and also co
 
 ### ☀️ SQ-GE — Green Energy
 
-![SQ-GE](SQ-GE.jpeg)
+![SQ-GE](assets/SQ-GE.jpeg)
 
 **SQ-GE** is the green energy fold, starting with solar.
 
@@ -193,23 +193,28 @@ These are realistic goals for the next ~6 months of work:
 
 ---
 
-## Repository Structure (planned)
-
-(This may change as the project grows.)
+## Repository Structure
 
 ```text
 /
-├── index.html          # Main landing page
-├── ai.html             # SQ-AI concept page (planned)
-├── learning.html       # SQ-LP concept page
-├── green.html          # SQ-GE concept page
-├── cc.html             # SQ-CC concept page
-├── assets/             # Images, logos, icons
+├── index.html               # Main landing page
+├── agents.html              # SQ-AI agents hub
+├── realestate.html          # SQ-AI Real Estate Intelligence agent
+├── learning.html            # SQ-LP concept page
+├── green.html                # SQ-GE concept page
+├── cc.html                   # SQ-CC concept page
+├── login.html / profile.html / users.html   # Auth + account pages
+├── assets/                   # Images, logos, icons
 │   ├── Fav-Photoroom.png
 │   ├── SQ-Group.jpeg
 │   ├── SQ-AI.jpeg
 │   ├── SQ-EL.jpeg
 │   ├── SQ-GE.jpeg
 │   └── SQ-IC.jpeg
-├── css/                # (optional) extracted styles
+├── js/layout/                 # Deterministic floor-plan geometry engine (realestate.html)
+├── backend/                   # FastAPI backend (auth, real estate AI chat + layout APIs)
+├── inventorypulse-ai/          # Separate InventoryPulse AI sub-project (own frontend/backend)
+├── render.yaml                 # Render deployment config for backend/
+├── CNAME                       # Custom domain for GitHub Pages
 └── README.md
+```
