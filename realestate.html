@@ -2787,6 +2787,46 @@ Click “Render Concept 1” to generate the technical blueprint.`;
       }
 
       /*
+        Turns the deterministic engine's own adjacency report into a plain,
+        ground-truth status message -- this is what actually happened to the
+        geometry, independent of anything the chat model claimed.
+      */
+      function formatAdjacencyReport(report) {
+        if (!Array.isArray(report) || !report.length) return null;
+
+        const applied = report.filter(r => r.status === "applied");
+        const already = report.filter(r => r.status === "already-satisfied");
+        const unmet = report.filter(r => r.status === "no-swap-candidate");
+        const unresolvedSource = report.filter(r => r.status === "unresolved-source");
+        const unresolvedTarget = report.filter(r => r.status === "unresolved-target");
+
+        const lines = [];
+
+        if (applied.length) {
+          lines.push("Applied:");
+          applied.forEach(r => lines.push(`• ${r.sourceLabel} moved next to ${r.targetLabel}.`));
+        }
+        if (already.length) {
+          lines.push("Already matched what you asked:");
+          already.forEach(r => lines.push(`• ${r.sourceLabel} is already next to ${r.targetLabel}.`));
+        }
+        if (unmet.length) {
+          lines.push("Understood, but could not apply safely (no matching room to swap with without breaking the plan):");
+          unmet.forEach(r => lines.push(`• "${r.roomText}" near ${r.targetLabel || r.phrase}.`));
+        }
+        if (unresolvedSource.length) {
+          lines.push("Could not identify which room you meant -- please be more specific:");
+          unresolvedSource.forEach(r => lines.push(`• "${r.roomText}" — try the exact name shown in the plan (e.g. "Common Toilet", "Bedroom 2").`));
+        }
+        if (unresolvedTarget.length) {
+          lines.push("Could not identify where you wanted it placed -- please be more specific:");
+          unresolvedTarget.forEach(r => lines.push(`• "${r.roomText}"${r.phrase ? ` near "${r.phrase}"` : ""} — name a specific room, or the hall/passage.`));
+        }
+
+        return lines.join("\n");
+      }
+
+      /*
         Applies the AI's structured layout_directives (backend chat state)
         onto the planner preferences. This is the primary edit-understanding
         path -- it handles typos/paraphrasing far better than regex -- while
@@ -3818,6 +3858,14 @@ Engineer Drawing now includes:
 
 Buyer Plan uses the same geometry with a softer presentation style.${adaptations}`
           );
+
+          const adjacencyMessage = formatAdjacencyReport(layout.adjacencyReport);
+          if (adjacencyMessage) {
+            addMessage(
+              "assistant",
+              `Positional request check (from the geometry engine, not the chat model):\n\n${adjacencyMessage}`
+            );
+          }
 
           setStatus(
             "Architectural concept ready — review the entrance, circulation and room relationships, then confirm."

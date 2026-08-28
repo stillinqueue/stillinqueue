@@ -126,8 +126,9 @@ function postProcessLayout(layout, requirements) {
   // Same-footprint swaps can never introduce overlaps, so this is folded
   // into the "original" snapshot the growth pass falls back to on failure.
   const roomPreferences = requirements?.preferences?.roomAdjacency;
+  let adjacencyReport = [];
   if (Array.isArray(roomPreferences) && roomPreferences.length) {
-    applyAdjacencyPairs(rooms, layout.circulation, roomPreferences);
+    adjacencyReport = applyAdjacencyPairs(rooms, layout.circulation, roomPreferences);
   }
 
   const originalRooms = rooms.map(room => ({ ...room }));
@@ -212,7 +213,7 @@ function postProcessLayout(layout, requirements) {
 
   if (hasOverlap || outOfBounds) {
     // Growth produced an invalid result -- keep the untouched original geometry.
-    return { ...layout, rooms: originalRooms };
+    return { ...layout, rooms: originalRooms, adjacencyReport };
   }
 
   const occupiedArea = growable.reduce((sum, room) => sum + room.width * room.height, 0);
@@ -221,6 +222,7 @@ function postProcessLayout(layout, requirements) {
   return {
     ...layout,
     rooms,
+    adjacencyReport,
     qualityChecks: {
       overlapsDetected: false,
       allRoomsWithinBounds: true,

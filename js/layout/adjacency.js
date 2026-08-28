@@ -4,6 +4,10 @@
   that the layout engine can actually act on. Used as a universal
   post-placement pass so it works regardless of which internal strategy
   generated the geometry (rigid templates and the generic solver alike).
+
+  Every attempt is reported back (applyAdjacencyPairs' return value) so the
+  UI can tell the user honestly what was and wasn't actually applied,
+  instead of silently doing nothing while the chat reply claims success.
 */
 
 const RELATION_PATTERN = /\b(?:near|adjacent to|beside|next to|close to)\s+([a-z0-9 '\-]+)/gi;
@@ -53,36 +57,52 @@ function findCirculationMatch(circulationRooms, phrase) {
 }
 
 /*
-  Returns [{ source: room, target: room|circulationItem }] pairs, e.g. from
-  { room: "common toilet", preference: "near the hall, adjacent to attached toilet 2" }
-  this yields both the hall pairing and the attached-toilet-2 pairing.
+  Returns one entry per {room, preference} pair per "near/adjacent to X"
+  phrase found inside it, whether or not it could actually be resolved --
+  callers use `status` to tell requested-but-unresolved apart from resolved.
 */
-export function resolveAdjacencyPairs(rooms, circulationRooms, roomPreferences) {
-  const pairs = [];
-  if (!Array.isArray(roomPreferences)) return pairs;
+export function resolveAdjacencyRequests(rooms, circulationRooms, roomPreferences) {
+  const requests = [];
+  if (!Array.isArray(roomPreferences)) return requests;
 
   for (const entry of roomPreferences) {
-    const source = findRoomMatch(rooms, entry?.room);
-    if (!source) continue;
+    const roomText = String(entry?.room || "").trim();
+    const preferenceText = String(entry?.preference || "").trim();
+    const source = findRoomMatch(rooms, roomText);
 
-    const preferenceText = String(entry?.preference || "");
+    if (!source) {
+      requests.push({ roomText, preferenceText, phrase: null, status: "unresolved-source" });
+      continue;
+    }
+
+    const phrases = [];
     let match;
     RELATION_PATTERN.lastIndex = 0;
     while ((match = RELATION_PATTERN.exec(preferenceText)) !== null) {
-      const phrase = match[1];
+      phrases.push(match[1]);
+    }
+
+    if (!phrases.length) {
+      requests.push({ roomText, preferenceText, phrase: null, status: "unresolved-target", source });
+      continue;
+    }
+
+    for (const phrase of phrases) {
       const targetRoom = findRoomMatch(rooms.filter(r => r !== source), phrase);
       if (targetRoom) {
-        pairs.push({ source, target: targetRoom });
+        requests.push({ roomText, preferenceText, phrase, status: "resolved", source, target: targetRoom });
         continue;
       }
       const targetCirculation = findCirculationMatch(circulationRooms, phrase);
       if (targetCirculation) {
-        pairs.push({ source, target: targetCirculation });
+        requests.push({ roomText, preferenceText, phrase, status: "resolved", source, target: targetCirculation });
+        continue;
       }
+      requests.push({ roomText, preferenceText, phrase, status: "unresolved-target", source });
     }
   }
 
-  return pairs;
+  return requests;
 }
 
 function rectanglesTouch(a, b, tolerance = 0.05) {
@@ -98,16 +118,29 @@ function rectanglesTouch(a, b, tolerance = 0.05) {
 }
 
 /*
-  Satisfies adjacency pairs by swapping a source room's geometry with
-  whichever OTHER same-footprint room is already touching the target --
-  a same-size swap can never introduce overlaps or push rooms out of
-  bounds, so this is safe to apply after any placement strategy.
+  Satisfies resolved adjacency requests by swapping a source room's
+  geometry with whichever OTHER same-footprint room is already touching
+  the target -- a same-size swap can never introduce overlaps or push
+  rooms out of bounds, so this is safe to apply after any placement
+  strategy. Returns a per-request report with a human-readable `status`:
+    - "unresolved-source": couldn't match `room` to anything in the plan
+    - "unresolved-target": couldn't match the "near X" phrase to anything
+    - "already-satisfied": the rooms were already touching, nothing to do
+    - "applied": geometry was changed to satisfy the request
+    - "no-swap-candidate": both rooms were identified but no safe swap
+       partner exists (e.g. mismatched room sizes) -- not applied
 */
 export function applyAdjacencyPairs(rooms, circulationRooms, roomPreferences) {
-  const pairs = resolveAdjacencyPairs(rooms, circulationRooms, roomPreferences);
+  const requests = resolveAdjacencyRequests(rooms, circulationRooms, roomPreferences);
 
-  for (const { source, target } of pairs) {
-    if (rectanglesTouch(source, target)) continue;
+  for (const request of requests) {
+    if (request.status !== "resolved") continue;
+    const { source, target } = request;
+
+    if (rectanglesTouch(source, target)) {
+      request.status = "already-satisfied";
+      continue;
+    }
 
     const swapPartner = rooms.find(room =>
       room !== source &&
@@ -116,7 +149,11 @@ export function applyAdjacencyPairs(rooms, circulationRooms, roomPreferences) {
       Math.abs(room.width - source.width) < 1.5 &&
       Math.abs(room.height - source.height) < 1.5
     );
-    if (!swapPartner) continue;
+
+    if (!swapPartner) {
+      request.status = "no-swap-candidate";
+      continue;
+    }
 
     const snapshot = { x: source.x, y: source.y, width: source.width, height: source.height, area: source.area };
     source.x = swapPartner.x;
@@ -129,5 +166,15 @@ export function applyAdjacencyPairs(rooms, circulationRooms, roomPreferences) {
     swapPartner.width = snapshot.width;
     swapPartner.height = snapshot.height;
     swapPartner.area = snapshot.area;
+    request.status = "applied";
   }
+
+  return requests.map(r => ({
+    roomText: r.roomText,
+    preferenceText: r.preferenceText,
+    phrase: r.phrase,
+    status: r.status,
+    sourceLabel: r.source?.name || r.roomText,
+    targetLabel: r.target?.name || r.phrase || null
+  }));
 }
