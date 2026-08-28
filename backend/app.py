@@ -18,6 +18,7 @@ from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as pdf_canvas
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
@@ -471,6 +472,65 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                         "additionalProperties": False,
                     },
                 },
+                "layout_directives": {
+                    "type": "object",
+                    "description": (
+                        "Structured edit directives the deterministic layout "
+                        "engine already understands. Set a field only when the "
+                        "user has actually asked for that change; otherwise keep "
+                        "the previous value from current_state (null means no "
+                        "preference either way)."
+                    ),
+                    "properties": {
+                        "family_lounge": {"type": ["boolean", "null"]},
+                        "utility": {"type": ["boolean", "null"]},
+                        "puja": {"type": ["boolean", "null"]},
+                        "store": {"type": ["boolean", "null"]},
+                        "kitchen_direction": {
+                            "type": ["string", "null"],
+                            "enum": ["north", "south", "east", "west", "northeast", "northwest", "southeast", "southwest", None],
+                        },
+                        "master_bedroom_direction": {
+                            "type": ["string", "null"],
+                            "enum": ["north", "south", "east", "west", "northeast", "northwest", "southeast", "southwest", None],
+                        },
+                        "extend_bedroom_passage": {"type": ["boolean", "null"]},
+                        "direct_master_entry": {"type": ["boolean", "null"]},
+                        "opposite_bedroom_entries": {"type": ["boolean", "null"]},
+                        "common_toilet_independent_access": {"type": ["boolean", "null"]},
+                        "dining_below_family": {"type": ["boolean", "null"]},
+                        "rooms_scaled_bigger": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": ["living", "familyLounge", "dining", "kitchen", "masterBedroom", "bedroom"],
+                            },
+                        },
+                        "rooms_scaled_smaller": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": ["living", "familyLounge", "dining", "kitchen", "masterBedroom", "bedroom"],
+                            },
+                        },
+                    },
+                    "required": [
+                        "family_lounge",
+                        "utility",
+                        "puja",
+                        "store",
+                        "kitchen_direction",
+                        "master_bedroom_direction",
+                        "extend_bedroom_passage",
+                        "direct_master_entry",
+                        "opposite_bedroom_entries",
+                        "common_toilet_independent_access",
+                        "dining_below_family",
+                        "rooms_scaled_bigger",
+                        "rooms_scaled_smaller",
+                    ],
+                    "additionalProperties": False,
+                },
             },
             "required": [
                 "plot",
@@ -485,6 +545,7 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                 "site_context",
                 "special_requirements",
                 "room_preferences",
+                "layout_directives",
             ],
             "additionalProperties": False,
         },
@@ -650,6 +711,28 @@ IMPORTANT BEHAVIOUR
 14. If the user's message is ambiguous, do not hallucinate certainty. Explain
     the likely interpretation in "interpreted_message" and ask for confirmation
     in "reply" when needed.
+
+15. "layout_directives" mirrors a fixed vocabulary the deterministic layout
+    engine already understands (this is NOT the free-form space program).
+    Set a field ONLY when the user's latest message clearly asks for that
+    exact change; otherwise copy the previous value from current_state's
+    layout_directives (do not reset it to null just because it wasn't
+    mentioned again). Examples of user phrasing -> field:
+    - "remove/no family lounge" -> family_lounge=false; "add a family lounge" -> true
+    - "remove/no utility" -> utility=false; "add a utility room" -> true
+    - "remove/no puja room" -> puja=false; "add a puja room" -> true
+    - "remove/no store room" -> store=false; "add a store room" -> true
+    - "kitchen facing southeast" -> kitchen_direction="southeast"
+    - "master bedroom in the southwest" -> master_bedroom_direction="southwest"
+    - "extend the passage/corridor to the bedrooms" -> extend_bedroom_passage=true
+    - "master bedroom should have its own direct entry" -> direct_master_entry=true
+    - "bedroom doors facing opposite each other" -> opposite_bedroom_entries=true
+    - "common toilet should have independent access, not through another room"
+      -> common_toilet_independent_access=true
+    - "dining below/under the family lounge" -> dining_below_family=true
+    - "make the living room bigger" -> add "living" to rooms_scaled_bigger
+    - "make the bedrooms smaller" -> add "bedroom" to rooms_scaled_smaller
+    Never invent a directive the user did not ask for.
 """.strip()
 
 
@@ -664,6 +747,10 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
     special_requirements = state.get("special_requirements")
     if not isinstance(special_requirements, list):
         special_requirements = []
+
+    layout_directives = state.get("layout_directives")
+    if not isinstance(layout_directives, dict):
+        layout_directives = {}
 
     return {
         "plot": {
@@ -682,6 +769,7 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
         "site_context": state.get("site_context"),
         "special_requirements": special_requirements,
         "room_preferences": room_preferences,
+        "layout_directives": layout_directives,
     }
 
 
@@ -1352,3 +1440,95 @@ def render_plan(payload: PlanRenderRequest) -> PlanRenderResponse:
         )
 
     return PlanRenderResponse(svg=svg, pdf_base64=pdf_base64)
+
+
+# ---------------------------------------------------------------------------
+# Real estate brochure export (Engineer Drawing + Buyer Plan + 3D view, all
+# rasterized client-side and bundled here into one downloadable PDF).
+# ---------------------------------------------------------------------------
+
+MAX_BROCHURE_IMAGE_BYTES = 8 * 1024 * 1024
+
+
+class BrochureRequest(BaseModel):
+    engineer_view_png: str
+    buyer_view_png: str
+    brochure_view_png: str
+    title: Optional[str] = None
+
+
+class BrochureResponse(BaseModel):
+    pdf_base64: str
+
+
+def _decode_brochure_image(image_b64: str, field_name: str) -> ImageReader:
+    image_b64 = (image_b64 or "").split(",")[-1].strip()
+    try:
+        decoded = base64.b64decode(image_b64, validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"{field_name} is not valid base64 image data.") from exc
+    if not decoded or len(decoded) > MAX_BROCHURE_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail=f"{field_name} is empty or too large.")
+    try:
+        reader = ImageReader(io.BytesIO(decoded))
+        reader.getSize()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"{field_name} could not be decoded as an image.") from exc
+    return reader
+
+
+def _clean_brochure_title(raw_title: str) -> str:
+    stripped = "".join(ch for ch in str(raw_title) if ch not in "<>" and (ch == " " or ch.isprintable()))
+    return stripped.strip()[:80]
+
+
+def _draw_brochure_page(c: pdf_canvas.Canvas, page_size: tuple[float, float], image: ImageReader, caption: str) -> None:
+    page_w, page_h = page_size
+    margin = 40.0
+    header_h = 30.0
+
+    img_w, img_h = image.getSize()
+    avail_w = page_w - margin * 2
+    avail_h = page_h - margin * 2 - header_h
+    fit_scale = min(avail_w / img_w, avail_h / img_h)
+    draw_w, draw_h = img_w * fit_scale, img_h * fit_scale
+    x = margin + (avail_w - draw_w) / 2
+    y = margin + (avail_h - draw_h) / 2
+
+    c.setFont("Helvetica-Bold", 13)
+    c.drawString(margin, page_h - margin, caption)
+    c.drawImage(image, x, y, width=draw_w, height=draw_h, preserveAspectRatio=True, anchor="c")
+    c.setStrokeColorRGB(0.55, 0.6, 0.7)
+    c.setLineWidth(1)
+    c.rect(x, y, draw_w, draw_h, stroke=1, fill=0)
+
+
+@app.post("/api/realestate/brochure", response_model=BrochureResponse)
+def realestate_brochure(payload: BrochureRequest) -> BrochureResponse:
+    engineer_image = _decode_brochure_image(payload.engineer_view_png, "engineer_view_png")
+    buyer_image = _decode_brochure_image(payload.buyer_view_png, "buyer_view_png")
+    brochure_image = _decode_brochure_image(payload.brochure_view_png, "brochure_view_png")
+
+    title = _clean_brochure_title(payload.title or "Still In Queue · Layout Brochure")
+    page_size = landscape(A4)
+
+    try:
+        buf = io.BytesIO()
+        c = pdf_canvas.Canvas(buf, pagesize=page_size)
+
+        _draw_brochure_page(c, page_size, engineer_image, f"{title} — Engineer Drawing")
+        c.showPage()
+
+        _draw_brochure_page(c, page_size, buyer_image, f"{title} — Buyer Plan")
+        c.showPage()
+
+        _draw_brochure_page(c, page_size, brochure_image, f"{title} — 3D View")
+        c.showPage()
+
+        c.save()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to build brochure PDF.") from exc
+
+    return BrochureResponse(pdf_base64=base64.b64encode(buf.getvalue()).decode("ascii"))

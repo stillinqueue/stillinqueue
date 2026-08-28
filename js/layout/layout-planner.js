@@ -53,7 +53,7 @@ export function generateLayout(requirements) {
     if (
       large?.success
     ) {
-      return large;
+      return postProcessLayout(large);
     }
   }
 
@@ -65,12 +65,152 @@ export function generateLayout(requirements) {
   if (
     compact?.success
   ) {
-    return compact;
+    return postProcessLayout(compact);
   }
 
-  return legacyGenerateLayout(
-    requirements
+  return postProcessLayout(
+    legacyGenerateLayout(
+      requirements
+    )
   );
+}
+
+
+/*
+  =========================================================
+  SPACE RECLAMATION + INTEGRITY CHECK
+
+  Every internal strategy below (large-connected, compact-3BHK,
+  legacy guillotine packer) can leave unused strips of the
+  buildable area between rooms and the plot boundary. Rather
+  than patch each strategy separately, this single pass runs
+  on whatever `rooms` came out, growing each room rightward
+  and downward to consume adjacent free space (capped so wet
+  areas like kitchens/toilets don't balloon), then re-validates
+  that the result still has zero overlaps and stays inside the
+  buildable rectangle. If growth ever produces an invalid
+  layout, the untouched original is returned instead -- this
+  is a strictly additive safety net, never a correctness risk.
+  =========================================================
+*/
+
+function postProcessLayout(layout) {
+  if (
+    !layout ||
+    !layout.success ||
+    !Array.isArray(layout.rooms) ||
+    layout.rooms.length === 0
+  ) {
+    return layout;
+  }
+
+  const buildable = layout.buildableArea;
+  if (
+    !buildable ||
+    buildable.width <= 0 ||
+    buildable.height <= 0
+  ) {
+    return layout;
+  }
+
+  const originalRooms = layout.rooms.map(room => ({ ...room }));
+  const rooms = layout.rooms.map(room => ({ ...room }));
+  const growable = rooms.filter(room => room.type !== "corridor");
+
+  const maxGrowthRatio = room =>
+    room.wetArea ||
+    room.type === "attachedToilet" ||
+    room.type === "commonToilet" ||
+    room.type === "utility"
+      ? 1.2
+      : 1.6;
+
+  function growRight(room) {
+    const cap = room.width * maxGrowthRatio(room);
+    let limit = buildable.x + buildable.width;
+    for (const other of rooms) {
+      if (other === room) continue;
+      if (
+        other.x >= room.x + room.width - 0.01 &&
+        rangesOverlap(room.y, room.y + room.height, other.y, other.y + other.height)
+      ) {
+        limit = Math.min(limit, other.x);
+      }
+    }
+    const newWidth = round(Math.min(cap, Math.max(room.width, limit - room.x)));
+    if (newWidth > room.width + 0.05) {
+      room.width = newWidth;
+      room.area = round(room.width * room.height);
+    }
+  }
+
+  function growDown(room) {
+    const cap = room.height * maxGrowthRatio(room);
+    let limit = buildable.y + buildable.height;
+    for (const other of rooms) {
+      if (other === room) continue;
+      if (
+        other.y >= room.y + room.height - 0.01 &&
+        rangesOverlap(room.x, room.x + room.width, other.x, other.x + other.width)
+      ) {
+        limit = Math.min(limit, other.y);
+      }
+    }
+    const newHeight = round(Math.min(cap, Math.max(room.height, limit - room.y)));
+    if (newHeight > room.height + 0.05) {
+      room.height = newHeight;
+      room.area = round(room.width * room.height);
+    }
+  }
+
+  // Larger public/social rooms claim leftover space before small service rooms.
+  const growthOrder = [...growable].sort(
+    (a, b) => b.width * b.height - a.width * a.height
+  );
+  for (const room of growthOrder) {
+    growRight(room);
+    growDown(room);
+  }
+
+  // Adjacent rooms sharing a wall land on the exact same coordinate, which
+  // float rounding can nudge by a hair -- use a small tolerance so genuinely
+  // touching (not overlapping) rooms are never mistaken for bad geometry.
+  const EPSILON = 0.02;
+  const overlapsWithTolerance = (a, b) =>
+    !(
+      a.x + a.width <= b.x + EPSILON ||
+      b.x + b.width <= a.x + EPSILON ||
+      a.y + a.height <= b.y + EPSILON ||
+      b.y + b.height <= a.y + EPSILON
+    );
+  const containsWithTolerance = (outer, inner) =>
+    inner.x >= outer.x - EPSILON &&
+    inner.y >= outer.y - EPSILON &&
+    inner.x + inner.width <= outer.x + outer.width + EPSILON &&
+    inner.y + inner.height <= outer.y + outer.height + EPSILON;
+
+  const hasOverlap = growable.some((room, index) =>
+    growable.slice(index + 1).some(other => overlapsWithTolerance(room, other))
+  );
+  const outOfBounds = growable.some(room => !containsWithTolerance(buildable, room));
+
+  if (hasOverlap || outOfBounds) {
+    // Growth produced an invalid result -- keep the untouched original geometry.
+    return { ...layout, rooms: originalRooms };
+  }
+
+  const occupiedArea = growable.reduce((sum, room) => sum + room.width * room.height, 0);
+  const utilizationPercent = round((occupiedArea / buildable.area) * 100, 1);
+
+  return {
+    ...layout,
+    rooms,
+    qualityChecks: {
+      overlapsDetected: false,
+      allRoomsWithinBounds: true,
+      buildableUtilizationPercent: utilizationPercent
+    }
+  };
 }
 
 

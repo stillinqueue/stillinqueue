@@ -475,6 +475,8 @@
     }
 
     .preview-3d-placeholder {
+      position: absolute;
+      inset: 0;
       min-height: 420px;
       display: flex;
       align-items: center;
@@ -483,6 +485,7 @@
       text-align: center;
       padding: 2rem;
       line-height: 1.6;
+      pointer-events: none;
     }
 
     .preview-3d-icon {
@@ -670,7 +673,7 @@
           <div class="chat-input-row">
             <textarea id="chatInput" class="chat-input chat-textarea"
               rows="3"
-              placeholder="Describe your requirements or changes...&#10;Example: Move the common bathroom near Bedroom 2 and add a utility beside the kitchen."></textarea>
+              placeholder="Describe your requirements or changes...&#10;Example: Make the kitchen face northeast and add a puja room."></textarea>
             <button id="chatSend" class="chat-send">Send</button>
           </div>
 
@@ -679,6 +682,7 @@
             <button id="btnRender" class="studio-btn" disabled>Render Concept 1</button>
             <button id="btnConfirm" class="studio-btn-secondary" disabled>Confirm Layout</button>
             <button id="btnDownloadPdf" class="studio-btn-secondary" disabled>Download SVG</button>
+            <button id="btnDownloadBrochure" class="studio-btn-secondary" disabled>Download Brochure (PDF)</button>
           </div>
 
           <!-- Predictable wait UI -->
@@ -750,17 +754,21 @@
           <div class="viewer-toolbar">
             <div>
               <div class="studio-label" style="margin-bottom:.35rem;">3D Preview</div>
-              <div class="viewer-hint">Concept visualization based on the current plan. Detailed furniture comes later.</div>
+              <div class="viewer-hint">Drag to orbit · scroll to zoom · built from the same room geometry as the blueprint (ground floor)</div>
+            </div>
+            <div class="viewer-controls">
+              <button class="viewer-pill" id="reset3dView">Reset View</button>
             </div>
           </div>
 
-          <div class="viewer-stage">
-            <div id="preview3d" class="preview-3d-placeholder">
+          <div class="viewer-stage" id="viewer3dStage">
+            <canvas id="canvas3d" style="width:100%;height:100%;display:block;"></canvas>
+            <div id="preview3dPlaceholder" class="preview-3d-placeholder">
               <div>
                 <div class="preview-3d-icon">◇</div>
-                <strong>3D preview is the next stage.</strong>
+                <strong>Render a layout first.</strong>
                 <div style="margin-top:.45rem;">
-                  The technical blueprint is rendered separately so we can build a proper 3D view from the same plan data.
+                  The 3D view is built from the same room geometry as the blueprint.
                 </div>
               </div>
             </div>
@@ -773,6 +781,15 @@
   <footer class="site-footer">
     <p>© 2025 Still in Queue · SQ-AI Real Estate. All rights reserved.</p>
   </footer>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
 
   <script type="module">
     import { generateLayout } from "./js/layout/layout-planner.js";
@@ -797,6 +814,7 @@
       const btnRender  = document.getElementById("btnRender");
       const btnConfirm = document.getElementById("btnConfirm");
       const btnPdf     = document.getElementById("btnDownloadPdf");
+      const btnBrochure = document.getElementById("btnDownloadBrochure");
 
       const progressFill = document.getElementById("progressFill");
       const progressText = document.getElementById("progressText");
@@ -806,7 +824,9 @@
       const tab3d = document.getElementById("tab3d");
       const blueprintPanel = document.getElementById("blueprintPanel");
       const preview3dPanel = document.getElementById("preview3dPanel");
-      const preview3d = document.getElementById("preview3d");
+      const canvas3d = document.getElementById("canvas3d");
+      const preview3dPlaceholder = document.getElementById("preview3dPlaceholder");
+      const reset3dViewBtn = document.getElementById("reset3dView");
 
       const tabEngineer = document.getElementById("tabEngineer");
       const tabBuyer = document.getElementById("tabBuyer");
@@ -904,7 +924,10 @@
         proposalAccepted: false,
         proposal: null,
         rendered: false,
-        confirmed: false
+        confirmed: false,
+
+        // AI-understood edit directives (see backend layout_directives schema).
+        layoutDirectives: {}
       };
 
       function setStatus(html) {
@@ -965,6 +988,7 @@
         btnRender.disabled = !(layoutState.proposalAccepted && layoutState.proposal && isConceptReady());
         btnConfirm.disabled = !layoutState.rendered;
         btnPdf.disabled = !layoutState.confirmed || !layoutState.rendered;
+        if (btnBrochure) btnBrochure.disabled = !layoutState.confirmed || !layoutState.rendered;
         btnRender.textContent = layoutState.rendered ? "Re-render Layout" : "Render Concept 1";
       }
 
@@ -1421,6 +1445,13 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         layoutState.planningStyle = s.planning_style ?? layoutState.planningStyle;
         layoutState.bathrooms = s.bathrooms ?? layoutState.bathrooms;
         layoutState.parking = s.parking_spaces ?? layoutState.parking;
+
+        if (s.layout_directives && typeof s.layout_directives === "object") {
+          layoutState.layoutDirectives = {
+            ...layoutState.layoutDirectives,
+            ...s.layout_directives
+          };
+        }
 
         const nextState = JSON.stringify(aiState || {});
         const nextProposal = JSON.stringify(aiProposal || {});
@@ -2747,6 +2778,44 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         };
       }
 
+      /*
+        Applies the AI's structured layout_directives (backend chat state)
+        onto the planner preferences. This is the primary edit-understanding
+        path -- it handles typos/paraphrasing far better than regex -- while
+        applyUserChatDesignOverrides() below stays as a text-based fallback.
+        Only non-null directive fields are applied so an unset directive
+        never clobbers a previously established preference.
+      */
+      function applyAIDirectives(preferences) {
+        const d = layoutState.layoutDirectives || {};
+
+        if (typeof d.family_lounge === "boolean") preferences.familyLounge = d.family_lounge;
+        if (typeof d.utility === "boolean") preferences.utility = d.utility;
+        if (typeof d.puja === "boolean") preferences.puja = d.puja;
+        if (typeof d.store === "boolean") preferences.store = d.store;
+        if (d.kitchen_direction) preferences.kitchenDirection = d.kitchen_direction;
+        if (d.master_bedroom_direction) preferences.masterBedroomDirection = d.master_bedroom_direction;
+        if (typeof d.extend_bedroom_passage === "boolean") preferences.extendBedroomPassage = d.extend_bedroom_passage;
+        if (typeof d.direct_master_entry === "boolean") preferences.directMasterEntry = d.direct_master_entry;
+        if (typeof d.opposite_bedroom_entries === "boolean") preferences.oppositeBedroomEntries = d.opposite_bedroom_entries;
+
+        preferences.layoutDirectives = preferences.layoutDirectives || {};
+        if (typeof d.common_toilet_independent_access === "boolean") {
+          preferences.layoutDirectives.commonToiletIndependentAccess = d.common_toilet_independent_access;
+        }
+        if (typeof d.dining_below_family === "boolean") {
+          preferences.layoutDirectives.diningBelowFamily = d.dining_below_family;
+        }
+
+        preferences.roomScales = preferences.roomScales || {};
+        (Array.isArray(d.rooms_scaled_bigger) ? d.rooms_scaled_bigger : []).forEach(key => {
+          preferences.roomScales[key] = 1.18;
+        });
+        (Array.isArray(d.rooms_scaled_smaller) ? d.rooms_scaled_smaller : []).forEach(key => {
+          preferences.roomScales[key] = 0.86;
+        });
+      }
+
       function applyUserChatDesignOverrides(
         preferences
       ) {
@@ -3531,6 +3600,10 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
           preferences
         );
 
+        applyAIDirectives(
+          preferences
+        );
+
         return {
           country,
           plot: {
@@ -3904,6 +3977,268 @@ You can still request a design change in chat. Any understood requirement change
       tabBuyer?.addEventListener("click", showBuyerSubtab);
 
       // ---------------------------
+      // Real 3D viewer (Three.js) — built from the same room geometry
+      // (layout.rooms: x, y, width, height, zone, type) as the blueprint.
+      // ---------------------------
+      const ROOM_3D_COLORS = {
+        living: 0x3b82f6,
+        familyLounge: 0x60a5fa,
+        dining: 0x38bdf8,
+        kitchen: 0x22c55e,
+        masterBedroom: 0xa78bfa,
+        bedroom: 0x8b7cf6,
+        attachedToilet: 0xf59e0b,
+        commonToilet: 0xf59e0b,
+        utility: 0x14b8a6,
+        puja: 0xf472b6,
+        store: 0x94a3b8
+      };
+      const WALL_HEIGHT_FT = 9;
+      const WALL_HEIGHT_M = 2.7;
+
+      let three3d = null; // { THREE, scene, camera, renderer, controls, group }
+      let builtLayoutRef = null;
+
+      async function ensureThreeLoaded() {
+        if (three3d) return three3d;
+
+        const THREE = await import("three");
+        const { OrbitControls } = await import("three/addons/controls/OrbitControls.js");
+
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, preserveDrawingBuffer: true });
+        renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xeef2f7);
+
+        const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 2000);
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+        sun.position.set(1, 2, 1).multiplyScalar(40);
+        scene.add(sun);
+
+        const group = new THREE.Group();
+        scene.add(group);
+
+        three3d = { THREE, scene, camera, renderer, controls, group };
+
+        (function animate() {
+          requestAnimationFrame(animate);
+          controls.update();
+          renderer.render(scene, camera);
+        })();
+
+        return three3d;
+      }
+
+      function resize3d() {
+        if (!three3d || !canvas3d) return;
+        const rect = canvas3d.parentElement.getBoundingClientRect();
+        const w = Math.max(1, rect.width);
+        const h = Math.max(1, rect.height);
+        three3d.renderer.setSize(w, h, false);
+        three3d.camera.aspect = w / h;
+        three3d.camera.updateProjectionMatrix();
+      }
+      window.addEventListener("resize", resize3d);
+
+      function layout3dBounds(layout) {
+        const w = Number(layout?.plot?.width) || 40;
+        const h = Number(layout?.plot?.height) || 60;
+        return { w, h, cx: w / 2, cz: h / 2 };
+      }
+
+      function frameHeroCamera(layout) {
+        if (!three3d) return;
+        const b = layout3dBounds(layout);
+        // Elevated "doll's-house" angle: mostly looking down so room floor
+        // colors read clearly instead of being hidden behind tall walls.
+        const dist = Math.max(b.w, b.h) * 1.3;
+        three3d.camera.position.set(b.cx + dist * 0.42, dist * 0.95, b.cz + dist * 0.42);
+        three3d.controls.target.set(b.cx, 0, b.cz);
+        three3d.controls.update();
+      }
+
+      async function rebuild3dScene(layout) {
+        const t = await ensureThreeLoaded();
+        const { THREE, group } = t;
+
+        while (group.children.length) group.remove(group.children[0]);
+
+        const wallHeight = String(layout?.unit || "ft").toLowerCase() === "m" ? WALL_HEIGHT_M : WALL_HEIGHT_FT;
+        const bounds = layout3dBounds(layout);
+
+        const ground = new THREE.Mesh(
+          new THREE.PlaneGeometry(bounds.w * 2.4, bounds.h * 2.4),
+          new THREE.MeshStandardMaterial({ color: 0xd6dee8 })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.set(bounds.cx, -0.02, bounds.cz);
+        group.add(ground);
+
+        const wallMat = new THREE.MeshStandardMaterial({
+          color: 0xf8fafc,
+          roughness: 0.9,
+          transparent: true,
+          opacity: 0.82
+        });
+
+        for (const room of (layout?.rooms || [])) {
+          if (room.type === "corridor") continue;
+
+          const rx = Number(room.x) || 0;
+          const ry = Number(room.y) || 0;
+          const rw = Math.max(0.5, Number(room.width) || 1);
+          const rh = Math.max(0.5, Number(room.height) || 1);
+          const cx = rx + rw / 2;
+          const cz = ry + rh / 2;
+          const color = ROOM_3D_COLORS[room.type] || 0x94a3b8;
+
+          const floor = new THREE.Mesh(
+            new THREE.BoxGeometry(rw, 0.15, rh),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.85 })
+          );
+          floor.position.set(cx, 0.08, cz);
+          group.add(floor);
+
+          const thickness = Math.max(0.3, wallHeight * 0.05);
+          const walls = [
+            { w: rw + thickness, d: thickness, x: cx, z: ry },
+            { w: rw + thickness, d: thickness, x: cx, z: ry + rh },
+            { w: thickness, d: rh + thickness, x: rx, z: cz },
+            { w: thickness, d: rh + thickness, x: rx + rw, z: cz }
+          ];
+          for (const w of walls) {
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w.w, wallHeight, w.d), wallMat);
+            mesh.position.set(w.x, wallHeight / 2, w.z);
+            group.add(mesh);
+          }
+        }
+
+        builtLayoutRef = layout;
+        resize3d();
+        frameHeroCamera(layout);
+      }
+
+      async function ensure3dSceneCurrent() {
+        const layout = window.currentConstraintLayout;
+        if (!layout) return null;
+        if (builtLayoutRef !== layout) {
+          await rebuild3dScene(layout);
+        }
+        resize3d();
+        return layout;
+      }
+
+      // ---------------------------
+      // SVG -> PNG rasterization (for embedding Engineer/Buyer views in the brochure PDF)
+      // ---------------------------
+      function svgElementToPngDataUrl(svgEl) {
+        return new Promise((resolve, reject) => {
+          if (!svgEl) { reject(new Error("No SVG element to export.")); return; }
+
+          const clone = svgEl.cloneNode(true);
+          clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+
+          const bbox = svgEl.getBBox ? svgEl.getBoundingClientRect() : { width: 1000, height: 700 };
+          const width = Math.max(400, Math.round(bbox.width || 1000));
+          const height = Math.max(300, Math.round(bbox.height || 700));
+
+          const source = new XMLSerializer().serializeToString(clone);
+          const svgBlob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+          const url = URL.createObjectURL(svgBlob);
+
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = width * 2;
+            canvas.height = height * 2;
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(url);
+            resolve(canvas.toDataURL("image/png"));
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error("Could not rasterize SVG for export."));
+          };
+          img.src = url;
+        });
+      }
+
+      async function downloadBrochure() {
+        if (!layoutState.confirmed || !layoutState.rendered) return;
+        if (btnBrochure) btnBrochure.disabled = true;
+
+        setStatus("Building brochure (Engineer + Buyer + 3D)...");
+
+        try {
+          const layout = await ensure3dSceneCurrent();
+          if (!layout) throw new Error("Render a layout before exporting a brochure.");
+
+          // Capture at a fixed resolution regardless of whether the 3D tab is
+          // currently visible -- a hidden panel has a zero-size bounding box,
+          // which would otherwise produce a blank screenshot.
+          const captureW = 1200, captureH = 900;
+          three3d.renderer.setSize(captureW, captureH, false);
+          three3d.camera.aspect = captureW / captureH;
+          three3d.camera.updateProjectionMatrix();
+          frameHeroCamera(layout);
+          three3d.renderer.render(three3d.scene, three3d.camera);
+          const brochureViewPng = canvas3d.toDataURL("image/png");
+          resize3d(); // restore on-screen sizing if the panel is visible
+
+          const engineerSvg = preview?.querySelector("svg");
+          const buyerSvg = buyerPreview?.querySelector("svg");
+
+          const [engineerPng, buyerPng] = await Promise.all([
+            svgElementToPngDataUrl(engineerSvg),
+            svgElementToPngDataUrl(buyerSvg)
+          ]);
+
+          const title = `${layoutState.plot.width}×${layoutState.plot.depth} ${layoutState.bedrooms}BHK Concept`;
+          const brochureApi = CHAT_API.replace("/api/realestate/chat", "/api/realestate/brochure");
+
+          const res = await fetch(brochureApi, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              engineer_view_png: engineerPng,
+              buyer_view_png: buyerPng,
+              brochure_view_png: brochureViewPng,
+              title
+            })
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.detail || `Brochure failed (HTTP ${res.status})`);
+
+          const byteChars = atob(data.pdf_base64);
+          const byteNumbers = new Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+          const blob = new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "brochure.pdf";
+          a.click();
+          URL.revokeObjectURL(url);
+
+          setStatus("Brochure downloaded ✅");
+        } catch (err) {
+          console.error("Brochure export error:", err);
+          setStatus(`<span style="color:#fca5a5;">Brochure error:</span> ${String(err.message || err)}`);
+        } finally {
+          updateLayoutButtons();
+        }
+      }
+
+      // ---------------------------
       // Preview tabs
       // ---------------------------
       function showBlueprintTab() {
@@ -3919,10 +4254,21 @@ You can still request a design change in chat. Any understood requirement change
         tabBlueprint?.classList.remove("active");
         if (blueprintPanel) blueprintPanel.style.display = "none";
         if (preview3dPanel) preview3dPanel.style.display = "block";
+
+        if (window.currentConstraintLayout) {
+          if (preview3dPlaceholder) preview3dPlaceholder.style.display = "none";
+          ensure3dSceneCurrent();
+        } else if (preview3dPlaceholder) {
+          preview3dPlaceholder.style.display = "flex";
+        }
       }
 
       tabBlueprint?.addEventListener("click", showBlueprintTab);
       tab3d?.addEventListener("click", show3dTab);
+      reset3dViewBtn?.addEventListener("click", () => {
+        if (window.currentConstraintLayout) frameHeroCamera(window.currentConstraintLayout);
+      });
+      btnBrochure?.addEventListener("click", downloadBrochure);
 
       // ---------------------------
       // Boot
