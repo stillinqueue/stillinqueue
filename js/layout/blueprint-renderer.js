@@ -1,3 +1,7 @@
+import {
+  buildAccessibilityReport
+} from "./accessibility.js";
+
 /*
   Still In Queue · Blueprint Renderer V3
   ---------------------------------------
@@ -7,7 +11,7 @@
   - dark black doors
   - dark black windows
   - clean white sheet
-  - minimal light grid
+  const unit = layout.unit || layout.plot?.unit || "ft";
   - clearer labels and dimensions
 */
 
@@ -196,21 +200,17 @@ export function renderBlueprintLayout(layout, container, options = {}) {
   // Furniture first
   rooms.forEach(room => drawFurniture(svg, room, base));
 
-  // Doors and windows
-  rooms.forEach(room => {
-    drawRoomDoor(svg, room, roomMap, circulation, base);
-    drawExteriorWindows(svg, room, buildable, base);
+  // Only draw doors backed by a verified shared boundary and access route.
+  const accessibility = layout.accessibilityReport || buildAccessibilityReport(layout);
+  accessibility.connections.forEach(connection => {
+    const room = roomMap[connection.roomId] || roomMap[connection.fromId];
+    if (!room) return;
+    const width = isBathroom(room.type) ? 2.5 : room.type === "living" ? 3.5 : 3.0;
+    const doorWidth = Math.min(width, connection.boundary.length * 0.68);
+    if (doorWidth > 1.5) drawDoorGeometry(svg, connection.boundary, doorWidth, base);
   });
 
-  // Explicit prompt-driven internal bedroom doors
-  interiorDoors.forEach(door => {
-    drawExplicitInteriorDoor(
-      svg,
-      door,
-      rooms,
-      base
-    );
-  });
+  rooms.forEach(room => drawExteriorWindows(svg, room, buildable, base));
 
   // Main exterior entrance
   entrances.forEach(entrance => {
@@ -250,136 +250,264 @@ export function renderBlueprintLayout(layout, container, options = {}) {
 export function renderBuyerLayout(layout, container, options = {}) {
   if (!container || !layout?.success) return;
 
-  // For now buyer plan uses the same clean dark style, slightly softer fills.
   const unit = layout.unit || layout.plot?.unit || "ft";
-  const plot = layout.plot;
   const buildable = layout.buildableArea;
   const rooms = Array.isArray(layout.rooms) ? layout.rooms : [];
   const circulation = Array.isArray(layout.circulation) ? layout.circulation : [];
   const entrances = Array.isArray(layout.entrances) ? layout.entrances : [];
-  const interiorDoors = Array.isArray(layout.interiorDoors) ? layout.interiorDoors : [];
-
-  const plotW = Number(plot.width);
-  const plotH = Number(plot.height);
-  const base = Math.max(plotW, plotH) / 100;
-  const pad = Math.max(plotW, plotH) * 0.08;
+  const base = Math.max(buildable.width, buildable.height) / 100;
+  const margin = Math.max(buildable.width, buildable.height) * 0.055;
+  const legendWidth = Math.max(buildable.width * 0.5, base * 31);
+  const footerHeight = Math.max(base * 8, margin * 1.7);
+  const planX = legendWidth + margin * 2;
+  const planY = margin;
+  const sheetWidth = planX + buildable.width + margin;
+  const sheetHeight = buildable.height + footerHeight + margin * 2;
 
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", `${-pad} ${-pad} ${plotW + pad * 2} ${plotH + pad * 2}`);
+  svg.setAttribute("viewBox", `0 0 ${sheetWidth} ${sheetHeight}`);
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Furnished buyer presentation floor plan");
 
-  add(svg, "rect", {
-    x: -pad,
-    y: -pad,
-    width: plotW + pad * 2,
-    height: plotH + pad * 2,
-    fill: "#ffffff"
-  });
+  const defs = add(svg, "defs");
+  addBuyerPatterns(defs, base);
 
   add(svg, "rect", {
     x: 0,
     y: 0,
-    width: plotW,
-    height: plotH,
-    fill: "#ffffff",
-    stroke: "#111111",
-    "stroke-width": base * 0.45
+    width: sheetWidth,
+    height: sheetHeight,
+    fill: "#ffffff"
   });
 
-  add(svg, "rect", {
+  drawBuyerLegend(svg, rooms, unit, margin, planY, legendWidth, base);
+
+  const plan = add(svg, "g", {
+    transform: `translate(${planX - buildable.x} ${planY - buildable.y})`
+  });
+
+  add(plan, "rect", {
     x: buildable.x,
     y: buildable.y,
     width: buildable.width,
     height: buildable.height,
-    fill: "none",
-    stroke: "#c9c9c9",
-    "stroke-width": base * 0.10,
-    "stroke-dasharray": `${base * 0.6} ${base * 0.45}`
+    fill: "#f7f5ef",
+    stroke: "#343434",
+    "stroke-width": base * 1.3,
+    filter: "url(#buyerPlanShadow)"
   });
 
-  circulation.forEach(c => {
-    add(svg, "rect", {
+  circulation.filter(item => !item.overlay).forEach(c => {
+    add(plan, "rect", {
       x: c.x,
       y: c.y,
       width: c.width,
       height: c.height,
-      fill: "#fafafa",
-      stroke: "#000000",
-      "stroke-width": base * 0.10
+      fill: "url(#buyerMarble)",
+      stroke: "#4b4b4b",
+      "stroke-width": base * 0.42
     });
   });
 
   const roomMap = Object.fromEntries(rooms.map(room => [room.id, room]));
 
   rooms.forEach(room => {
-    add(svg, "rect", {
+    add(plan, "rect", {
       x: room.x,
       y: room.y,
       width: room.width,
       height: room.height,
       fill: buyerFill(room.type),
-      stroke: "#000000",
-      "stroke-width": base * 0.75
+      stroke: "#3c3c3c",
+      "stroke-width": base * 1.05,
+      "stroke-linejoin": "miter"
     });
 
-    drawFurniture(svg, room, base, true);
+    drawFurniture(plan, room, base, true);
   });
 
   circulation
     .filter(c => c.overlay)
     .forEach(c => {
-      add(svg, "rect", {
+      add(plan, "rect", {
         x: c.x,
         y: c.y,
         width: c.width,
         height: c.height,
-        fill: "#ffffff",
-        stroke: "#000000",
-        "stroke-width": base * 0.24
+        fill: "url(#buyerMarble)",
+        stroke: "#4b4b4b",
+        "stroke-width": base * 0.42
       });
     });
 
-  rooms.forEach(room => {
-    drawRoomDoor(svg, room, roomMap, circulation, base, true);
-    drawExteriorWindows(svg, room, buildable, base, true);
-    drawRoomLabel(svg, room, unit, base, true);
+  const accessibility = layout.accessibilityReport || buildAccessibilityReport(layout);
+  accessibility.connections.forEach(connection => {
+    const room = roomMap[connection.roomId] || roomMap[connection.fromId];
+    if (!room) return;
+    const width = isBathroom(room.type) ? 2.5 : room.type === "living" ? 3.5 : 3.0;
+    const doorWidth = Math.min(width, connection.boundary.length * 0.68);
+    if (doorWidth > 1.5) drawDoorGeometry(plan, connection.boundary, doorWidth, base);
   });
 
-  interiorDoors.forEach(door => {
-    drawExplicitInteriorDoor(
-      svg,
-      door,
-      rooms,
-      base
-    );
+  rooms.forEach((room, index) => {
+    drawExteriorWindows(plan, room, buildable, base, true);
+    drawRoomNumber(plan, room, index + 1, base);
   });
 
   entrances.forEach(entrance => {
     drawMainEntrance(
-      svg,
+      plan,
       entrance,
       rooms,
       base
     );
   });
 
-  drawRoad(svg, layout.roadSide || plot.roadSide || "north", plotW, plotH, pad, base);
-  drawNorthArrow(svg, plotW, pad, base);
-
-  text(
+  sheetText(
     svg,
-    plotW / 2,
-    plotH + pad * 0.72,
-    "Buyer Presentation Plan · Concept only",
-    base * 1.6,
-    600,
-    "#111111"
+    margin,
+    sheetHeight - margin * 0.55,
+    `UNIT PLAN - ${options?.requirements?.house?.bhk || rooms.filter(room => ["bedroom", "masterBedroom"].includes(room.type)).length} BED CONCEPT`,
+    base * 2.2,
+    700,
+    "start"
+  );
+  sheetText(
+    svg,
+    sheetWidth - margin,
+    sheetHeight - margin * 0.55,
+    "FURNISHED PRESENTATION PLAN",
+    base * 1.65,
+    700,
+    "end"
   );
 
   container.innerHTML = "";
   container.appendChild(svg);
   return svg;
+}
+
+
+function addBuyerPatterns(defs, base) {
+  const shadow = add(defs, "filter", {
+    id: "buyerPlanShadow",
+    x: "-15%",
+    y: "-15%",
+    width: "130%",
+    height: "130%"
+  });
+  add(shadow, "feDropShadow", {
+    dx: base * 0.6,
+    dy: base * 0.9,
+    stdDeviation: base * 0.65,
+    "flood-color": "#000000",
+    "flood-opacity": 0.18
+  });
+
+  const wood = add(defs, "pattern", {
+    id: "buyerWood",
+    width: base * 3.2,
+    height: base * 1.15,
+    patternUnits: "userSpaceOnUse"
+  });
+  add(wood, "rect", { width: base * 3.2, height: base * 1.15, fill: "#eee2cb" });
+  add(wood, "path", {
+    d: `M 0 ${base * 1.1} H ${base * 3.2} M ${base * 1.4} 0 V ${base * 1.1}`,
+    stroke: "#d6c4a5",
+    "stroke-width": base * 0.08,
+    fill: "none"
+  });
+
+  const marble = add(defs, "pattern", {
+    id: "buyerMarble",
+    width: base * 4,
+    height: base * 4,
+    patternUnits: "userSpaceOnUse"
+  });
+  add(marble, "rect", { width: base * 4, height: base * 4, fill: "#f8f8f5" });
+  add(marble, "path", {
+    d: `M ${-base} ${base * 3.4} Q ${base} ${base * 1.8} ${base * 4.8} ${base * 0.9}`,
+    stroke: "#d8dadd",
+    "stroke-width": base * 0.09,
+    opacity: 0.7,
+    fill: "none"
+  });
+
+  const tile = add(defs, "pattern", {
+    id: "buyerTile",
+    width: base * 2.2,
+    height: base * 2.2,
+    patternUnits: "userSpaceOnUse"
+  });
+  add(tile, "rect", { width: base * 2.2, height: base * 2.2, fill: "#e9e3d8" });
+  add(tile, "path", {
+    d: `M ${base * 2.2} 0 H 0 V ${base * 2.2}`,
+    stroke: "#c7bdae",
+    "stroke-width": base * 0.08,
+    fill: "none"
+  });
+}
+
+
+function drawBuyerLegend(svg, rooms, unit, x, y, width, base) {
+  sheetText(svg, x, y + base * 2.1, "LEGEND", base * 1.65, 700, "start");
+  add(svg, "line", {
+    x1: x,
+    y1: y + base * 2.9,
+    x2: x + width - base * 3,
+    y2: y + base * 2.9,
+    stroke: "#9a9a94",
+    "stroke-width": base * 0.12
+  });
+
+  const rowHeight = base * 3.05;
+  rooms.forEach((room, index) => {
+    const rowY = y + base * 5 + index * rowHeight;
+    sheetText(svg, x, rowY, `${index + 1}.`, base * 1.28, 500, "start");
+    sheetText(svg, x + base * 3.1, rowY, room.name.toUpperCase(), base * 1.28, 600, "start");
+    sheetText(
+      svg,
+      x + width - base * 3,
+      rowY,
+      `${formatDimension(room.width, unit)} × ${formatDimension(room.height, unit)}`,
+      base * 1.18,
+      400,
+      "end"
+    );
+  });
+}
+
+
+function drawRoomNumber(svg, room, number, base) {
+  const radius = base * 1.15;
+  const cx = room.x + room.width * 0.78;
+  const cy = room.y + room.height * 0.72;
+  add(svg, "circle", {
+    cx,
+    cy,
+    r: radius,
+    fill: "#fffdf8",
+    stroke: "#3d3b36",
+    "stroke-width": base * 0.12
+  });
+  sheetText(svg, cx, cy + radius * 0.34, String(number), base * 1.25, 600, "middle");
+}
+
+
+function sheetText(parent, x, y, value, size, weight = 500, anchor = "middle") {
+  const element = add(parent, "text", {
+    x,
+    y,
+    "text-anchor": anchor,
+    "font-family": "Georgia, 'Times New Roman', serif",
+    "font-size": size,
+    "font-weight": weight,
+    fill: "#171717"
+  });
+  element.textContent = value;
+  return element;
 }
 
 
@@ -726,10 +854,6 @@ function drawRoomDoor(svg, room, roomMap, circulation, base) {
     }
   }
 
-  if (!connection && circulation.length) {
-    connection = nearestWallConnection(room, circulation[0]);
-  }
-
   if (!connection) return;
 
   const width =
@@ -848,34 +972,6 @@ function sharedWall(a, b) {
 }
 
 
-function nearestWallConnection(room, target) {
-  const rcx = room.x + room.width / 2;
-  const rcy = room.y + room.height / 2;
-  const tcx = target.x + target.width / 2;
-  const tcy = target.y + target.height / 2;
-  const dx = tcx - rcx;
-  const dy = tcy - rcy;
-
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    const wall = dx >= 0 ? "east" : "west";
-    return {
-      wall,
-      coord: wall === "east" ? room.x + room.width : room.x,
-      center: rcy,
-      length: room.height
-    };
-  }
-
-  const wall = dy >= 0 ? "south" : "north";
-  return {
-    wall,
-    coord: wall === "south" ? room.y + room.height : room.y,
-    center: rcx,
-    length: room.width
-  };
-}
-
-
 function drawExteriorWindows(svg, room, buildable, base) {
   const walls = exteriorWalls(room, buildable);
   if (!walls.length) return;
@@ -978,6 +1074,8 @@ function exteriorWalls(room, buildable) {
 
 
 function drawFurniture(svg, room, base, buyer = false) {
+  if (buyer) return drawBuyerFurniture(svg, room, base);
+
   const stroke = "#000000";
   const light = buyer ? "#ffffff" : "#ffffff";
   const type = room.type;
@@ -988,6 +1086,79 @@ function drawFurniture(svg, room, base, buyer = false) {
   if (type === "kitchen") return drawKitchen(svg, room, base, stroke, light);
   if (isBathroom(type)) return drawBathroomFixtures(svg, room, base, stroke, light);
   if (type === "utility") return drawUtility(svg, room, base, stroke, light);
+}
+
+
+function drawBuyerFurniture(svg, room, base) {
+  const stroke = "#6b6860";
+  const fill = "#fffdf8";
+  const type = room.type;
+
+  if (type === "masterBedroom" || type === "bedroom") {
+    const width = Math.min(room.width * 0.52, room.height * 0.72);
+    const height = Math.min(room.height * 0.42, room.width * 0.54);
+    const x = room.x + (room.width - width) / 2;
+    const y = room.y + (room.height - height) / 2;
+    add(svg, "rect", { x, y, width, height, rx: base * 0.22, fill, stroke, "stroke-width": base * 0.13 });
+    add(svg, "rect", { x: x + width * 0.08, y: y + height * 0.08, width: width * 0.36, height: height * 0.2, rx: base * 0.2, fill: "#f1eee7", stroke, "stroke-width": base * 0.08 });
+    add(svg, "rect", { x: x + width * 0.56, y: y + height * 0.08, width: width * 0.36, height: height * 0.2, rx: base * 0.2, fill: "#f1eee7", stroke, "stroke-width": base * 0.08 });
+    add(svg, "path", { d: `M ${x + width * 0.1} ${y + height * 0.36} Q ${x + width * 0.5} ${y + height * 0.48} ${x + width * 0.9} ${y + height * 0.36}`, fill: "none", stroke: "#c9c0b2", "stroke-width": base * 0.08 });
+    const tableSize = Math.min(base * 2.2, width * 0.17);
+    add(svg, "rect", { x: x - tableSize * 1.15, y: y + height * 0.05, width: tableSize, height: tableSize, fill: "#e4dccd", stroke, "stroke-width": base * 0.08 });
+    add(svg, "rect", { x: x + width + tableSize * 0.15, y: y + height * 0.05, width: tableSize, height: tableSize, fill: "#e4dccd", stroke, "stroke-width": base * 0.08 });
+    return;
+  }
+
+  if (type === "living" || type === "familyLounge") {
+    const rugW = room.width * 0.48;
+    const rugH = room.height * 0.42;
+    const rugX = room.x + (room.width - rugW) / 2;
+    const rugY = room.y + (room.height - rugH) / 2;
+    add(svg, "rect", { x: rugX, y: rugY, width: rugW, height: rugH, rx: base * 0.5, fill: "#e8dfcf", stroke: "#d3c5b0", "stroke-width": base * 0.08 });
+    const sofaW = Math.min(room.width * 0.48, base * 17);
+    const sofaH = Math.min(room.height * 0.17, base * 4.2);
+    const sofaX = room.x + (room.width - sofaW) / 2;
+    const sofaY = room.y + room.height * 0.12;
+    add(svg, "rect", { x: sofaX, y: sofaY, width: sofaW, height: sofaH, rx: base * 0.45, fill, stroke, "stroke-width": base * 0.12 });
+    for (let index = 1; index < 3; index++) {
+      add(svg, "line", { x1: sofaX + sofaW * index / 3, y1: sofaY, x2: sofaX + sofaW * index / 3, y2: sofaY + sofaH, stroke: "#c9c5bd", "stroke-width": base * 0.07 });
+    }
+    add(svg, "rect", { x: rugX + rugW * 0.32, y: rugY + rugH * 0.36, width: rugW * 0.36, height: rugH * 0.3, rx: base * 0.25, fill: "#f7f4ed", stroke, "stroke-width": base * 0.1 });
+    drawBuyerPlant(svg, room.x + room.width * 0.1, room.y + room.height * 0.18, base);
+    return;
+  }
+
+  if (type === "dining") {
+    const width = room.width * 0.4;
+    const height = room.height * 0.42;
+    const x = room.x + (room.width - width) / 2;
+    const y = room.y + (room.height - height) / 2;
+    add(svg, "rect", { x, y, width, height, rx: base * 0.18, fill: "#eee6d8", stroke, "stroke-width": base * 0.12 });
+    const chairR = Math.min(base * 1.1, height * 0.15);
+    [0.2, 0.5, 0.8].forEach(position => {
+      add(svg, "circle", { cx: x + width * position, cy: y - chairR * 1.35, r: chairR, fill, stroke, "stroke-width": base * 0.09 });
+      add(svg, "circle", { cx: x + width * position, cy: y + height + chairR * 1.35, r: chairR, fill, stroke, "stroke-width": base * 0.09 });
+    });
+    return;
+  }
+
+  if (type === "kitchen") {
+    const depth = Math.min(base * 2.5, room.width * 0.12, room.height * 0.18);
+    add(svg, "rect", { x: room.x + base * 0.55, y: room.y + base * 0.55, width: room.width - base * 1.1, height: depth, fill: "#e5e0d7", stroke, "stroke-width": base * 0.1 });
+    add(svg, "rect", { x: room.x + base * 0.55, y: room.y + base * 0.55, width: depth, height: room.height * 0.56, fill: "#e5e0d7", stroke, "stroke-width": base * 0.1 });
+    add(svg, "rect", { x: room.x + room.width * 0.5, y: room.y + base * 0.8, width: room.width * 0.2, height: depth * 0.5, fill: "#fafafa", stroke, "stroke-width": base * 0.08 });
+    return;
+  }
+
+  if (isBathroom(type)) return drawBathroomFixtures(svg, room, base, stroke, fill);
+  if (type === "utility") return drawUtility(svg, room, base, stroke, fill);
+}
+
+
+function drawBuyerPlant(svg, cx, cy, base) {
+  add(svg, "circle", { cx, cy, r: base * 0.85, fill: "#b9c69d", stroke: "#71805f", "stroke-width": base * 0.08 });
+  add(svg, "circle", { cx: cx - base * 0.55, cy: cy - base * 0.2, r: base * 0.48, fill: "#8eaa75" });
+  add(svg, "circle", { cx: cx + base * 0.5, cy: cy - base * 0.35, r: base * 0.45, fill: "#789763" });
 }
 
 

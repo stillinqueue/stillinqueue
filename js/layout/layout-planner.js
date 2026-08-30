@@ -18,6 +18,10 @@ import {
   applyAdjacencyPairs
 } from "./adjacency.js";
 
+import {
+  buildAccessibilityReport
+} from "./accessibility.js";
+
 
 /*
   Still In Queue · Architectural Planner V16
@@ -45,6 +49,14 @@ export function generateLayout(requirements) {
       1
     );
 
+  let bestInaccessibleLayout = null;
+  const rememberInaccessible = layout => {
+    if (!layout?.accessibilityReport) return;
+    const count = layout.accessibilityReport.inaccessibleRooms.length;
+    const bestCount = bestInaccessibleLayout?.accessibilityReport?.inaccessibleRooms.length ?? Infinity;
+    if (count < bestCount) bestInaccessibleLayout = layout;
+  };
+
   if (
     bhk >= 4 &&
     bhk <= 5
@@ -57,7 +69,9 @@ export function generateLayout(requirements) {
     if (
       large?.success
     ) {
-      return postProcessLayout(large, requirements);
+      const processedLarge = postProcessLayout(large, requirements);
+      if (processedLarge.success) return processedLarge;
+      rememberInaccessible(processedLarge);
     }
   }
 
@@ -69,15 +83,20 @@ export function generateLayout(requirements) {
   if (
     compact?.success
   ) {
-    return postProcessLayout(compact, requirements);
+    const processedCompact = postProcessLayout(compact, requirements);
+    if (processedCompact.success) return processedCompact;
+    rememberInaccessible(processedCompact);
   }
 
-  return postProcessLayout(
+  const processedLegacy = postProcessLayout(
     legacyGenerateLayout(
       requirements
     ),
     requirements
   );
+  if (processedLegacy.success) return processedLegacy;
+  rememberInaccessible(processedLegacy);
+  return bestInaccessibleLayout || processedLegacy;
 }
 
 
@@ -213,13 +232,13 @@ function postProcessLayout(layout, requirements) {
 
   if (hasOverlap || outOfBounds) {
     // Growth produced an invalid result -- keep the untouched original geometry.
-    return { ...layout, rooms: originalRooms, adjacencyReport };
+    return withAccessibilityCheck({ ...layout, rooms: originalRooms, adjacencyReport });
   }
 
   const occupiedArea = growable.reduce((sum, room) => sum + room.width * room.height, 0);
   const utilizationPercent = round((occupiedArea / buildable.area) * 100, 1);
 
-  return {
+  return withAccessibilityCheck({
     ...layout,
     rooms,
     adjacencyReport,
@@ -228,6 +247,16 @@ function postProcessLayout(layout, requirements) {
       allRoomsWithinBounds: true,
       buildableUtilizationPercent: utilizationPercent
     }
+  });
+}
+
+function withAccessibilityCheck(layout) {
+  const accessibilityReport = buildAccessibilityReport(layout);
+  return {
+    ...layout,
+    success: layout.success && accessibilityReport.valid,
+    reason: accessibilityReport.valid ? layout.reason : "inaccessible-rooms",
+    accessibilityReport
   };
 }
 

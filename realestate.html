@@ -3757,6 +3757,10 @@ Review the revised proposal below. If it looks right, click â€œAccept Proposalâ€
               ? layout.failedRooms.map(r => r.name).join(", ")
               : "";
 
+            const inaccessibleNames = Array.isArray(layout.accessibilityReport?.inaccessibleRooms)
+              ? layout.accessibilityReport.inaccessibleRooms.map(room => room.name).join(", ")
+              : "";
+
             preview.innerHTML = `
               <div style="
                 padding:24px;
@@ -3771,6 +3775,7 @@ Review the revised proposal below. If it looks right, click â€œAccept Proposalâ€
                 <br><br>
                 Feasibility: <strong>${feasibilityStatus}</strong>
                 ${failedNames ? `<br>Rooms not placed: ${failedNames}` : ""}
+                ${inaccessibleNames ? `<br>Rooms without a valid entrance route: ${inaccessibleNames}` : ""}
                 <br><br>
                 We will improve the packing strategy rather than drawing an invalid plan.
               </div>
@@ -3783,6 +3788,7 @@ Review the revised proposal below. If it looks right, click â€œAccept Proposalâ€
 Feasibility: ${feasibilityStatus}
 
 ${failedNames ? `Rooms not placed: ${failedNames}` : ""}
+${inaccessibleNames ? `Rooms without a valid entrance route: ${inaccessibleNames}` : ""}
 
 This is useful test information. The planner has refused to draw a knowingly invalid layout.`
             );
