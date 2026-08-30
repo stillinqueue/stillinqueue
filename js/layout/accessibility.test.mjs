@@ -147,3 +147,32 @@ test("rolls back an unsafe explicit room swap", () => {
   assert.equal(layout.adjacencyReport[0].outcome, "not-feasible");
   assert.deepEqual(layout.validationReport.errors, []);
 });
+
+test("keeps the master bedroom accessible through the compact rear landing", () => {
+  const layout = generateLayout({
+    country: "india",
+    plot: { width: 30, height: 44, unit: "ft", roadSide: "north" },
+    setbacks: { front: 5, rear: 4, left: 3, right: 3 },
+    house: { bhk: 3, floors: 1 },
+    preferences: { familyLounge: false }
+  });
+
+  assert.equal(layout.accessibilityReport.inaccessibleRooms.some(room => room.id === "bedroom-1"), false);
+  assert.equal(layout.circulation.find(item => item.id === "lobby-rear")?.overlay, true);
+});
+
+test("does not grow rooms across the legacy circulation spine", () => {
+  const layout = generateLayout({
+    country: "india",
+    plot: { width: 60, height: 40, unit: "ft", roadSide: "north" },
+    setbacks: { front: 5, rear: 4, left: 4, right: 4 },
+    house: { bhk: 3, floors: 1 },
+    preferences: {
+      familyLounge: false,
+      roomConstraints: [{ room: "masterBedroom", width: 14, depth: 16, area: null, area_delta: null, unit: "ft" }]
+    }
+  });
+
+  assert.equal(layout.accessibilityReport.inaccessibleRooms.some(room => room.id === "bedroom-1"), false);
+  assert.equal(layout.entrances[0]?.roomId, "living");
+});

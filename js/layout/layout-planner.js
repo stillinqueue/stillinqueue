@@ -263,8 +263,9 @@ function postProcessLayout(layout, requirements) {
     growable.slice(index + 1).some(other => overlapsWithTolerance(room, other))
   );
   const outOfBounds = growable.some(room => !containsWithTolerance(buildable, room));
+  const growthInvalid = !hasValidCandidateRooms(layout, rooms);
 
-  if (hasOverlap || outOfBounds) {
+  if (hasOverlap || outOfBounds || growthInvalid) {
     // Growth produced an invalid result -- keep the untouched original geometry.
     return withAccessibilityCheck({
       ...layout,
@@ -1792,6 +1793,7 @@ function generateCompact3BHK(requirements) {
     id: "lobby-rear",
     name: "Landing",
     type: "corridor",
+    overlay: true,
 
     x:
       xLeft + leftW * 0.38,
@@ -2747,6 +2749,14 @@ function generateLayoutAttempt(requirements) {
   const success =
     failedRooms.length === 0;
 
+  const mainEntrance =
+    createLegacyMainEntrance(
+      placedRooms,
+      buildable,
+      roadSide,
+      profile.unit
+    );
+
   return {
     success,
 
@@ -2770,6 +2780,11 @@ function generateLayoutAttempt(requirements) {
     circulation: [
       corridor
     ],
+
+    entrances:
+      mainEntrance
+        ? [mainEntrance]
+        : [],
 
     rooms:
       placedRooms,
@@ -2806,6 +2821,40 @@ function generateLayoutAttempt(requirements) {
     },
 
     adaptations: []
+  };
+}
+
+
+function createLegacyMainEntrance(rooms, buildable, roadSide, unit) {
+  const tolerance = 0.05;
+  const touchesRoadEdge = room => {
+    if (roadSide === "south") {
+      return Math.abs(room.y + room.height - buildable.y - buildable.height) < tolerance;
+    }
+    if (roadSide === "east") {
+      return Math.abs(room.x + room.width - buildable.x - buildable.width) < tolerance;
+    }
+    if (roadSide === "west") {
+      return Math.abs(room.x - buildable.x) < tolerance;
+    }
+    return Math.abs(room.y - buildable.y) < tolerance;
+  };
+
+  const publicTypes = ["living", "dining", "familyLounge"];
+  const room = rooms.find(item => publicTypes.includes(item.type) && touchesRoadEdge(item));
+  if (!room) return null;
+
+  const width = String(unit).toLowerCase() === "m" ? 1 : 3.5;
+  const horizontalEdge = roadSide === "north" || roadSide === "south";
+  return {
+    id: "main-entrance",
+    name: "Main Entrance",
+    type: "entrance",
+    roomId: room.id,
+    side: roadSide,
+    width,
+    x: horizontalEdge ? room.x + room.width / 2 : roadSide === "west" ? room.x : room.x + room.width,
+    y: horizontalEdge ? roadSide === "north" ? room.y : room.y + room.height : room.y + room.height / 2
   };
 }
 

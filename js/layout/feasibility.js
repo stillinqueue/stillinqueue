@@ -260,10 +260,13 @@ export function validateGeneratedLayout(layout) {
   ) : rooms;
   if (outOfBounds.length) errors.push("room-out-of-bounds");
 
-  const belowMinimum = rooms.filter(room =>
-    room.width + tolerance < Number(room.minWidth || 0) ||
-    room.height + tolerance < Number(room.minHeight || 0)
-  );
+  const belowMinimum = rooms.filter(room => {
+    const minWidth = Number(room.minWidth || 0);
+    const minHeight = Number(room.minHeight || 0);
+    const normalOrientation = room.width + tolerance >= minWidth && room.height + tolerance >= minHeight;
+    const rotatedOrientation = room.width + tolerance >= minHeight && room.height + tolerance >= minWidth;
+    return !normalOrientation && !rotatedOrientation;
+  });
   if (belowMinimum.length) errors.push("room-below-minimum");
 
   const attachedToiletErrors = rooms.filter(room => {
