@@ -91,6 +91,14 @@ export const DESIGN_PROFILES = {
         zone: "service"
       },
 
+      balcony: {
+        minWidth: 4,
+        minHeight: 6,
+        preferredWidth: 6,
+        preferredHeight: 12,
+        zone: "outdoor"
+      },
+
       corridor: {
         minWidth: 3.5,
         preferredWidth: 4,
@@ -190,6 +198,14 @@ export const DESIGN_PROFILES = {
         preferredWidth: 1.5,
         preferredHeight: 2.0,
         zone: "service"
+      },
+
+      balcony: {
+        minWidth: 1.2,
+        minHeight: 2.4,
+        preferredWidth: 1.8,
+        preferredHeight: 3.6,
+        zone: "outdoor"
       },
 
       corridor: {

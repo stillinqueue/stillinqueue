@@ -10,7 +10,10 @@
   instead of silently doing nothing while the chat reply claims success.
 */
 
-const RELATION_PATTERN = /\b(?:near|adjacent to|beside|next to|close to)\s+([a-z0-9 '\-]+)/gi;
+const RELATION_PATTERN = /\b(?:near|adjacent to|beside|next to|close to|connected to)\s+([a-z0-9 '\-]+)/gi;
+const SWAP_PATTERN = /\bswap(?:ped)?(?:\s+with)?\s+([a-z0-9 '\-]+)/i;
+const OPPOSITE_PATTERN = /\bopposite(?:\s+to)?\s+([a-z0-9 '\-]+)/i;
+const SIDE_PATTERN = /\b(?:on|to|toward|towards)?\s*(left|right|top|bottom)\b/i;
 const CIRCULATION_KEYWORDS = ["hall", "corridor", "passage", "lobby", "foyer", "landing"];
 
 function normalize(text) {
@@ -72,6 +75,30 @@ export function resolveAdjacencyRequests(rooms, circulationRooms, roomPreference
 
     if (!source) {
       requests.push({ roomText, preferenceText, phrase: null, status: "unresolved-source" });
+      continue;
+    }
+
+    const swapMatch = preferenceText.match(SWAP_PATTERN);
+    if (swapMatch) {
+      const target = findRoomMatch(rooms.filter(room => room !== source), swapMatch[1]);
+      requests.push(target
+        ? { roomText, preferenceText, phrase: swapMatch[1], action: "swap", status: "resolved", source, target }
+        : { roomText, preferenceText, phrase: swapMatch[1], action: "swap", status: "unresolved-target", source });
+      continue;
+    }
+
+    const oppositeMatch = preferenceText.match(OPPOSITE_PATTERN);
+    if (oppositeMatch) {
+      const target = findRoomMatch(rooms.filter(room => room !== source), oppositeMatch[1]);
+      requests.push(target
+        ? { roomText, preferenceText, phrase: oppositeMatch[1], action: "opposite", status: "resolved", source, target }
+        : { roomText, preferenceText, phrase: oppositeMatch[1], action: "opposite", status: "unresolved-target", source });
+      continue;
+    }
+
+    const sideMatch = preferenceText.match(SIDE_PATTERN);
+    if (sideMatch) {
+      requests.push({ roomText, preferenceText, phrase: sideMatch[1], action: "side", side: sideMatch[1], status: "resolved", source });
       continue;
     }
 
@@ -137,8 +164,67 @@ export function applyAdjacencyPairs(rooms, circulationRooms, roomPreferences) {
     if (request.status !== "resolved") continue;
     const { source, target } = request;
 
+    if (request.action === "swap") {
+      swapGeometry(source, target);
+      request.status = "applied";
+      request.outcome = "applied";
+      continue;
+    }
+
+    if (request.action === "side") {
+      const bounds = rooms.reduce((result, room) => ({
+        minX: Math.min(result.minX, room.x),
+        maxX: Math.max(result.maxX, room.x + room.width),
+        minY: Math.min(result.minY, room.y),
+        maxY: Math.max(result.maxY, room.y + room.height)
+      }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+      const horizontal = request.side === "left" || request.side === "right";
+      const candidates = rooms.filter(room => room !== source).sort((a, b) => {
+        const aValue = horizontal ? a.x + a.width / 2 : a.y + a.height / 2;
+        const bValue = horizontal ? b.x + b.width / 2 : b.y + b.height / 2;
+        return request.side === "left" || request.side === "top" ? aValue - bValue : bValue - aValue;
+      });
+      const midpoint = horizontal ? (bounds.minX + bounds.maxX) / 2 : (bounds.minY + bounds.maxY) / 2;
+      const sourceValue = horizontal ? source.x + source.width / 2 : source.y + source.height / 2;
+      const already = request.side === "left" || request.side === "top" ? sourceValue <= midpoint : sourceValue >= midpoint;
+      if (already) {
+        request.status = "already-satisfied";
+        request.outcome = "applied";
+      } else if (candidates.length) {
+        swapGeometry(source, candidates[0]);
+        request.target = candidates[0];
+        request.status = "applied";
+        request.outcome = "approximated";
+      } else {
+        request.status = "no-swap-candidate";
+        request.outcome = "not-feasible";
+      }
+      continue;
+    }
+
+    if (request.action === "opposite") {
+      const targetCenterX = target.x + target.width / 2;
+      const targetCenterY = target.y + target.height / 2;
+      const candidate = rooms
+        .filter(room => room !== source && room !== target)
+        .sort((a, b) => {
+          const distance = room => Math.hypot(room.x + room.width / 2 - targetCenterX, room.y + room.height / 2 - targetCenterY);
+          return distance(b) - distance(a);
+        })[0];
+      if (candidate) {
+        swapGeometry(source, candidate);
+        request.status = "applied";
+        request.outcome = "approximated";
+      } else {
+        request.status = "no-swap-candidate";
+        request.outcome = "not-feasible";
+      }
+      continue;
+    }
+
     if (rectanglesTouch(source, target)) {
       request.status = "already-satisfied";
+      request.outcome = "applied";
       continue;
     }
 
@@ -146,27 +232,19 @@ export function applyAdjacencyPairs(rooms, circulationRooms, roomPreferences) {
       room !== source &&
       room.id !== target.id &&
       rectanglesTouch(room, target) &&
-      Math.abs(room.width - source.width) < 1.5 &&
-      Math.abs(room.height - source.height) < 1.5
+      Math.abs(room.width - source.width) <= Math.max(1.5, source.width * 0.2) &&
+      Math.abs(room.height - source.height) <= Math.max(1.5, source.height * 0.2)
     );
 
     if (!swapPartner) {
       request.status = "no-swap-candidate";
+      request.outcome = "not-feasible";
       continue;
     }
 
-    const snapshot = { x: source.x, y: source.y, width: source.width, height: source.height, area: source.area };
-    source.x = swapPartner.x;
-    source.y = swapPartner.y;
-    source.width = swapPartner.width;
-    source.height = swapPartner.height;
-    source.area = swapPartner.area;
-    swapPartner.x = snapshot.x;
-    swapPartner.y = snapshot.y;
-    swapPartner.width = snapshot.width;
-    swapPartner.height = snapshot.height;
-    swapPartner.area = snapshot.area;
+    swapGeometry(source, swapPartner);
     request.status = "applied";
+    request.outcome = "applied";
   }
 
   return requests.map(r => ({
@@ -174,7 +252,23 @@ export function applyAdjacencyPairs(rooms, circulationRooms, roomPreferences) {
     preferenceText: r.preferenceText,
     phrase: r.phrase,
     status: r.status,
+    outcome: r.outcome || (r.status.startsWith("unresolved") ? "not-feasible" : null),
+    action: r.action || "adjacent",
     sourceLabel: r.source?.name || r.roomText,
     targetLabel: r.target?.name || r.phrase || null
   }));
+}
+
+function swapGeometry(first, second) {
+  const snapshot = { x: first.x, y: first.y, width: first.width, height: first.height, area: first.area };
+  first.x = second.x;
+  first.y = second.y;
+  first.width = second.width;
+  first.height = second.height;
+  first.area = second.area;
+  second.x = snapshot.x;
+  second.y = snapshot.y;
+  second.width = snapshot.width;
+  second.height = snapshot.height;
+  second.area = snapshot.area;
 }

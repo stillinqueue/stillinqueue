@@ -932,7 +932,12 @@
 
         // Raw {room, preference} pairs from AI state.room_preferences, resolved
         // into concrete adjacency swaps by js/layout/adjacency.js at render time.
-        roomPreferences: []
+        roomPreferences: [],
+
+        // Explicit dimensions/areas and usable-area target remain separate
+        // from plot dimensions throughout the deterministic planner flow.
+        roomConstraints: [],
+        targetInternalArea: null
       };
 
       function setStatus(html) {
@@ -961,9 +966,14 @@
       }
 
       function isConceptReady() {
+        const hasPlanningEnvelope = Boolean(
+          layoutState.plot.width && layoutState.plot.depth
+        );
+        const hasInternalAreaTarget = Boolean(
+          Number(layoutState.targetInternalArea?.area) > 0
+        );
         return Boolean(
-          layoutState.plot.width &&
-          layoutState.plot.depth &&
+          (hasPlanningEnvelope || hasInternalAreaTarget) &&
           layoutState.facing &&
           layoutState.bedrooms &&
           layoutState.floors
@@ -1434,6 +1444,7 @@ Click “Render Concept 1” to generate the technical blueprint.`;
       function syncLayoutStateFromAI(state, proposal) {
         const previousState = JSON.stringify(aiState || {});
         const previousProposal = JSON.stringify(aiProposal || {});
+        const wasAccepted = layoutState.proposalAccepted;
 
         aiState = state || aiState;
         aiProposal = proposal ?? aiProposal;
@@ -1462,6 +1473,17 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           layoutState.roomPreferences = s.room_preferences;
         }
 
+        if (Array.isArray(s.room_constraints)) {
+          layoutState.roomConstraints = s.room_constraints;
+        }
+
+        if (s.target_internal_area && typeof s.target_internal_area === "object") {
+          layoutState.targetInternalArea = {
+            area: s.target_internal_area.area,
+            unit: s.target_internal_area.unit
+          };
+        }
+
         const nextState = JSON.stringify(aiState || {});
         const nextProposal = JSON.stringify(aiProposal || {});
         const requirementsChanged =
@@ -1479,7 +1501,7 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         // Any AI-understood requirement change invalidates the previously accepted/rendered plan.
         // This guarantees the next render is built from the latest state and proposal.
         if (requirementsChanged) {
-          layoutState.proposalAccepted = false;
+          layoutState.proposalAccepted = wasAccepted;
           layoutState.rendered = false;
           layoutState.confirmed = false;
           draftPlan = null;
@@ -1488,11 +1510,11 @@ Click “Render Concept 1” to generate the technical blueprint.`;
 
           if (preview) {
             preview.innerHTML =
-              '<div class="preview-placeholder">Requirements changed. Accept the updated proposal and render again.</div>';
+              `<div class="preview-placeholder">Requirements changed. ${wasAccepted ? "Render again to apply the edit." : "Accept the updated proposal and render again."}</div>`;
           }
           if (buyerPreview) {
             buyerPreview.innerHTML =
-              '<div class="preview-placeholder">Requirements changed. Buyer plan will regenerate after the updated proposal is accepted.</div>';
+              `<div class="preview-placeholder">Requirements changed. ${wasAccepted ? "Buyer plan will update on the next render." : "Buyer plan will regenerate after the updated proposal is accepted."}</div>`;
           }
         }
 
@@ -2817,7 +2839,12 @@ Click “Render Concept 1” to generate the technical blueprint.`;
 
         if (applied.length) {
           lines.push("Applied:");
-          applied.forEach(r => lines.push(`• ${r.sourceLabel} moved next to ${r.targetLabel}.`));
+          applied.forEach(r => {
+            if (r.action === "swap") lines.push(`• ${r.sourceLabel} swapped with ${r.targetLabel}.`);
+            else if (r.action === "side") lines.push(`• ${r.sourceLabel} moved toward the ${r.phrase}.`);
+            else if (r.action === "opposite") lines.push(`• ${r.sourceLabel} placed approximately opposite ${r.targetLabel}.`);
+            else lines.push(`• ${r.sourceLabel} moved next to ${r.targetLabel}.`);
+          });
         }
         if (already.length) {
           lines.push("Already matched what you asked:");
@@ -2839,6 +2866,27 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         return lines.join("\n");
       }
 
+      function formatConstraintReport(layout) {
+        const lines = [];
+        const constraints = Array.isArray(layout.constraintReport) ? layout.constraintReport : [];
+        const balcony = Array.isArray(layout.balconyReport) ? layout.balconyReport : [];
+
+        [...constraints, ...balcony].forEach(result => {
+          const actual = result.actual;
+          const dimensions = actual
+            ? `${actual.width.toFixed(1)} × ${actual.depth.toFixed(1)} ${layout.unit} (${actual.area.toFixed(1)} sq ${layout.unit})`
+            : result.reason || "could not be applied";
+          lines.push(`• ${result.status}: ${result.room} — ${dimensions}`);
+        });
+
+        const area = layout.areaSummary;
+        if (area?.targetInternalArea) {
+          lines.push(`• ${area.status}: internal area ${area.calculatedInternalArea.toFixed(1)} / target ${area.targetInternalArea.toFixed(1)} ${area.unit}`);
+        }
+
+        return lines.join("\n");
+      }
+
       /*
         Applies the AI's structured layout_directives (backend chat state)
         onto the planner preferences. This is the primary edit-understanding
@@ -2854,6 +2902,7 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         if (typeof d.utility === "boolean") preferences.utility = d.utility;
         if (typeof d.puja === "boolean") preferences.puja = d.puja;
         if (typeof d.store === "boolean") preferences.store = d.store;
+        if (typeof d.balcony === "boolean") preferences.balcony = d.balcony;
         if (d.kitchen_direction) preferences.kitchenDirection = d.kitchen_direction;
         if (d.master_bedroom_direction) preferences.masterBedroomDirection = d.master_bedroom_direction;
         if (typeof d.extend_bedroom_passage === "boolean") preferences.extendBedroomPassage = d.extend_bedroom_passage;
@@ -3103,6 +3152,14 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           roomRegex,
           key
         ) => {
+          const structuredBigger = Array.isArray(layoutState.layoutDirectives?.rooms_scaled_bigger)
+            ? layoutState.layoutDirectives.rooms_scaled_bigger
+            : [];
+          const structuredSmaller = Array.isArray(layoutState.layoutDirectives?.rooms_scaled_smaller)
+            ? layoutState.layoutDirectives.rooms_scaled_smaller
+            : [];
+          if (structuredBigger.length || structuredSmaller.length) return;
+
           for (
             const content
             of userTexts
@@ -3160,8 +3217,15 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           "masterBedroom"
         );
 
+        for (let bedroomNumber = 2; bedroomNumber <= 5; bedroomNumber++) {
+          applySizeIntent(
+            new RegExp(`\\bbed(?:room)?\\s*${bedroomNumber}\\b`, "i"),
+            `bedroom${bedroomNumber}`
+          );
+        }
+
         applySizeIntent(
-          /\bbedrooms?\b/i,
+          /\bbedrooms\b(?!\s*\d)|\b(?:all|every)\s+bedrooms?\b/i,
           "bedroom"
         );
 
@@ -3528,6 +3592,18 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
 
       function buildConstraintPlannerRequirements() {
         const unit = String(layoutState.plot.unit || "ft").toLowerCase();
+        const targetAreaValue = Number(layoutState.targetInternalArea?.area || 0);
+        const targetAreaUnit = layoutState.targetInternalArea?.unit || (unit === "m" ? "sq m" : "sq ft");
+        const targetAreaInPlotUnits = targetAreaUnit === "sq m" && unit === "ft"
+          ? targetAreaValue * 10.7639
+          : targetAreaUnit === "sq ft" && unit === "m"
+            ? targetAreaValue / 10.7639
+            : targetAreaValue;
+        const hasExplicitPlot = Number(layoutState.plot.width) > 0 && Number(layoutState.plot.depth) > 0;
+        const derivedEnvelopeArea = targetAreaInPlotUnits > 0 ? targetAreaInPlotUnits * 1.04 : 0;
+        const derivedWidth = Math.sqrt(derivedEnvelopeArea * 0.75);
+        const plotWidth = hasExplicitPlot ? Number(layoutState.plot.width) : derivedWidth;
+        const plotDepth = hasExplicitPlot ? Number(layoutState.plot.depth) : derivedEnvelopeArea / derivedWidth;
 
         // Prefer a country returned by OpenAI. For this Stage 8 test only,
         // metre plots fall back to Germany and feet plots fall back to India.
@@ -3560,12 +3636,34 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
 
         const roadSide = facingMap[layoutState.facing] || "north";
 
-        const oldSetbacks = getConceptPlannerSetbacks(
+        const defaultSetbacks = getConceptPlannerSetbacks(
           country,
-          Number(layoutState.plot.width),
-          Number(layoutState.plot.depth),
+          plotWidth,
+          plotDepth,
           unit
         );
+
+        const oldSetbacks = !hasExplicitPlot
+          ? { front: 0, rear: 0, left: 0, right: 0 }
+          : { ...defaultSetbacks };
+
+        if (hasExplicitPlot && targetAreaInPlotUnits > 0) {
+          const availableWidth = plotWidth - oldSetbacks.left - oldSetbacks.right;
+          const availableDepth = plotDepth - oldSetbacks.front - oldSetbacks.rear;
+          const availableArea = availableWidth * availableDepth;
+          const desiredEnvelopeArea = targetAreaInPlotUnits * 1.04;
+          if (desiredEnvelopeArea < availableArea) {
+            const aspectRatio = availableWidth / availableDepth;
+            const desiredWidth = Math.sqrt(desiredEnvelopeArea * aspectRatio);
+            const desiredDepth = desiredEnvelopeArea / desiredWidth;
+            const extraHorizontal = (availableWidth - desiredWidth) / 2;
+            const extraVertical = (availableDepth - desiredDepth) / 2;
+            oldSetbacks.left += extraHorizontal;
+            oldSetbacks.right += extraHorizontal;
+            oldSetbacks.front += extraVertical;
+            oldSetbacks.rear += extraVertical;
+          }
+        }
 
         const convertSetback = (value) => Number(value || 0);
 
@@ -3666,14 +3764,16 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
         );
 
         preferences.roomAdjacency = layoutState.roomPreferences || [];
+        preferences.roomConstraints = layoutState.roomConstraints || [];
 
         return {
           country,
           plot: {
-            width: Number(layoutState.plot.width),
-            height: Number(layoutState.plot.depth),
+            width: plotWidth,
+            height: plotDepth,
             unit,
-            roadSide
+            roadSide,
+            derivedFromInternalArea: !hasExplicitPlot
           },
           setbacks: {
             front: convertSetback(oldSetbacks.front),
@@ -3685,6 +3785,9 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
             bhk: Number(layoutState.bedrooms || 1),
             floors: Number(layoutState.floors || 1)
           },
+          targetInternalArea: targetAreaInPlotUnits > 0
+            ? { area: targetAreaInPlotUnits, unit: unit === "m" ? "sq m" : "sq ft" }
+            : null,
           preferences
         };
       }
@@ -3799,8 +3902,9 @@ This is useful test information. The planner has refused to draw a knowingly inv
             return;
           }
 
-          const title =
-            `${layoutState.plot.width}×${layoutState.plot.depth} ${layoutState.bedrooms}BHK Concept`;
+          const title = layoutState.plot.width && layoutState.plot.depth
+            ? `${layoutState.plot.width}×${layoutState.plot.depth} ${layoutState.bedrooms}BHK Concept`
+            : `${layoutState.bedrooms}BHK · ${layoutState.targetInternalArea?.area || ""} ${layoutState.targetInternalArea?.unit || ""} Concept`;
 
           renderBlueprintLayout(
             layout,
@@ -3883,6 +3987,14 @@ Buyer Plan uses the same geometry with a softer presentation style.${adaptations
             addMessage(
               "assistant",
               `Positional request check (from the geometry engine, not the chat model):\n\n${adjacencyMessage}`
+            );
+          }
+
+          const constraintMessage = formatConstraintReport(layout);
+          if (constraintMessage) {
+            addMessage(
+              "assistant",
+              `Constraint result (from generated geometry):\n\n${constraintMessage}`
             );
           }
 

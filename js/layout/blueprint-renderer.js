@@ -1150,6 +1150,22 @@ function drawBuyerFurniture(svg, room, base) {
     return;
   }
 
+  if (type === "balcony" || type === "deck") {
+    const inset = base * 0.7;
+    add(svg, "rect", {
+      x: room.x + inset,
+      y: room.y + inset,
+      width: Math.max(base, room.width - inset * 2),
+      height: Math.max(base, room.height - inset * 2),
+      fill: "none",
+      stroke: "#8b8b82",
+      "stroke-width": base * 0.1,
+      "stroke-dasharray": `${base * 0.5} ${base * 0.35}`
+    });
+    drawBuyerPlant(svg, room.x + room.width / 2, room.y + room.height * 0.25, base);
+    return;
+  }
+
   if (isBathroom(type)) return drawBathroomFixtures(svg, room, base, stroke, fill);
   if (type === "utility") return drawUtility(svg, room, base, stroke, fill);
 }
@@ -1573,17 +1589,19 @@ function drawTitleBlock(svg, plotW, plotH, pad, base, info) {
 
 function buyerFill(type) {
   const fills = {
-    living: "#fbfbfb",
-    familyLounge: "#fbfbfb",
-    dining: "#fbfbfb",
-    kitchen: "#fbfbfb",
-    bedroom: "#fdfdfd",
-    masterBedroom: "#fdfdfd",
-    attachedToilet: "#fcfcfc",
-    commonToilet: "#fcfcfc",
-    utility: "#fcfcfc",
-    puja: "#fcfcfc",
-    store: "#fcfcfc"
+    living: "url(#buyerMarble)",
+    familyLounge: "url(#buyerWood)",
+    dining: "url(#buyerMarble)",
+    kitchen: "url(#buyerMarble)",
+    bedroom: "url(#buyerWood)",
+    masterBedroom: "url(#buyerWood)",
+    attachedToilet: "url(#buyerTile)",
+    commonToilet: "url(#buyerTile)",
+    utility: "url(#buyerTile)",
+    puja: "url(#buyerWood)",
+    store: "url(#buyerTile)",
+    balcony: "url(#buyerWood)",
+    deck: "url(#buyerWood)"
   };
   return fills[type] || "#ffffff";
 }

@@ -67,3 +67,83 @@ test("generated 4BHK gives the common toilet a non-private route", () => {
   const source = layout.rooms.find(room => room.id === connection.fromId);
   assert.ok(connection.fromCirculation || !["bedroom", "masterBedroom", "attachedToilet"].includes(source?.type));
 });
+
+test("applies exact room dimensions and a scoped bedroom reduction", () => {
+  const layout = generateLayout({
+    country: "india",
+    plot: { width: 60, height: 80, unit: "ft", roadSide: "north" },
+    setbacks: { front: 10, rear: 5, left: 4, right: 4 },
+    house: { bhk: 3, floors: 1 },
+    preferences: {
+      familyLounge: false,
+      roomConstraints: [{ room: "masterBedroom", width: 14, depth: 16, area: null, area_delta: null, unit: "ft" }],
+      roomScales: { bedroom3: 0.86 }
+    }
+  });
+
+  assert.equal(layout.success, true);
+  const master = layout.rooms.find(room => room.id === "bedroom-1");
+  assert.deepEqual([master.width, master.height], [14, 16]);
+  assert.equal(layout.constraintReport.find(result => result.roomId === "bedroom-1").status, "applied");
+  assert.equal(layout.constraintReport.some(result => result.roomId === "bedroom-2"), false);
+});
+
+test("transfers a requested area increase without changing total internal area", () => {
+  const requirements = {
+    country: "india",
+    plot: { width: 60, height: 80, unit: "ft", roadSide: "north" },
+    setbacks: { front: 10, rear: 5, left: 4, right: 4 },
+    house: { bhk: 3, floors: 1 },
+    preferences: { familyLounge: false }
+  };
+  const before = generateLayout(requirements);
+  const after = generateLayout({
+    ...requirements,
+    preferences: {
+      ...requirements.preferences,
+      roomConstraints: [{ room: "living", width: null, depth: null, area: null, area_delta: 40, unit: "ft" }]
+    }
+  });
+
+  const beforeLiving = before.rooms.find(room => room.id === "living");
+  const afterLiving = after.rooms.find(room => room.id === "living");
+  assert.equal(after.success, true);
+  assert.ok(Math.abs(afterLiving.area - beforeLiving.area - 40) < 0.2);
+  assert.ok(Math.abs(after.areaSummary.calculatedInternalArea - before.areaSummary.calculatedInternalArea) < 0.2);
+});
+
+test("creates an exterior balcony connected to living", () => {
+  const layout = generateLayout({
+    country: "india",
+    plot: { width: 60, height: 80, unit: "ft", roadSide: "north" },
+    setbacks: { front: 10, rear: 5, left: 4, right: 4 },
+    house: { bhk: 3, floors: 1 },
+    preferences: {
+      familyLounge: false,
+      balcony: true,
+      roomAdjacency: [{ room: "balcony", preference: "connected to living" }]
+    }
+  });
+
+  assert.equal(layout.success, true);
+  assert.equal(layout.validationReport.exteriorBalconyErrors.length, 0);
+  assert.equal(layout.adjacencyReport[0].outcome, "applied");
+  assert.ok(layout.areaSummary.balconyArea > 0);
+});
+
+test("rolls back an unsafe explicit room swap", () => {
+  const layout = generateLayout({
+    country: "india",
+    plot: { width: 60, height: 80, unit: "ft", roadSide: "north" },
+    setbacks: { front: 10, rear: 5, left: 4, right: 4 },
+    house: { bhk: 3, floors: 1 },
+    preferences: {
+      familyLounge: false,
+      roomAdjacency: [{ room: "kitchen", preference: "swap with bedroom 2" }]
+    }
+  });
+
+  assert.equal(layout.success, true);
+  assert.equal(layout.adjacencyReport[0].outcome, "not-feasible");
+  assert.deepEqual(layout.validationReport.errors, []);
+});

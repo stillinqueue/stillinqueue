@@ -97,7 +97,8 @@ export function buildRoomProgram(requirements) {
 
   const withScale = (
     defaults,
-    scaleKey
+    scaleKey,
+    fallbackScaleKey = null
   ) => {
     const scale =
       Math.max(
@@ -106,6 +107,7 @@ export function buildRoomProgram(requirements) {
           1.35,
           Number(
             roomScales[scaleKey] ||
+            (fallbackScaleKey ? roomScales[fallbackScaleKey] : null) ||
             1
           )
         )
@@ -113,6 +115,11 @@ export function buildRoomProgram(requirements) {
 
     return {
       ...defaults,
+
+      requestedSizeScale:
+        Math.abs(scale - 1) > 0.001
+          ? scale
+          : null,
 
       preferredWidth:
         defaults.preferredWidth != null
@@ -346,6 +353,9 @@ export function buildRoomProgram(requirements) {
         ],
         isMaster
           ? "masterBedroom"
+          : `bedroom${i}`,
+        isMaster
+          ? null
           : "bedroom"
       )
     });
@@ -552,6 +562,19 @@ export function buildRoomProgram(requirements) {
     });
   }
 
+  if (preferences.balcony === true) {
+    rooms.push({
+      id: "balcony",
+      name: "Balcony",
+      type: "balcony",
+      attachedTo: "living",
+      preferredNear: ["living"],
+      requiresExteriorWall: true,
+      requiresCirculationAccess: false,
+      ...ROOM_DEFAULTS.balcony
+    });
+  }
+
 
   /*
     ---------------------------------------------------------
@@ -579,6 +602,81 @@ export function buildRoomProgram(requirements) {
     );
   }
 
+  return applyRoomConstraints(
+    rooms,
+    preferences.roomConstraints,
+    plotUnit
+  );
+}
+
+
+function applyRoomConstraints(rooms, constraints, plotUnit) {
+  if (!Array.isArray(constraints) || constraints.length === 0) return rooms;
+
+  const normalize = value => String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+  const aliases = room => {
+    const values = [room.id, room.name, room.type];
+    if (room.id === "bedroom-1") values.push("master", "master bedroom", "masterbedroom");
+    if (room.id === "living") values.push("living dining", "living room");
+    if (room.id === "common-toilet") values.push("common bathroom", "common washroom");
+    return values.map(normalize);
+  };
+
+  const findRoom = roomText => {
+    const target = normalize(roomText);
+    return rooms.find(room => aliases(room).includes(target)) ||
+      rooms.find(room => aliases(room).some(alias => target.includes(alias) || alias.includes(target)));
+  };
+
+  const lengthFactor = constraintUnit => {
+    const source = String(constraintUnit || plotUnit).toLowerCase();
+    if (source === plotUnit) return 1;
+    if (source === "m" && plotUnit === "ft") return 3.28084;
+    if (source === "ft" && plotUnit === "m") return 0.3048;
+    return 1;
+  };
+
+  for (const constraint of constraints) {
+    const room = findRoom(constraint?.room);
+    if (!room) continue;
+
+    const factor = lengthFactor(constraint.unit);
+    const width = Number(constraint.width) > 0 ? Number(constraint.width) * factor : null;
+    const depth = Number(constraint.depth) > 0 ? Number(constraint.depth) * factor : null;
+    const rawArea = Number(constraint.area) > 0 ? Number(constraint.area) : null;
+    const area = rawArea == null ? null : rawArea * factor * factor;
+    const areaDelta = Number.isFinite(Number(constraint.area_delta)) && Number(constraint.area_delta) !== 0
+      ? Number(constraint.area_delta) * factor * factor
+      : null;
+    const defaultWidth = Number(room.preferredWidth || room.minWidth);
+    const defaultHeight = Number(room.preferredHeight || room.minHeight);
+
+    let preferredWidth = width || defaultWidth;
+    let preferredHeight = depth || defaultHeight;
+    if (area && !width && !depth) {
+      const scale = Math.sqrt(area / Math.max(1, defaultWidth * defaultHeight));
+      preferredWidth = defaultWidth * scale;
+      preferredHeight = defaultHeight * scale;
+    } else if (area && width && !depth) {
+      preferredHeight = area / width;
+    } else if (area && depth && !width) {
+      preferredWidth = area / depth;
+    }
+
+    room.preferredWidth = Math.max(Number(room.minWidth || 0), preferredWidth);
+    room.preferredHeight = Math.max(Number(room.minHeight || 0), preferredHeight);
+    room.requestedConstraint = {
+      width,
+      depth,
+      area,
+      areaDelta,
+      unit: plotUnit
+    };
+  }
 
   return rooms;
 }

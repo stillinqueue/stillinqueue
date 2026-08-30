@@ -7,7 +7,8 @@ import {
 } from "./buildable-area.js";
 
 import {
-  checkPlanFeasibility
+  checkPlanFeasibility,
+  validateGeneratedLayout
 } from "./feasibility.js";
 
 import {
@@ -139,6 +140,17 @@ function postProcessLayout(layout, requirements) {
 
   const rooms = layout.rooms.map(room => ({ ...room }));
 
+  const beforeBalcony = rooms.map(room => ({ ...room }));
+  const balconyReport = ensureExteriorBalcony(rooms, layout.buildableArea, requirements);
+  if (!hasValidCandidateRooms(layout, rooms)) {
+    rooms.splice(0, rooms.length, ...beforeBalcony);
+    balconyReport.forEach(result => {
+      result.status = "not-feasible";
+      result.reason = "The balcony would invalidate room access or minimum dimensions.";
+      delete result.actual;
+    });
+  }
+
   // Satisfy chat-driven "place X near/adjacent to Y" requests (works across
   // every internal strategy, including the rigid hand-built templates that
   // otherwise ignore preferredNear entirely) before reclaiming dead space.
@@ -146,8 +158,28 @@ function postProcessLayout(layout, requirements) {
   // into the "original" snapshot the growth pass falls back to on failure.
   const roomPreferences = requirements?.preferences?.roomAdjacency;
   let adjacencyReport = [];
+  const beforeAdjacency = rooms.map(room => ({ ...room }));
   if (Array.isArray(roomPreferences) && roomPreferences.length) {
     adjacencyReport = applyAdjacencyPairs(rooms, layout.circulation, roomPreferences);
+    if (!hasValidCandidateRooms(layout, rooms)) {
+      rooms.splice(0, rooms.length, ...beforeAdjacency);
+      adjacencyReport = adjacencyReport.map(result =>
+        ["applied", "already-satisfied"].includes(result.status)
+          ? { ...result, status: "no-swap-candidate", outcome: "not-feasible" }
+          : result
+      );
+    }
+  }
+
+  const beforeConstraints = rooms.map(room => ({ ...room }));
+  const constraintReport = applyRoomSizeConstraints(rooms, layout);
+  if (!hasValidCandidateRooms(layout, rooms)) {
+    rooms.splice(0, rooms.length, ...beforeConstraints);
+    constraintReport.forEach(result => {
+      result.status = "not-feasible";
+      const room = rooms.find(item => item.id === result.roomId);
+      if (room) result.actual = { width: room.width, depth: room.height, area: room.area };
+    });
   }
 
   const originalRooms = rooms.map(room => ({ ...room }));
@@ -200,7 +232,9 @@ function postProcessLayout(layout, requirements) {
   }
 
   // Larger public/social rooms claim leftover space before small service rooms.
-  const growthOrder = [...growable].sort(
+  const growthOrder = growable
+    .filter(room => !room.requestedConstraint && !room.requestedSizeScale)
+    .sort(
     (a, b) => b.width * b.height - a.width * a.height
   );
   for (const room of growthOrder) {
@@ -232,7 +266,19 @@ function postProcessLayout(layout, requirements) {
 
   if (hasOverlap || outOfBounds) {
     // Growth produced an invalid result -- keep the untouched original geometry.
-    return withAccessibilityCheck({ ...layout, rooms: originalRooms, adjacencyReport });
+    return withAccessibilityCheck({
+      ...layout,
+      rooms: originalRooms,
+      adjacencyReport,
+      constraintReport,
+      balconyReport,
+      areaSummary: buildAreaSummary(originalRooms, layout.circulation, requirements?.targetInternalArea),
+      statistics: {
+        ...layout.statistics,
+        requestedRooms: originalRooms.length,
+        placedRooms: originalRooms.length
+      }
+    });
   }
 
   const occupiedArea = growable.reduce((sum, room) => sum + room.width * room.height, 0);
@@ -242,6 +288,14 @@ function postProcessLayout(layout, requirements) {
     ...layout,
     rooms,
     adjacencyReport,
+    constraintReport,
+    balconyReport,
+    areaSummary: buildAreaSummary(rooms, layout.circulation, requirements?.targetInternalArea),
+    statistics: {
+      ...layout.statistics,
+      requestedRooms: rooms.length,
+      placedRooms: rooms.length
+    },
     qualityChecks: {
       overlapsDetected: false,
       allRoomsWithinBounds: true,
@@ -250,13 +304,268 @@ function postProcessLayout(layout, requirements) {
   });
 }
 
+function hasValidCandidateRooms(layout, rooms) {
+  const candidate = { ...layout, rooms };
+  return buildAccessibilityReport(candidate).valid && validateGeneratedLayout(candidate).valid;
+}
+
+function ensureExteriorBalcony(rooms, buildable, requirements) {
+  if (requirements?.preferences?.balcony !== true || rooms.some(room => room.type === "balcony")) {
+    return [];
+  }
+
+  const living = rooms.find(room => room.id === "living");
+  if (!living) return [{ room: "Balcony", status: "not-feasible", reason: "Living room was not found." }];
+
+  const unit = String(requirements?.plot?.unit || "ft").toLowerCase();
+  const depth = unit === "m" ? 1.8 : 6;
+  const minLivingWidth = Number(living.minWidth || (unit === "m" ? 3 : 10));
+  const touchesWest = Math.abs(living.x - buildable.x) < 0.05;
+  const touchesEast = Math.abs(living.x + living.width - buildable.x - buildable.width) < 0.05;
+
+  if ((touchesWest || touchesEast) && living.width - depth >= minLivingWidth) {
+    const balcony = {
+      id: "balcony",
+      name: "Balcony",
+      type: "balcony",
+      attachedTo: "living",
+      requiresExteriorWall: true,
+      requiresCirculationAccess: false,
+      x: touchesWest ? living.x : living.x + living.width - depth,
+      y: living.y,
+      width: depth,
+      height: living.height,
+      minWidth: unit === "m" ? 1.2 : 4,
+      minHeight: unit === "m" ? 2.4 : 6,
+      area: round(depth * living.height)
+    };
+    if (touchesWest) living.x += depth;
+    living.width -= depth;
+    living.area = round(living.width * living.height);
+    rooms.push(balcony);
+    return [{ room: "Balcony", status: "applied", actual: { width: balcony.width, depth: balcony.height, area: balcony.area } }];
+  }
+
+  return [{ room: "Balcony", status: "not-feasible", reason: "The living room has no exterior edge with enough depth." }];
+}
+
+function applyRoomSizeConstraints(rooms, layout) {
+  const reports = [];
+  const EPSILON = 0.05;
+  const initialAccess = buildAccessibilityReport({ ...layout, rooms });
+  const accessByRoom = new Map(initialAccess.connections.map(item => [item.roomId, item.boundary]));
+  const minimum = (room, dimension) => Number(
+    dimension === "width" ? room.minWidth || 3 : room.minHeight || 3
+  );
+
+  const coversRange = (items, start, end, axis) => {
+    const intervals = items
+      .map(item => axis === "y" ? [item.y, item.y + item.height] : [item.x, item.x + item.width])
+      .sort((a, b) => a[0] - b[0]);
+    let cursor = start;
+    for (const [from, to] of intervals) {
+      if (from > cursor + EPSILON) return false;
+      cursor = Math.max(cursor, to);
+      if (cursor >= end - EPSILON) return true;
+    }
+    return cursor >= end - EPSILON;
+  };
+
+  const shiftWidth = (room, targetWidth) => {
+    const delta = targetWidth - room.width;
+    if (Math.abs(delta) < EPSILON) return true;
+    if (delta < 0) {
+      const accessWall = accessByRoom.get(room.id)?.wall;
+      if (accessWall === "east") room.x += room.width - targetWidth;
+      room.width = targetWidth;
+      return true;
+    }
+    const right = rooms.filter(other => other !== room &&
+      Math.abs(other.x - (room.x + room.width)) < EPSILON &&
+      rangesOverlap(room.y, room.y + room.height, other.y, other.y + other.height));
+    if (right.length && coversRange(right, room.y, room.y + room.height, "y") &&
+      right.every(other => other.width - delta >= minimum(other, "width"))) {
+      room.width = targetWidth;
+      right.forEach(other => { other.x += delta; other.width -= delta; });
+      return true;
+    }
+    const left = rooms.filter(other => other !== room &&
+      Math.abs(other.x + other.width - room.x) < EPSILON &&
+      rangesOverlap(room.y, room.y + room.height, other.y, other.y + other.height));
+    if (left.length && coversRange(left, room.y, room.y + room.height, "y") &&
+      left.every(other => other.width - delta >= minimum(other, "width"))) {
+      room.x -= delta;
+      room.width = targetWidth;
+      left.forEach(other => { other.width -= delta; });
+      return true;
+    }
+    return false;
+  };
+
+  const shiftHeight = (room, targetHeight) => {
+    const delta = targetHeight - room.height;
+    if (Math.abs(delta) < EPSILON) return true;
+    if (delta < 0) {
+      const accessWall = accessByRoom.get(room.id)?.wall;
+      if (accessWall === "south") room.y += room.height - targetHeight;
+      room.height = targetHeight;
+      return true;
+    }
+    const below = rooms.filter(other => other !== room &&
+      Math.abs(other.y - (room.y + room.height)) < EPSILON &&
+      rangesOverlap(room.x, room.x + room.width, other.x, other.x + other.width));
+    if (below.length && coversRange(below, room.x, room.x + room.width, "x") &&
+      below.every(other => other.height - delta >= minimum(other, "height"))) {
+      room.height = targetHeight;
+      below.forEach(other => { other.y += delta; other.height -= delta; });
+      return true;
+    }
+    const above = rooms.filter(other => other !== room &&
+      Math.abs(other.y + other.height - room.y) < EPSILON &&
+      rangesOverlap(room.x, room.x + room.width, other.x, other.x + other.width));
+    if (above.length && coversRange(above, room.x, room.x + room.width, "x") &&
+      above.every(other => other.height - delta >= minimum(other, "height"))) {
+      room.y -= delta;
+      room.height = targetHeight;
+      above.forEach(other => { other.height -= delta; });
+      return true;
+    }
+    return false;
+  };
+
+  for (const room of rooms.filter(item => item.requestedConstraint || item.requestedSizeScale)) {
+    const snapshot = rooms.map(item => ({ ...item }));
+    const constraint = room.requestedConstraint || {};
+    const requestedArea = Number(constraint.area) > 0
+      ? Number(constraint.area)
+      : Number(constraint.areaDelta)
+        ? room.width * room.height + Number(constraint.areaDelta)
+      : room.requestedSizeScale
+        ? room.width * room.height * Number(room.requestedSizeScale)
+        : null;
+    const requestedWidth = Number(constraint.width) > 0 ? Number(constraint.width) : null;
+    const requestedHeight = Number(constraint.depth) > 0 ? Number(constraint.depth) : null;
+    let applied = true;
+
+    if (requestedWidth) applied = shiftWidth(room, Math.max(minimum(room, "width"), requestedWidth));
+    if (applied && requestedHeight) applied = shiftHeight(room, Math.max(minimum(room, "height"), requestedHeight));
+    if (applied && requestedArea && !requestedWidth && !requestedHeight) {
+      const widthTarget = requestedArea / room.height;
+      applied = shiftWidth(room, Math.max(minimum(room, "width"), widthTarget));
+      if (!applied) {
+        rooms.forEach((item, index) => Object.assign(item, snapshot[index]));
+        const heightTarget = requestedArea / room.width;
+        applied = shiftHeight(room, Math.max(minimum(room, "height"), heightTarget));
+      }
+    }
+
+    if (!applied) rooms.forEach((item, index) => Object.assign(item, snapshot[index]));
+    rooms.forEach(item => {
+      item.x = round(item.x);
+      item.y = round(item.y);
+      item.width = round(item.width);
+      item.height = round(item.height);
+      item.area = round(item.width * item.height);
+    });
+
+    const actualArea = round(room.width * room.height);
+    const exact = applied &&
+      (!requestedWidth || Math.abs(room.width - requestedWidth) < 0.1) &&
+      (!requestedHeight || Math.abs(room.height - requestedHeight) < 0.1) &&
+      (!requestedArea || Math.abs(actualArea - requestedArea) <= Math.max(2, requestedArea * 0.02));
+    reports.push({
+      roomId: room.id,
+      room: room.name,
+      status: !applied ? "not-feasible" : exact ? "applied" : "approximated",
+      requested: { width: requestedWidth, depth: requestedHeight, area: requestedArea },
+      actual: { width: room.width, depth: room.height, area: actualArea }
+    });
+  }
+
+  return reports;
+}
+
+function buildAreaSummary(rooms, circulation, target) {
+  const calculatedRoomArea = round(rooms.reduce((sum, room) => sum + room.width * room.height, 0));
+  const circulationArea = round((circulation || [])
+    .filter(item => !item.overlay)
+    .reduce((sum, item) => sum + item.width * item.height, 0));
+  const balconyArea = round(rooms
+    .filter(room => room.type === "balcony" || room.type === "deck")
+    .reduce((sum, room) => sum + room.width * room.height, 0));
+  const internalRectangles = [
+    ...rooms.filter(room => room.type !== "balcony" && room.type !== "deck"),
+    ...(circulation || []).filter(item => !item.overlay)
+  ];
+  const calculatedInternalArea = round(calculateRectangleUnionArea(internalRectangles));
+  const targetInternalArea = Number(target?.area) > 0 ? round(Number(target.area)) : null;
+  const differenceRatio = targetInternalArea
+    ? Math.abs(calculatedInternalArea - targetInternalArea) / targetInternalArea
+    : 0;
+  return {
+    status: !targetInternalArea
+      ? null
+      : differenceRatio <= 0.08
+        ? "applied"
+        : differenceRatio <= 0.2
+          ? "approximated"
+          : "not-feasible",
+    targetInternalArea,
+    calculatedRoomArea,
+    circulationArea,
+    balconyArea,
+    calculatedInternalArea,
+    unit: target?.unit || null
+  };
+}
+
+function calculateRectangleUnionArea(rectangles) {
+  const xValues = [...new Set(rectangles.flatMap(item => [item.x, item.x + item.width]))]
+    .sort((a, b) => a - b);
+  let area = 0;
+  for (let index = 0; index < xValues.length - 1; index++) {
+    const x1 = xValues[index];
+    const x2 = xValues[index + 1];
+    if (x2 <= x1) continue;
+    const intervals = rectangles
+      .filter(item => item.x < x2 && item.x + item.width > x1)
+      .map(item => [item.y, item.y + item.height])
+      .sort((a, b) => a[0] - b[0]);
+    let covered = 0;
+    let start = null;
+    let end = null;
+    for (const [from, to] of intervals) {
+      if (start == null) {
+        start = from;
+        end = to;
+      } else if (from <= end) {
+        end = Math.max(end, to);
+      } else {
+        covered += end - start;
+        start = from;
+        end = to;
+      }
+    }
+    if (start != null) covered += end - start;
+    area += (x2 - x1) * covered;
+  }
+  return area;
+}
+
 function withAccessibilityCheck(layout) {
   const accessibilityReport = buildAccessibilityReport(layout);
+  const validationReport = validateGeneratedLayout(layout);
+  const valid = accessibilityReport.valid && validationReport.valid;
   return {
     ...layout,
-    success: layout.success && accessibilityReport.valid,
-    reason: accessibilityReport.valid ? layout.reason : "inaccessible-rooms",
-    accessibilityReport
+    success: layout.success && valid,
+    reason: valid
+      ? layout.reason
+      : !accessibilityReport.valid
+        ? "inaccessible-rooms"
+        : "invalid-layout-geometry",
+    accessibilityReport,
+    validationReport
   };
 }
 

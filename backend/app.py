@@ -472,6 +472,46 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                         "additionalProperties": False,
                     },
                 },
+                "room_constraints": {
+                    "type": "array",
+                    "description": (
+                        "Persistent explicit room size constraints. Width/depth "
+                        "and area are independent; use null for values the user "
+                        "did not specify."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "room": {"type": "string"},
+                            "width": {"type": ["number", "null"]},
+                            "depth": {"type": ["number", "null"]},
+                            "area": {"type": ["number", "null"]},
+                            "area_delta": {"type": ["number", "null"]},
+                            "unit": {
+                                "type": ["string", "null"],
+                                "enum": ["ft", "m", None],
+                            },
+                        },
+                        "required": ["room", "width", "depth", "area", "area_delta", "unit"],
+                        "additionalProperties": False,
+                    },
+                },
+                "target_internal_area": {
+                    "type": "object",
+                    "description": (
+                        "Target usable/internal apartment area, distinct from "
+                        "plot area. Null values mean no target was stated."
+                    ),
+                    "properties": {
+                        "area": {"type": ["number", "null"]},
+                        "unit": {
+                            "type": ["string", "null"],
+                            "enum": ["sq ft", "sq m", None],
+                        },
+                    },
+                    "required": ["area", "unit"],
+                    "additionalProperties": False,
+                },
                 "layout_directives": {
                     "type": "object",
                     "description": (
@@ -486,6 +526,7 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                         "utility": {"type": ["boolean", "null"]},
                         "puja": {"type": ["boolean", "null"]},
                         "store": {"type": ["boolean", "null"]},
+                        "balcony": {"type": ["boolean", "null"]},
                         "kitchen_direction": {
                             "type": ["string", "null"],
                             "enum": ["north", "south", "east", "west", "northeast", "northwest", "southeast", "southwest", None],
@@ -503,14 +544,14 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                             "type": "array",
                             "items": {
                                 "type": "string",
-                                "enum": ["living", "familyLounge", "dining", "kitchen", "masterBedroom", "bedroom"],
+                                "enum": ["living", "familyLounge", "dining", "kitchen", "masterBedroom", "bedroom", "bedroom2", "bedroom3", "bedroom4", "bedroom5"],
                             },
                         },
                         "rooms_scaled_smaller": {
                             "type": "array",
                             "items": {
                                 "type": "string",
-                                "enum": ["living", "familyLounge", "dining", "kitchen", "masterBedroom", "bedroom"],
+                                "enum": ["living", "familyLounge", "dining", "kitchen", "masterBedroom", "bedroom", "bedroom2", "bedroom3", "bedroom4", "bedroom5"],
                             },
                         },
                     },
@@ -519,6 +560,7 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                         "utility",
                         "puja",
                         "store",
+                        "balcony",
                         "kitchen_direction",
                         "master_bedroom_direction",
                         "extend_bedroom_passage",
@@ -545,6 +587,8 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                 "site_context",
                 "special_requirements",
                 "room_preferences",
+                "room_constraints",
+                "target_internal_area",
                 "layout_directives",
             ],
             "additionalProperties": False,
@@ -724,6 +768,9 @@ IMPORTANT BEHAVIOUR
 12. "missing_fields" must contain only genuinely missing minimum concept fields.
     Use these exact labels when applicable:
     "plot size", "plot unit", "BHK / bedrooms", "plot facing", "floors".
+    A target_internal_area may substitute for plot size for an apartment
+    concept; the deterministic engine will derive a temporary planning
+    envelope. Do not fabricate plot width/depth in that case.
 
 13. "road_side" usually equals facing for a conventional facing description
     unless the user explicitly distinguishes them.
@@ -742,6 +789,8 @@ IMPORTANT BEHAVIOUR
     - "remove/no utility" -> utility=false; "add a utility room" -> true
     - "remove/no puja room" -> puja=false; "add a puja room" -> true
     - "remove/no store room" -> store=false; "add a store room" -> true
+        - "large balcony connected to living" -> balcony=true and preserve the
+            connection request in room_preferences
     - "kitchen facing southeast" -> kitchen_direction="southeast"
     - "master bedroom in the southwest" -> master_bedroom_direction="southwest"
     - "extend the passage/corridor to the bedrooms" -> extend_bedroom_passage=true
@@ -752,6 +801,7 @@ IMPORTANT BEHAVIOUR
     - "dining below/under the family lounge" -> dining_below_family=true
     - "make the living room bigger" -> add "living" to rooms_scaled_bigger
     - "make the bedrooms smaller" -> add "bedroom" to rooms_scaled_smaller
+    - "make bedroom 3 smaller" -> add "bedroom3" to rooms_scaled_smaller
     Never invent a directive the user did not ask for.
 
 16. Any request about WHERE a room should sit relative to another room or to
@@ -763,6 +813,9 @@ IMPORTANT BEHAVIOUR
     to attached toilet 2">}. Keep every previously stated room_preference
     from current_state unless the user explicitly changes or removes that
     specific one -- do not silently drop earlier requests.
+    For swaps, use a direct preference such as {"room": "kitchen",
+    "preference": "swap with bedroom 2"}. Preserve side/opposite phrases such
+    as "on left", "on right", "on top", or "opposite bedroom 2".
 
 17. IMPORTANT -- be honest about what you can actually guarantee. You are a
     conversational interpreter; a separate deterministic geometry engine
@@ -784,6 +837,21 @@ IMPORTANT BEHAVIOUR
     - Only describe layout_directives fields (item 15) as applied plainly,
       since those are simple flags the engine reliably honors; reserve the
       tentative phrasing for room_preferences-style positional requests.
+
+18. Capture explicit room sizes in "room_constraints":
+        - "master bedroom 14 by 16 ft" -> width=14, depth=16, area=null.
+        - "living room should be 300 sq ft" -> area=300, width/depth=null.
+        - "increase living by 40 sq ft" -> area_delta=40, area/width/depth=null.
+        - "reduce bedroom 3 by 20 sq ft" -> area_delta=-20.
+        - Width/depth and area are independent; never invent missing values.
+        - Keep previous constraints from current_state unless the user changes or
+            removes that room's constraint. Use the room name/number stated by the
+            user so the deterministic engine can resolve it.
+
+19. "1600 sq ft apartment", "usable area", "internal area", or "carpet area"
+        sets target_internal_area, NOT plot dimensions. Keep the previous target
+        unless explicitly changed or removed. A stated plot/site area remains plot
+        information and must not be copied into target_internal_area.
 """.strip()
 
 
@@ -794,6 +862,14 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
     room_preferences = state.get("room_preferences")
     if not isinstance(room_preferences, list):
         room_preferences = []
+
+    room_constraints = state.get("room_constraints")
+    if not isinstance(room_constraints, list):
+        room_constraints = []
+
+    target_internal_area = state.get("target_internal_area")
+    if not isinstance(target_internal_area, dict):
+        target_internal_area = {}
 
     special_requirements = state.get("special_requirements")
     if not isinstance(special_requirements, list):
@@ -820,6 +896,11 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
         "site_context": state.get("site_context"),
         "special_requirements": special_requirements,
         "room_preferences": room_preferences,
+        "room_constraints": room_constraints,
+        "target_internal_area": {
+            "area": target_internal_area.get("area"),
+            "unit": target_internal_area.get("unit"),
+        },
         "layout_directives": layout_directives,
     }
 
