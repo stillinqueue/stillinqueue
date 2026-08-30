@@ -176,3 +176,18 @@ test("does not grow rooms across the legacy circulation spine", () => {
   assert.equal(layout.accessibilityReport.inaccessibleRooms.some(room => room.id === "bedroom-1"), false);
   assert.equal(layout.entrances[0]?.roomId, "living");
 });
+
+test("creates a valid common-toilet route for a comfortable 40 by 50 4BHK", () => {
+  const layout = generateLayout({
+    country: "india",
+    plot: { width: 40, height: 50, unit: "ft", roadSide: "north" },
+    setbacks: { front: 3, rear: 2, left: 2, right: 2 },
+    house: { bhk: 4, floors: 1 },
+    preferences: {}
+  });
+
+  assert.equal(layout.feasibility.status, "comfortable");
+  assert.equal(layout.success, true);
+  assert.equal(layout.accessibilityReport.inaccessibleCommonToilets.length, 0);
+  assert.ok(layout.accessibilityReport.connections.some(connection => connection.roomId === "common-toilet"));
+});

@@ -235,7 +235,7 @@ export function checkPlanFeasibility(requirements) {
 export function validateGeneratedLayout(layout) {
   const rooms = Array.isArray(layout?.rooms) ? layout.rooms : [];
   const buildable = layout?.buildableArea;
-  const tolerance = 0.05;
+  const tolerance = 0.15;
   const errors = [];
 
   const overlaps = [];

@@ -182,6 +182,8 @@ function postProcessLayout(layout, requirements) {
     });
   }
 
+  const circulationRepairReport = repairCommonToiletAccess(rooms, layout);
+
   const originalRooms = rooms.map(room => ({ ...room }));
   const growable = rooms.filter(room => room.type !== "corridor");
 
@@ -273,6 +275,7 @@ function postProcessLayout(layout, requirements) {
       adjacencyReport,
       constraintReport,
       balconyReport,
+      circulationRepairReport,
       areaSummary: buildAreaSummary(originalRooms, layout.circulation, requirements?.targetInternalArea),
       statistics: {
         ...layout.statistics,
@@ -284,6 +287,16 @@ function postProcessLayout(layout, requirements) {
 
   const occupiedArea = growable.reduce((sum, room) => sum + room.width * room.height, 0);
   const utilizationPercent = round((occupiedArea / buildable.area) * 100, 1);
+  const finalAccess = buildAccessibilityReport({ ...layout, rooms });
+  circulationRepairReport.forEach(result => {
+    if (
+      result.status === "not-feasible" &&
+      !finalAccess.inaccessibleCommonToilets.some(room => room.id === result.roomId)
+    ) {
+      result.status = "already-satisfied";
+      delete result.reason;
+    }
+  });
 
   return withAccessibilityCheck({
     ...layout,
@@ -291,6 +304,7 @@ function postProcessLayout(layout, requirements) {
     adjacencyReport,
     constraintReport,
     balconyReport,
+    circulationRepairReport,
     areaSummary: buildAreaSummary(rooms, layout.circulation, requirements?.targetInternalArea),
     statistics: {
       ...layout.statistics,
@@ -303,6 +317,87 @@ function postProcessLayout(layout, requirements) {
       buildableUtilizationPercent: utilizationPercent
     }
   });
+}
+
+function repairCommonToiletAccess(rooms, layout) {
+  const report = [];
+  const access = buildAccessibilityReport({ ...layout, rooms });
+  const inaccessibleIds = new Set(access.inaccessibleCommonToilets.map(room => room.id));
+  const circulation = Array.isArray(layout.circulation) ? layout.circulation : [];
+  const buildable = layout.buildableArea;
+  const tolerance = 0.05;
+
+  const overlaps = (candidate, other) => !(
+    candidate.x + candidate.width <= other.x + tolerance ||
+    other.x + other.width <= candidate.x + tolerance ||
+    candidate.y + candidate.height <= other.y + tolerance ||
+    other.y + other.height <= candidate.y + tolerance
+  );
+
+  for (const room of rooms.filter(item => inaccessibleIds.has(item.id))) {
+    const snapshot = { x: room.x, y: room.y, width: room.width, height: room.height, area: room.area };
+    let applied = false;
+
+    const sizes = [
+      { width: room.width, height: room.height },
+      { width: Number(room.preferredWidth || room.minWidth), height: Number(room.preferredHeight || room.minHeight) },
+      { width: Number(room.minWidth), height: Number(room.minHeight) },
+      { width: Number(room.minHeight), height: Number(room.minWidth) }
+    ].filter(size => size.width > 0 && size.height > 0);
+
+    for (const size of sizes) {
+      room.width = size.width;
+      room.height = size.height;
+      room.area = round(size.width * size.height);
+
+      for (const corridor of circulation) {
+      const candidates = [];
+      const verticalStep = Math.max(0.5, room.height / 4);
+      const horizontalStep = Math.max(0.5, room.width / 4);
+
+      for (let y = corridor.y; y <= corridor.y + corridor.height - room.height + tolerance; y += verticalStep) {
+        candidates.push({ x: corridor.x - room.width, y });
+        candidates.push({ x: corridor.x + corridor.width, y });
+      }
+      for (let x = corridor.x; x <= corridor.x + corridor.width - room.width + tolerance; x += horizontalStep) {
+        candidates.push({ x, y: corridor.y - room.height });
+        candidates.push({ x, y: corridor.y + corridor.height });
+      }
+
+      for (const candidate of candidates) {
+        const positioned = { ...room, x: round(candidate.x), y: round(candidate.y) };
+        const inside = positioned.x >= buildable.x - tolerance &&
+          positioned.y >= buildable.y - tolerance &&
+          positioned.x + positioned.width <= buildable.x + buildable.width + tolerance &&
+          positioned.y + positioned.height <= buildable.y + buildable.height + tolerance;
+        if (!inside || rooms.some(other => other !== room && overlaps(positioned, other))) continue;
+
+        room.x = positioned.x;
+        room.y = positioned.y;
+        const candidateLayout = { ...layout, rooms };
+        const candidateAccess = buildAccessibilityReport(candidateLayout);
+        const commonToiletAccessible = !candidateAccess.inaccessibleCommonToilets.some(item => item.id === room.id);
+        if (commonToiletAccessible && validateGeneratedLayout(candidateLayout).valid) {
+          applied = true;
+          break;
+        }
+        Object.assign(room, snapshot);
+      }
+      if (applied) break;
+      }
+      if (applied) break;
+    }
+
+    if (!applied) Object.assign(room, snapshot);
+    report.push({
+      roomId: room.id,
+      room: room.name,
+      status: applied ? "applied" : "not-feasible",
+      actual: { x: room.x, y: room.y, width: room.width, depth: room.height }
+    });
+  }
+
+  return report;
 }
 
 function hasValidCandidateRooms(layout, rooms) {
