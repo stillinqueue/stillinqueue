@@ -706,11 +706,11 @@
 
         <div id="blueprintPanel">
           <div class="blueprint-subtabs">
-            <button class="blueprint-subtab active" id="tabEngineer">Engineer Drawing</button>
-            <button class="blueprint-subtab" id="tabBuyer">Buyer Plan</button>
+            <button class="blueprint-subtab" id="tabEngineer">Engineer Drawing</button>
+            <button class="blueprint-subtab active" id="tabBuyer">Buyer Plan</button>
           </div>
 
-          <div id="engineerPanel">
+          <div id="engineerPanel" style="display:none;">
             <div class="viewer-toolbar">
               <div>
                 <div class="studio-label" style="margin-bottom:.35rem;">Engineer Drawing</div>
@@ -734,7 +734,7 @@
             <div class="legend" id="legend"></div>
           </div>
 
-          <div id="buyerPanel" style="display:none;">
+          <div id="buyerPanel">
             <div class="viewer-toolbar">
               <div>
                 <div class="studio-label" style="margin-bottom:.35rem;">Buyer Plan</div>
@@ -3829,7 +3829,7 @@ This is useful test information. The planner has refused to draw a knowingly inv
           window.currentConstraintRequirements = requirements;
 
           showBlueprintTab();
-          showEngineerSubtab();
+          showBuyerSubtab();
 
           layoutState.rendered = true;
           layoutState.confirmed = false;
@@ -4357,7 +4357,7 @@ You can still request a design change in chat. Any understood requirement change
       layoutState.confirmed = false;
       applyTransform();
       showBlueprintTab();
-      showEngineerSubtab();
+      showBuyerSubtab();
       updateLayoutButtons();
 
       addMessage("assistant",
