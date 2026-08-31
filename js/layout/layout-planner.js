@@ -964,9 +964,11 @@ function applyArchitecturalRebalance(rooms, layout, operation) {
     [source, target, donorChoice.donor, sourceSide.receiver].filter(Boolean)
   );
 
+  const appliedSourceWidth = Number(sourceSide?.appliedOrientation?.width || requestedWidth);
+  const appliedSourceDepth = Number(sourceSide?.appliedOrientation?.depth || requestedDepth);
   const sourceExact =
-    Math.abs(source.width - requestedWidth) < 0.1 &&
-    Math.abs(source.height - requestedDepth) < 0.1;
+    Math.abs(source.width - appliedSourceWidth) < 0.1 &&
+    Math.abs(source.height - appliedSourceDepth) < 0.1;
 
   const targetBefore = snapshot.find(room => room.id === target.id);
   const targetGain = targetBefore
@@ -999,7 +1001,12 @@ function applyArchitecturalRebalance(rooms, layout, operation) {
     sourceReceiver: sourceSide.receiver,
     targetDonor: donorChoice.donor,
     strategy: "balanced_remote_redistribution",
-    operation,
+    operation: {
+      ...operation,
+      applied_source_orientation: sourceSide?.appliedOrientation || null,
+      source_orientation_rotated: Boolean(sourceSide?.rotated),
+      source_replan_mode: sourceSide?.replanMode || null
+    },
     baseReport
   });
 }
@@ -1057,6 +1064,9 @@ function buildArchitecturalRebalanceSuccessReport({
     target_gain: round(targetGain),
     local_source_receiver: sourceReceiver?.id || null,
     target_donor: targetDonor?.id || null,
+    applied_source_orientation: operation.applied_source_orientation || null,
+    source_orientation_rotated: Boolean(operation.source_orientation_rotated),
+    source_replan_mode: operation.source_replan_mode || null,
     changes,
     explicit_source_preserved: Math.abs(sourceLoss - releasedArea) <= 1.5,
     reason: strategy === "direct_wall_transfer"
@@ -1077,77 +1087,140 @@ function reshapeSourceWithArchitecturalNeighborhood({
   skipAreaAbsorption
 }) {
   const originalSnapshot = rooms.map(room => ({ ...room }));
-  const neighborhoodLevels = buildArchitecturalNeighborhoodLevels(rooms, source, 3);
+
+  /*
+    Architect-style source-zone redesign.
+
+    The old implementation tried only a very compact 2-7 room neighborhood
+    while keeping the requested width/depth orientation fixed. That is too
+    restrictive for requests such as 18 x 10.8 -> 10 x 11, because the room
+    must become much narrower while also gaining a small amount of depth.
+
+    We now progressively widen the private/local neighborhood and test both
+    dimensional orientations when the user supplied an unordered "A x B"
+    size. 10 x 11 and 11 x 10 are the same requested room size unless a later
+    operation explicitly introduces orientation_locked=true.
+  */
+  const orientationLocked = operationOrientationLockedFromSource(source);
+  const sourceShapes = uniqueArchitecturalShapes(
+    requestedWidth,
+    requestedDepth,
+    orientationLocked
+  );
+
+  const neighborhoodLevels = buildArchitecturalNeighborhoodLevels(
+    rooms,
+    source,
+    5,
+    12
+  );
+
+  /*
+    Last-resort source-side zone: include the complete connected component
+    around the source (bounded to rooms that are not balconies/decks). This
+    allows the engine to redraw a meaningful private-zone mini-plan instead
+    of merely pushing the source's existing walls.
+  */
+  const connectedZone = buildConnectedArchitecturalZone(
+    rooms,
+    source,
+    12
+  );
+
+  if (connectedZone.length >= 2) {
+    const existingKey = new Set(
+      neighborhoodLevels.map(level => level.map(room => room.id).sort().join('|'))
+    );
+    const key = connectedZone.map(room => room.id).sort().join('|');
+    if (!existingKey.has(key)) neighborhoodLevels.push(connectedZone);
+  }
 
   for (const localRooms of neighborhoodLevels) {
     const receivers = localRooms
       .filter(room => room !== source && room.id !== excludedReceiverId)
-      .sort((a, b) => architecturalReceiverScore(a, preferredReceiverId) - architecturalReceiverScore(b, preferredReceiverId));
+      .sort((a, b) =>
+        architecturalReceiverScore(a, preferredReceiverId) -
+        architecturalReceiverScore(b, preferredReceiverId)
+      );
 
-    for (const receiver of receivers) {
-      const selected = new Set(localRooms.map(room => room.id));
-      const zone = boundingZoneForRooms(localRooms, layout.buildableArea);
-      if (!zone) continue;
+    for (const shape of sourceShapes) {
+      for (const receiver of receivers) {
+        const selected = new Set(localRooms.map(room => room.id));
+        const zone = boundingZoneForRooms(localRooms, layout.buildableArea);
+        if (!zone) continue;
 
-      const obstacles = rooms
-        .filter(room => !selected.has(room.id) && rectanglesOverlapLoose(room, zone))
-        .map(room => ({ ...room }));
+        const obstacles = rooms
+          .filter(room => !selected.has(room.id) && rectanglesOverlapLoose(room, zone))
+          .map(room => ({ ...room }));
 
-      const desiredAreas = new Map();
-      for (const room of localRooms) {
-        if (room === source) {
-          desiredAreas.set(room.id, requestedWidth * requestedDepth);
-        } else if (room === receiver && !skipAreaAbsorption) {
-          desiredAreas.set(room.id, room.width * room.height + releasedArea);
-        } else {
-          desiredAreas.set(room.id, room.width * room.height);
+        const desiredAreas = new Map();
+        for (const room of localRooms) {
+          if (room === source) {
+            desiredAreas.set(room.id, shape.width * shape.height);
+          } else if (room === receiver && !skipAreaAbsorption) {
+            desiredAreas.set(room.id, room.width * room.height + releasedArea);
+          } else {
+            desiredAreas.set(room.id, room.width * room.height);
+          }
         }
-      }
 
-      const packed = packBoundedLocalZone({
-        zone,
-        localRooms,
-        obstacles,
-        source,
-        target: receiver,
-        requestedWidth,
-        requestedDepth,
-        desiredAreas,
-        buildable: layout.buildableArea
-      });
+        const packed = packBoundedLocalZone({
+          zone,
+          localRooms,
+          obstacles,
+          source,
+          target: receiver,
+          requestedWidth: shape.width,
+          requestedDepth: shape.height,
+          desiredAreas,
+          buildable: layout.buildableArea,
+          allowArchitecturalReplan: true
+        });
 
-      if (!packed) continue;
+        if (!packed) continue;
 
-      restoreRoomSnapshots(rooms, originalSnapshot);
-      for (const placement of packed.placements) {
-        const room = rooms.find(item => item.id === placement.id);
-        if (!room) continue;
-        room.x = round(placement.x);
-        room.y = round(placement.y);
-        room.width = round(placement.width);
-        room.height = round(placement.height);
-        room.area = round(room.width * room.height);
-        room.operationLocked = true;
-      }
+        restoreRoomSnapshots(rooms, originalSnapshot);
+        for (const placement of packed.placements) {
+          const room = rooms.find(item => item.id === placement.id);
+          if (!room) continue;
+          room.x = round(placement.x);
+          room.y = round(placement.y);
+          room.width = round(placement.width);
+          room.height = round(placement.height);
+          room.area = round(room.width * room.height);
+          room.operationLocked = true;
+        }
 
-      const finalSource = rooms.find(room => room.id === source.id);
-      const finalReceiver = rooms.find(room => room.id === receiver.id);
-      const receiverBefore = originalSnapshot.find(room => room.id === receiver.id);
-      const sourceExact = finalSource &&
-        Math.abs(finalSource.width - requestedWidth) < 0.1 &&
-        Math.abs(finalSource.height - requestedDepth) < 0.1;
-      const receiverGain = finalReceiver && receiverBefore
-        ? finalReceiver.width * finalReceiver.height - receiverBefore.width * receiverBefore.height
-        : 0;
-      const receiverOkay = skipAreaAbsorption ||
-        Math.abs(receiverGain - releasedArea) <= Math.max(1.5, releasedArea * 0.04);
+        const finalSource = rooms.find(room => room.id === source.id);
+        const finalReceiver = rooms.find(room => room.id === receiver.id);
+        const receiverBefore = originalSnapshot.find(room => room.id === receiver.id);
+        const sourceExact = finalSource &&
+          Math.abs(finalSource.width - shape.width) < 0.1 &&
+          Math.abs(finalSource.height - shape.height) < 0.1;
+        const receiverGain = finalReceiver && receiverBefore
+          ? finalReceiver.width * finalReceiver.height - receiverBefore.width * receiverBefore.height
+          : 0;
+        const receiverOkay = skipAreaAbsorption ||
+          Math.abs(receiverGain - releasedArea) <= Math.max(1.5, releasedArea * 0.04);
 
-      if (sourceExact && receiverOkay && hasValidCandidateRooms(layout, rooms)) {
-        return {
-          success: true,
-          receiver: finalReceiver,
-          localRoomIds: localRooms.map(room => room.id)
-        };
+        if (sourceExact && receiverOkay && hasValidCandidateRooms(layout, rooms)) {
+          return {
+            success: true,
+            receiver: finalReceiver,
+            localRoomIds: localRooms.map(room => room.id),
+            requestedOrientation: {
+              width: requestedWidth,
+              depth: requestedDepth
+            },
+            appliedOrientation: {
+              width: shape.width,
+              depth: shape.height
+            },
+            rotated: Math.abs(shape.width - requestedWidth) > 0.05 ||
+              Math.abs(shape.height - requestedDepth) > 0.05,
+            replanMode: packed.mode || 'architectural-mini-zone'
+          };
+        }
       }
     }
   }
@@ -1155,11 +1228,61 @@ function reshapeSourceWithArchitecturalNeighborhood({
   restoreRoomSnapshots(rooms, originalSnapshot);
   return {
     success: false,
-    reason: "The planner could not find a compact source-side neighborhood that fits the exact new room shape while absorbing the released physical area."
+    reason: "The planner could not redraw a practical connected source-side mini-zone that fits the requested room size while absorbing the released physical area."
   };
 }
 
-function buildArchitecturalNeighborhoodLevels(rooms, source, maxDepth = 3) {
+function operationOrientationLockedFromSource(source) {
+  return Boolean(
+    source?.requestedConstraint?.orientationLocked ||
+    source?.requestedConstraint?.orientation_locked
+  );
+}
+
+function uniqueArchitecturalShapes(width, depth, orientationLocked) {
+  const shapes = [{ width, height: depth }];
+  if (!orientationLocked && Math.abs(width - depth) > 0.05) {
+    shapes.push({ width: depth, height: width });
+  }
+
+  const seen = new Set();
+  return shapes.filter(shape => {
+    const key = `${round(shape.width)}:${round(shape.height)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildConnectedArchitecturalZone(rooms, source, maxRooms = 12) {
+  const allowed = rooms.filter(room => !["balcony", "deck"].includes(room.type));
+  const visited = new Set([source.id]);
+  const queue = [source];
+
+  while (queue.length && visited.size < maxRooms) {
+    const current = queue.shift();
+    const neighbors = allowed
+      .filter(room => !visited.has(room.id) && roomsShareBoundary(current, room))
+      .sort((a, b) => architecturalZoneRoomPriority(a) - architecturalZoneRoomPriority(b));
+
+    for (const room of neighbors) {
+      if (visited.size >= maxRooms) break;
+      visited.add(room.id);
+      queue.push(room);
+    }
+  }
+
+  return allowed.filter(room => visited.has(room.id));
+}
+
+function architecturalZoneRoomPriority(room) {
+  if (["bedroom", "masterBedroom", "familyLounge", "dining", "living"].includes(room.type)) return 0;
+  if (["foyer", "storage", "utility", "kitchen"].includes(room.type)) return 10;
+  if (["attachedToilet", "commonToilet"].includes(room.type) || room.wetArea) return 50;
+  return 20;
+}
+
+function buildArchitecturalNeighborhoodLevels(rooms, source, maxDepth = 5, maxRooms = 12) {
   const touches = (a, b) => roomsShareBoundary(a, b);
   const visited = new Set([source.id]);
   let frontier = [source];
@@ -1168,19 +1291,22 @@ function buildArchitecturalNeighborhoodLevels(rooms, source, maxDepth = 3) {
   for (let depth = 1; depth <= maxDepth; depth++) {
     const next = [];
     for (const current of frontier) {
-      for (const room of rooms) {
-        if (visited.has(room.id) || room === source) continue;
-        if (!touches(current, room)) continue;
+      const neighbors = rooms
+        .filter(room => !visited.has(room.id) && room !== source && touches(current, room))
+        .sort((a, b) => architecturalZoneRoomPriority(a) - architecturalZoneRoomPriority(b));
+
+      for (const room of neighbors) {
+        if (visited.size >= maxRooms) break;
         visited.add(room.id);
         next.push(room);
       }
+      if (visited.size >= maxRooms) break;
     }
+
     frontier = next;
     const selected = rooms.filter(room => visited.has(room.id));
-    if (selected.length >= 2 && selected.length <= 7) {
-      levels.push(selected);
-    }
-    if (!frontier.length || selected.length >= 7) break;
+    if (selected.length >= 2) levels.push(selected);
+    if (!frontier.length || selected.length >= maxRooms) break;
   }
 
   return levels;
@@ -1756,17 +1882,33 @@ function packBoundedLocalZone({
   requestedWidth,
   requestedDepth,
   desiredAreas,
-  buildable
+  buildable,
+  allowArchitecturalReplan = false
 }) {
   const originalById = new Map(localRooms.map(room => [room.id, { ...room }]));
+  const others = localRooms.filter(room => room !== source && room !== target);
+  const byAreaDesc = [...others].sort((a, b) => desiredAreas.get(b.id) - desiredAreas.get(a.id));
+  const byAreaAsc = [...others].sort((a, b) => desiredAreas.get(a.id) - desiredAreas.get(b.id));
+  const byPriority = [...others].sort((a, b) => architecturalZoneRoomPriority(a) - architecturalZoneRoomPriority(b));
+  const byReversePriority = [...byPriority].reverse();
+
   const orders = [
-    [source, target, ...localRooms.filter(room => room !== source && room !== target)
-      .sort((a, b) => desiredAreas.get(b.id) - desiredAreas.get(a.id))],
-    [source, ...localRooms.filter(room => room !== source && room !== target)
-      .sort((a, b) => desiredAreas.get(b.id) - desiredAreas.get(a.id)), target],
-    [target, source, ...localRooms.filter(room => room !== source && room !== target)
-      .sort((a, b) => desiredAreas.get(b.id) - desiredAreas.get(a.id))]
+    [source, target, ...byAreaDesc],
+    [source, ...byAreaDesc, target],
+    [target, source, ...byAreaDesc],
+    [source, ...byPriority, target],
+    [source, ...byReversePriority, target],
+    [target, ...byPriority, source]
   ];
+
+  if (allowArchitecturalReplan) {
+    orders.push(
+      [...byAreaDesc, source, target],
+      [...byAreaAsc, source, target],
+      [...byPriority, source, target],
+      [target, ...byAreaDesc, source]
+    );
+  }
 
   let best = null;
 
@@ -1795,7 +1937,8 @@ function packBoundedLocalZone({
         original,
         sizes,
         freeRects,
-        buildable
+        buildable,
+        architecturalMode: allowArchitecturalReplan
       });
 
       if (!candidate) {
@@ -1824,18 +1967,37 @@ function packBoundedLocalZone({
         (placed.y + placed.height / 2) - (original.y + original.height / 2)
       );
       const shapeShift = Math.abs(placed.width - original.width) + Math.abs(placed.height - original.height);
-      return sum + centerShift + shapeShift * 0.4;
+      const wetPenalty = placed.wetArea || ["attachedToilet", "commonToilet", "utility"].includes(placed.type)
+        ? centerShift * 2.5
+        : 0;
+      const exteriorPenalty = placed.requiresExteriorWall && !touchesBuildableExterior(placed, buildable)
+        ? 500
+        : 0;
+      return sum + centerShift + shapeShift * 0.4 + wetPenalty + exteriorPenalty;
     }, 0);
 
     if (!best || score < best.score) {
       best = {
         placements,
-        score
+        score,
+        mode: allowArchitecturalReplan
+          ? "architectural-mini-zone-regeneration"
+          : "bounded-local-zone"
       };
     }
   }
 
   return best;
+}
+
+function touchesBuildableExterior(room, buildable) {
+  const tolerance = 0.1;
+  return (
+    Math.abs(room.x - buildable.x) < tolerance ||
+    Math.abs(room.y - buildable.y) < tolerance ||
+    Math.abs(room.x + room.width - buildable.x - buildable.width) < tolerance ||
+    Math.abs(room.y + room.height - buildable.y - buildable.height) < tolerance
+  );
 }
 
 function getLocalZoneSizes(room, desiredArea, fixed, zone) {
@@ -1906,7 +2068,8 @@ function findLocalZonePlacement({
   original,
   sizes,
   freeRects,
-  buildable
+  buildable,
+  architecturalMode = false
 }) {
   const candidates = [];
   const exteriorTolerance = 0.1;
@@ -1932,6 +2095,16 @@ function findLocalZonePlacement({
           y: Math.max(freeRect.y, Math.min(maxY, original.y))
         }
       ];
+
+      if (architecturalMode) {
+        positions.push(
+          { x: (freeRect.x + maxX) / 2, y: freeRect.y },
+          { x: (freeRect.x + maxX) / 2, y: maxY },
+          { x: freeRect.x, y: (freeRect.y + maxY) / 2 },
+          { x: maxX, y: (freeRect.y + maxY) / 2 },
+          { x: (freeRect.x + maxX) / 2, y: (freeRect.y + maxY) / 2 }
+        );
+      }
 
       for (const position of positions) {
         const x = round(position.x);
