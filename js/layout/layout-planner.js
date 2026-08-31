@@ -255,6 +255,29 @@ function postProcessLayout(layout, requirements) {
     }
   }
 
+  /*
+    Area transfer + explicit room resize can represent ONE user decision,
+    for example:
+
+      "Make Bedroom 3 exactly 10 x 11 and give the released area
+       to Family Lounge."
+
+    Keep a snapshot before area operations so the transfer and exact resize
+    can be rolled back together if the final dimensional constraint cannot
+    be satisfied. This prevents a half-applied result where area moved but
+    the requested room size failed.
+  */
+  const beforeAreaOperations = rooms.map(room => ({ ...room }));
+  const beforeAreaCirculation = (layout.circulation || []).map(item => ({ ...item }));
+  const coupledTransferOperations = areaOperations.filter(operation =>
+    operation.operation === "transfer_area" &&
+    operation.source_room &&
+    (() => {
+      const source = resolveCanonicalRoom(rooms, layout.circulation || [], operation.source_room);
+      return Boolean(source?.requestedConstraint);
+    })()
+  );
+
   if (areaOperations.length) {
     operationReport.push(...applyAreaOperations(rooms, layout, areaOperations));
   }
@@ -281,6 +304,66 @@ function postProcessLayout(layout, requirements) {
       result.status = "not-feasible";
       const room = rooms.find(item => item.id === result.roomId);
       if (room) result.actual = { width: room.width, depth: room.height, area: room.area };
+    });
+  }
+
+  /*
+    ATOMIC RESIZE + TRANSFER ROLLBACK
+
+    If an explicit transfer is coupled to a room constraint, the transaction
+    is successful only when the source room reaches the requested dimensions.
+    Otherwise restore BOTH the transfer and the resize.
+  */
+  const failedCoupledOperations = coupledTransferOperations.filter(operation => {
+    const source = resolveCanonicalRoom(rooms, layout.circulation || [], operation.source_room);
+    if (!source) return true;
+    const report = constraintReport.find(item => item.roomId === source.id);
+    return !report || report.status !== "applied";
+  });
+
+  if (failedCoupledOperations.length) {
+    restoreRoomSnapshots(rooms, beforeAreaOperations);
+    layout.circulation.splice(0, layout.circulation.length, ...beforeAreaCirculation);
+
+    const failedKeys = new Set(
+      failedCoupledOperations.map(operation =>
+        `${operation.source_room || ""}->${operation.target_room || ""}`
+      )
+    );
+
+    operationReport = operationReport.map(result => {
+      const key = `${result.source_room || ""}->${result.target_room || ""}`;
+      if (result.operation !== "transfer_area" || !failedKeys.has(key)) return result;
+      return {
+        ...result,
+        status: "rejected",
+        actual_area: 0,
+        changes: [],
+        circulation_changes: [],
+        total_donor_loss: 0,
+        total_recipient_gain: 0,
+        circulation_area_change: 0,
+        residual_difference: 0,
+        reason: "The area transfer was rolled back because the source room could not reach its requested final dimensions without invalidating the layout. No part of this combined edit was kept."
+      };
+    });
+
+    constraintReport.forEach(result => {
+      const coupled = failedCoupledOperations.some(operation => {
+        const originalSource = resolveCanonicalRoom(beforeAreaOperations, [], operation.source_room);
+        return originalSource?.id === result.roomId;
+      });
+      if (!coupled) return;
+      result.status = "not-feasible";
+      const room = rooms.find(item => item.id === result.roomId);
+      if (room) {
+        result.actual = {
+          width: room.width,
+          depth: room.height,
+          area: round(room.width * room.height)
+        };
+        result.actualAreaDelta = 0;
+      }
     });
   }
 
@@ -481,36 +564,33 @@ function applyAreaOperations(rooms, layout, operations) {
     }
 
     let plan = null;
-    const requestedReshape = operation.operation === "transfer_area" && source &&
-      Number(operation.requested_width) > 0 && Number(operation.requested_depth) > 0
-      ? reshapeSourceZone(
-          rooms,
-          layout,
-          source,
-          Number(operation.requested_width),
-          Number(operation.requested_depth)
-        )
-      : null;
-    if (requestedReshape) {
-      const donorChoice = chooseDonor(rooms, target, requestedReshape.releasedArea);
-      if (donorChoice && donorChoice.maximumArea >= requestedReshape.releasedArea - 0.5) {
-        plan = {
-          amount: requestedReshape.releasedArea,
-          moves: [{ transfer: donorChoice, amount: requestedReshape.releasedArea }],
-          sourceReshaped: true
-        };
-      }
-    } else if (explicitDonor && explicitDonor !== target) {
+
+    /*
+      IMPORTANT:
+      Exact room dimensions are handled later by applyRoomSizeConstraints().
+      The area layer only moves the NET area that must leave the explicit
+      source and reach the explicit target. It must not independently reshape
+      the source here, otherwise the same resize is applied twice.
+    */
+    if (explicitDonor && explicitDonor !== target) {
       const direct = describeBoundaryTransfer(explicitDonor, target);
       if (direct) {
-        plan = { amount: Math.min(requestedArea, direct.maximumArea), moves: [{ transfer: direct, amount: null }] };
+        plan = {
+          amount: Math.min(requestedArea, direct.maximumArea),
+          moves: [{ transfer: direct, amount: Math.min(requestedArea, direct.maximumArea) }],
+          conservative: true,
+          path: [explicitDonor.id, target.id]
+        };
       } else if (operation.operation === "transfer_area") {
         plan = describeSeparatedTransfer(rooms, source, target, requestedArea);
       }
     } else {
       const donorChoice = chooseDonor(rooms, target, requestedArea);
       if (donorChoice) {
-        plan = { amount: Math.min(requestedArea, donorChoice.maximumArea), moves: [{ transfer: donorChoice, amount: null }] };
+        plan = {
+          amount: Math.min(requestedArea, donorChoice.maximumArea),
+          moves: [{ transfer: donorChoice, amount: Math.min(requestedArea, donorChoice.maximumArea) }]
+        };
       }
     }
 
@@ -525,10 +605,28 @@ function applyAreaOperations(rooms, layout, operations) {
       continue;
     }
 
+    let moveApplicationFailed = false;
     for (const move of plan.moves) {
       const currentTransfer = describeBoundaryTransfer(move.transfer.donor, move.transfer.receiver);
-      if (currentTransfer) applyBoundaryTransfer(currentTransfer, move.amount || plan.amount);
+      const moveAmount = Number(move.amount || plan.amount);
+      if (!currentTransfer || currentTransfer.maximumArea + 0.2 < moveAmount) {
+        moveApplicationFailed = true;
+        break;
+      }
+      applyBoundaryTransfer(currentTransfer, moveAmount);
     }
+
+    if (moveApplicationFailed) {
+      restoreRoomSnapshots(rooms, snapshot);
+      layout.circulation.splice(0, layout.circulation.length, ...circulationSnapshot);
+      reports.push({
+        ...baseReport,
+        reason: "A conservative source-to-target transfer path could not remain valid while shared boundaries were moved. No substitute donor was used.",
+        suggestion: "Choose a nearer recipient or allow a broader local rearrangement."
+      });
+      continue;
+    }
+
     rooms.forEach(room => {
       room.x = round(room.x);
       room.y = round(room.y);
@@ -576,11 +674,51 @@ function applyAreaOperations(rooms, layout, operations) {
       totalDonorLoss - totalRecipientGain - circulationAreaChange
     );
     const targetBefore = snapshot.find(room => room.id === target.id);
+    const sourceBefore = source ? snapshot.find(room => room.id === source.id) : null;
     const actualArea = round(target.area - targetBefore.width * targetBefore.height);
+    const actualSourceLoss = source && sourceBefore
+      ? round(sourceBefore.width * sourceBefore.height - source.width * source.height)
+      : null;
+    const intermediateChanges = operation.operation === "transfer_area"
+      ? changes.filter(change =>
+          change.room_id !== source?.id &&
+          change.room_id !== target?.id
+        )
+      : [];
+    const maximumIntermediateNetChange = intermediateChanges.length
+      ? Math.max(...intermediateChanges.map(change => Math.abs(change.delta)))
+      : 0;
+    const tolerance = Math.max(1, requestedArea * 0.05);
+    const explicitSourcePreserved = operation.operation !== "transfer_area" ||
+      (actualSourceLoss != null && Math.abs(actualSourceLoss - requestedArea) <= tolerance);
+    const explicitTargetPreserved = Math.abs(actualArea - requestedArea) <= tolerance;
+    const intermediatesPreserved = operation.operation !== "transfer_area" || maximumIntermediateNetChange <= tolerance;
+    const semanticsPreserved = explicitSourcePreserved && explicitTargetPreserved && intermediatesPreserved;
+
+    if (operation.operation === "transfer_area" && !semanticsPreserved) {
+      restoreRoomSnapshots(rooms, snapshot);
+      layout.circulation.splice(0, layout.circulation.length, ...circulationSnapshot);
+      reports.push({
+        ...baseReport,
+        requested_area: round(requestedArea),
+        actual_area: 0,
+        explicit_source_preserved: false,
+        requested_source_loss: round(requestedArea),
+        actual_source_loss: 0,
+        requested_target_gain: round(requestedArea),
+        actual_target_gain: 0,
+        intermediate_rooms: [],
+        substitute_donors: [],
+        reason: "The planner could not preserve the explicit source-to-target transfer without changing another room's net area, so the whole transfer was rolled back.",
+        suggestion: "Choose a nearer recipient or allow a broader local rearrangement."
+      });
+      continue;
+    }
+
     reports.push({
       ...baseReport,
       actual_area: actualArea,
-      status: Math.abs(actualArea - requestedArea) <= Math.max(1, requestedArea * 0.05) ? "applied" : "approximated",
+      status: semanticsPreserved && Math.abs(actualArea - requestedArea) <= tolerance ? "applied" : "approximated",
       changes,
       circulation_changes: circulationChanges,
       total_donor_loss: totalDonorLoss,
@@ -588,6 +726,13 @@ function applyAreaOperations(rooms, layout, operations) {
       circulation_area_change: circulationAreaChange,
       residual_difference: residualDifference,
       footprint_changed: false,
+      explicit_source_preserved: explicitSourcePreserved,
+      requested_source_loss: operation.operation === "transfer_area" ? round(requestedArea) : null,
+      actual_source_loss: operation.operation === "transfer_area" ? actualSourceLoss : null,
+      requested_target_gain: round(requestedArea),
+      actual_target_gain: actualArea,
+      intermediate_rooms: intermediateChanges.map(change => change.room),
+      substitute_donors: [],
       reason: buildTransferReason(
         plan,
         target,
@@ -715,56 +860,151 @@ function restoreRoomSnapshots(rooms, snapshot) {
 
 function determineRequestedTransferArea(operation, source, target, unit) {
   const squareFactor = String(unit || "ft").toLowerCase() === "m" ? 1 / 10.7639 : 1;
-  if (Number(operation.amount_sqft) > 0) return Number(operation.amount_sqft) * squareFactor;
+
+  if (Number(operation.amount_sqft) > 0) {
+    return Number(operation.amount_sqft) * squareFactor;
+  }
+
   if (Number(operation.amount_percent) > 0) {
     const basis = operation.operation === "transfer_area" && source ? source.area : target.area;
     return basis * Number(operation.amount_percent) / 100;
   }
+
+  /*
+    For an explicit transfer paired with a persistent room constraint, derive
+    the amount from the SOURCE room's requested final size. This is the key
+    fix for conversations like:
+
+      "Make Bedroom 3 exactly 10 x 11."
+      "Family Lounge."
+
+    The second turn may contain no amount fields on transfer_area, but the
+    source room still carries its 10 x 11 requestedConstraint. Falling back
+    to 8% here would be incorrect.
+  */
+  if (operation.operation === "transfer_area" && source?.requestedConstraint) {
+    const constraint = source.requestedConstraint;
+    const currentArea = Number(source.width) * Number(source.height);
+    const width = Number(constraint.width);
+    const depth = Number(constraint.depth);
+    const absoluteArea = Number(constraint.area);
+    const areaDelta = Number(constraint.areaDelta);
+
+    let requestedSourceArea = null;
+    if (width > 0 && depth > 0) {
+      requestedSourceArea = width * depth;
+    } else if (absoluteArea > 0) {
+      requestedSourceArea = absoluteArea;
+    } else if (Number.isFinite(areaDelta) && areaDelta < 0) {
+      requestedSourceArea = currentArea + areaDelta;
+    }
+
+    if (requestedSourceArea != null) {
+      return Math.max(0, currentArea - requestedSourceArea);
+    }
+  }
+
   if (Number(operation.requested_width) > 0 && Number(operation.requested_depth) > 0) {
     const requestedArea = Number(operation.requested_width) * Number(operation.requested_depth);
-    if (operation.operation === "transfer_area" && source) return Math.max(0, source.area - requestedArea);
+    if (operation.operation === "transfer_area" && source) {
+      return Math.max(0, source.area - requestedArea);
+    }
     return Math.max(0, requestedArea - target.area);
   }
-  if (Number(operation.area) > 0) return Math.max(0, Number(operation.area) * squareFactor - target.area);
-  if (operation.priority === "high") return target.area * 2;
-  return (operation.operation === "transfer_area" && source ? source.area : target.area) * 0.08;
+
+  if (Number(operation.area) > 0) {
+    return Math.max(0, Number(operation.area) * squareFactor - target.area);
+  }
+
+  if (operation.priority === "high") {
+    return target.area * 2;
+  }
+
+  /*
+    Never invent the old generic 8% amount for an EXPLICIT source->target
+    transfer. If the user named both rooms but no quantity can be derived,
+    the operation must wait for clarification instead of silently substituting
+    a heuristic amount.
+  */
+  if (operation.operation === "transfer_area" && source && target) {
+    return 0;
+  }
+
+  return target.area * 0.08;
 }
 
 function describeSeparatedTransfer(rooms, source, target, requestedArea) {
-  const sourceReceivers = rooms
-    .filter(room => room !== source && room !== target)
-    .map(room => describeBoundaryTransfer(source, room))
-    .filter(Boolean)
-    .sort(compareTransferCandidates);
-  const targetDonors = rooms
-    .filter(room => room !== source && room !== target)
-    .map(room => describeBoundaryTransfer(room, target))
-    .filter(Boolean)
-    .sort(compareTransferCandidates);
-  if (!sourceReceivers.length || !targetDonors.length) return null;
+  if (!source || !target || source === target || !(requestedArea > 0.5)) return null;
 
-  for (const targetMove of targetDonors) {
-    const sourceMoves = [];
-    let remaining = Math.min(requestedArea, targetMove.maximumArea);
-    for (const sourceMove of sourceReceivers) {
-      if (sourceMove.receiver === targetMove.donor) continue;
-      const amount = Math.min(remaining, sourceMove.maximumArea);
-      if (amount > 0.5) sourceMoves.push({ transfer: sourceMove, amount });
-      remaining -= amount;
-      if (remaining <= 0.5 || sourceMoves.length === 2) break;
-    }
-    const amount = sourceMoves.reduce((sum, move) => sum + move.amount, 0);
-    if (amount > 0.5) {
-      return {
-        amount,
-        moves: [
-          ...sourceMoves,
-          { transfer: targetMove, amount }
-        ]
-      };
+  /*
+    Conservative multi-hop transfer.
+
+    The previous implementation used one set of rooms to absorb area from the
+    source and a DIFFERENT donor near the target. That conserved total area but
+    violated the user's semantics because unrelated rooms became net donors or
+    recipients.
+
+    Here we search for one continuous source -> ... -> target room chain. Every
+    intermediate room receives and then gives the SAME amount, so its net area
+    remains approximately unchanged. No substitute donor is allowed.
+  */
+  const maxEdges = 6;
+  const queue = [{ room: source, path: [source], bottleneck: Infinity }];
+  const bestSeen = new Map([[source.id, Infinity]]);
+  let bestPath = null;
+
+  while (queue.length) {
+    const current = queue.shift();
+    const currentRoom = current.room;
+    const edgeCount = current.path.length - 1;
+    if (edgeCount >= maxEdges) continue;
+
+    for (const next of rooms) {
+      if (next === currentRoom || current.path.includes(next)) continue;
+      const transfer = describeBoundaryTransfer(currentRoom, next);
+      if (!transfer || transfer.maximumArea <= 0.5) continue;
+
+      const bottleneck = Math.min(current.bottleneck, transfer.maximumArea);
+      const path = [...current.path, next];
+
+      if (next === target) {
+        const candidate = { path, bottleneck };
+        if (!bestPath ||
+            candidate.bottleneck > bestPath.bottleneck + 0.1 ||
+            (Math.abs(candidate.bottleneck - bestPath.bottleneck) <= 0.1 && candidate.path.length < bestPath.path.length)) {
+          bestPath = candidate;
+        }
+        continue;
+      }
+
+      const previousBest = bestSeen.get(next.id) || 0;
+      if (bottleneck <= previousBest + 0.1) continue;
+      bestSeen.set(next.id, bottleneck);
+      queue.push({ room: next, path, bottleneck });
     }
   }
-  return null;
+
+  if (!bestPath) return null;
+
+  const amount = Math.min(requestedArea, bestPath.bottleneck);
+  if (!(amount > 0.5)) return null;
+
+  const moves = [];
+  for (let index = 0; index < bestPath.path.length - 1; index++) {
+    const donor = bestPath.path[index];
+    const receiver = bestPath.path[index + 1];
+    const transfer = describeBoundaryTransfer(donor, receiver);
+    if (!transfer || transfer.maximumArea + 0.2 < amount) return null;
+    moves.push({ transfer, amount });
+  }
+
+  return {
+    amount,
+    moves,
+    conservative: true,
+    path: bestPath.path.map(room => room.id),
+    intermediateRooms: bestPath.path.slice(1, -1).map(room => room.id)
+  };
 }
 
 function repairBedroomAccessAfterTransfer(rooms, layout, affectedRooms) {
@@ -884,18 +1124,25 @@ function applyBoundaryTransfer(transfer, amount) {
 }
 
 function buildTransferReason(plan, target, requestedArea, actualArea, unit, changes, circulationAreaChange) {
-  const donors = changes.filter(change => change.delta < 0).map(change => change.room);
-  const otherRecipients = changes
-    .filter(change => change.delta > 0 && change.room !== target.name)
-    .map(change => `${change.room} +${change.delta}`);
   const requested = round(requestedArea);
   const actual = round(actualArea);
   const areaUnit = String(unit || "ft").toLowerCase() === "m" ? "sq m" : "sq ft";
-  const allocations = [
-    otherRecipients.length ? `other recipients: ${otherRecipients.join(", ")}` : null,
-    circulationAreaChange ? `local circulation: +${circulationAreaChange}` : null
-  ].filter(Boolean).join("; ");
-  return `${target.name} increased by ${actual} ${areaUnit} toward the ${requested} requested. Donor losses: ${donors.join(", ")}.${allocations ? ` Additional allocations: ${allocations} ${areaUnit}.` : ""}`;
+  const sourceChange = changes.find(change => change.delta < 0);
+  const intermediateChanges = changes.filter(change =>
+    change !== sourceChange &&
+    change.room !== target.name &&
+    Math.abs(change.delta) > 0.1
+  );
+  const pathText = Array.isArray(plan?.path) && plan.path.length > 2
+    ? ` The transfer propagated through ${plan.path.length - 2} intermediate room(s) without intentionally using substitute donors.`
+    : "";
+  const circulationText = circulationAreaChange
+    ? ` Local circulation changed by ${round(circulationAreaChange)} ${areaUnit}.`
+    : "";
+  const intermediateText = intermediateChanges.length
+    ? ` Net intermediate changes: ${intermediateChanges.map(change => `${change.room} ${change.delta > 0 ? "+" : ""}${change.delta}`).join(", ")} ${areaUnit}.`
+    : "";
+  return `${target.name} gained ${actual} ${areaUnit} toward the explicit ${requested} ${areaUnit} source-to-target request.${pathText}${intermediateText}${circulationText}`;
 }
 
 function evaluateLayoutOptimization(rooms, layout, operation) {
@@ -6034,5 +6281,3 @@ function round(
       factor
     ) /
     factor
-  );
-}
