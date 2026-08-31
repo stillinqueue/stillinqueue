@@ -28,7 +28,7 @@ export const DESIGN_PROFILES = {
       },
 
       kitchen: {
-        minWidth: 6,
+        minWidth: 7,
         minHeight: 9,
         preferredWidth: 8,
         preferredHeight: 10,
@@ -224,6 +224,31 @@ export const DESIGN_PROFILES = {
       accessibilityAware: true
     }
   }
+};
+
+
+export const PLANNING_ROOM_POLICIES = {
+  highProtectionTypes: [
+    "masterBedroom", "bedroom", "kitchen", "attachedToilet", "commonToilet"
+  ],
+  flexibleTypes: [
+    "familyLounge", "dining", "living", "foyer", "corridor", "study",
+    "utility", "store"
+  ],
+  outdoorTypes: ["balcony", "deck", "sitout", "parking"],
+  donorPreference: [
+    "corridor", "store", "foyer", "familyLounge", "dining", "living",
+    "study", "utility", "bedroom", "masterBedroom", "kitchen",
+    "attachedToilet", "commonToilet"
+  ],
+  softAreaPercent: {
+    slightly: 5,
+    little: 8,
+    some: 8,
+    much: 15
+  },
+  minimumPassageWidthFt: 3,
+  maximumAspectRatio: 3
 };
 
 

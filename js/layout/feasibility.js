@@ -6,6 +6,10 @@ import {
   calculateBuildableArea
 } from "./buildable-area.js";
 
+import {
+  PLANNING_ROOM_POLICIES
+} from "./plan-schema.js";
+
 
 export function checkPlanFeasibility(requirements) {
   const country =
@@ -269,6 +273,32 @@ export function validateGeneratedLayout(layout) {
   });
   if (belowMinimum.length) errors.push("room-below-minimum");
 
+  const awkwardAspectRatios = rooms.filter(room =>
+    Math.max(room.width / room.height, room.height / room.width) >
+      PLANNING_ROOM_POLICIES.maximumAspectRatio
+  );
+  if (awkwardAspectRatios.length) errors.push("room-aspect-ratio-impractical");
+
+  const plotUnit = String(layout?.unit || layout?.plot?.unit || "ft").toLowerCase();
+  const minimumPassageWidth = plotUnit === "m"
+    ? PLANNING_ROOM_POLICIES.minimumPassageWidthFt * 0.3048
+    : PLANNING_ROOM_POLICIES.minimumPassageWidthFt;
+  const narrowPassages = (layout?.circulation || []).filter(item =>
+    Math.min(item.width, item.height) + tolerance < minimumPassageWidth
+  );
+  if (narrowPassages.length) errors.push("passage-below-practical-minimum");
+
+  const exteriorOpeningErrors = buildable ? rooms.filter(room => {
+    if (!room.requiresExteriorWall) return false;
+    return !(
+      Math.abs(room.x - buildable.x) < tolerance ||
+      Math.abs(room.y - buildable.y) < tolerance ||
+      Math.abs(room.x + room.width - buildable.x - buildable.width) < tolerance ||
+      Math.abs(room.y + room.height - buildable.y - buildable.height) < tolerance
+    );
+  }) : [];
+  if (exteriorOpeningErrors.length) errors.push("required-exterior-opening-unavailable");
+
   const attachedToiletErrors = rooms.filter(room => {
     if (room.type !== "attachedToilet") return false;
     const bedroom = rooms.find(candidate => candidate.id === room.attachedTo);
@@ -298,6 +328,9 @@ export function validateGeneratedLayout(layout) {
     overlaps,
     outOfBounds: outOfBounds.map(room => room.id),
     belowMinimum: belowMinimum.map(room => room.id),
+    awkwardAspectRatios: awkwardAspectRatios.map(room => room.id),
+    narrowPassages: narrowPassages.map(item => item.id),
+    exteriorOpeningErrors: exteriorOpeningErrors.map(room => room.id),
     attachedToiletErrors: attachedToiletErrors.map(room => room.id),
     exteriorBalconyErrors: exteriorBalconyErrors.map(room => room.id),
     calculatedRoomArea: calculatedArea,

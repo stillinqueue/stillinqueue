@@ -472,6 +472,80 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                         "additionalProperties": False,
                     },
                 },
+                "layout_operations": {
+                    "type": "array",
+                    "description": (
+                        "Canonical geometry operations interpreted from the "
+                        "user's latest and previously active layout edits."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": [
+                                    "swap", "adjacent", "near", "position", "resize",
+                                    "transfer_area", "redistribute_area", "optimize_layout",
+                                ],
+                            },
+                            "source_room": {
+                                "type": ["string", "null"],
+                                "enum": [
+                                    "living", "familyLounge", "dining", "kitchen", "utility",
+                                    "masterBedroom", "bedroom2", "bedroom3", "bedroom4",
+                                    "commonBathroom", "masterBathroom", "bathroom2", "bathroom3",
+                                    "bathroom4", "foyer", "passage", "balcony", "parking",
+                                    "study", "storage", "sitout", None,
+                                ],
+                            },
+                            "target_room": {
+                                "type": ["string", "null"],
+                                "enum": [
+                                    "living", "familyLounge", "dining", "kitchen", "utility",
+                                    "masterBedroom", "bedroom2", "bedroom3", "bedroom4",
+                                    "commonBathroom", "masterBathroom", "bathroom2", "bathroom3",
+                                    "bathroom4", "foyer", "passage", "balcony", "parking",
+                                    "study", "storage", "sitout", None,
+                                ],
+                            },
+                            "donor_room": {
+                                "type": ["string", "null"],
+                                "enum": [
+                                    "living", "familyLounge", "dining", "kitchen", "utility",
+                                    "masterBedroom", "bedroom2", "bedroom3", "bedroom4",
+                                    "commonBathroom", "masterBathroom", "bathroom2", "bathroom3",
+                                    "bathroom4", "foyer", "passage", "balcony", "parking",
+                                    "study", "storage", "sitout", None,
+                                ],
+                            },
+                            "side": {
+                                "type": ["string", "null"],
+                                "enum": ["left", "right", "top", "bottom", None],
+                            },
+                            "width": {"type": ["number", "null"]},
+                            "depth": {"type": ["number", "null"]},
+                            "area": {"type": ["number", "null"]},
+                            "amount_sqft": {"type": ["number", "null"]},
+                            "amount_percent": {"type": ["number", "null"]},
+                            "requested_width": {"type": ["number", "null"]},
+                            "requested_depth": {"type": ["number", "null"]},
+                            "priority": {
+                                "type": "string",
+                                "enum": ["low", "normal", "high"],
+                            },
+                            "preserve_total_area": {"type": "boolean"},
+                            "preserve_room_usability": {"type": "boolean"},
+                            "reason": {"type": "string"},
+                        },
+                        "required": [
+                            "operation", "source_room", "target_room", "donor_room", "side",
+                            "width", "depth", "area", "amount_sqft", "amount_percent",
+                            "requested_width", "requested_depth", "priority",
+                            "preserve_total_area", "preserve_room_usability", "reason",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
                 "room_constraints": {
                     "type": "array",
                     "description": (
@@ -587,6 +661,7 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                 "site_context",
                 "special_requirements",
                 "room_preferences",
+                "layout_operations",
                 "room_constraints",
                 "target_internal_area",
                 "layout_directives",
@@ -852,6 +927,52 @@ IMPORTANT BEHAVIOUR
         sets target_internal_area, NOT plot dimensions. Keep the previous target
         unless explicitly changed or removed. A stated plot/site area remains plot
         information and must not be copied into target_internal_area.
+
+20. Convert every room movement request into canonical "layout_operations".
+        This is the authoritative geometry instruction; do not encode a swap as two
+        room_preferences. Canonical room IDs are: living, familyLounge, dining,
+        kitchen, utility, masterBedroom, bedroom2, bedroom3, bedroom4,
+        commonBathroom, masterBathroom, bathroom2, bathroom3, bathroom4, foyer,
+        passage, balcony, parking. Normalize aliases strictly: "bed room 2",
+        "bed2", and "second bedroom" are bedroom2; "family room", "family lounge",
+        and a distinct "lounge" are familyLounge; "master room" is masterBedroom.
+        Never collapse a numbered bedroom to generic "bedroom".
+        - "Bedroom 2 in place of Family Lounge" and reciprocal/exchange wording
+            means one operation: swap bedroom2 with familyLounge.
+        - "Bedroom 2 near Family Lounge" means near, not swap.
+        - "Bedroom 2 beside Family Lounge" means adjacent, not swap.
+        - "Master bedroom on left" means position with side=left.
+        Copy previously active operations from current_state, replace an older
+        operation when the user changes the same source relationship, and never
+        emit duplicate identical operations.
+
+21. Interpret practical area-edit intent into canonical operations:
+        - "reduce bedroom 3 and give that space to living" -> transfer_area,
+            source_room=bedroom3, target_room=living, preserve_total_area=true.
+        - "kitchen bigger but don't increase the house" -> redistribute_area,
+            target_room=kitchen, source_room=null, donor_room=null,
+            preserve_total_area=true. The deterministic planner chooses donors.
+        - "Bedroom 2 is too large, give some space to family lounge" ->
+            transfer_area from bedroom2 to familyLounge.
+        - "master bedroom 14x16, take required area from bedroom 3" -> resize with
+            target_room=masterBedroom, donor_room=bedroom3, requested dimensions set.
+        - "make the plan more practical" -> optimize_layout. This requests a local
+            evaluation/proposal, never a wholesale redesign.
+        Interpret "a little" or "some" as amount_percent=8; "slightly" as 5;
+        "much bigger" as 15; "as large as possible" leaves both amount fields null
+        with priority=high. Preserve usability unless the user explicitly overrides
+        it. Never invent geometry or claim a deterministic result before Render.
+        current_state may include a compact current_layout_summary with canonical
+        IDs, dimensions, areas, and validation status. Use it only to explain likely
+        planning choices; JavaScript remains authoritative for donor selection and
+        all geometry outcomes.
+
+    22. Resolve instruction conflicts using this order: latest explicit user
+        instruction, locked/confirmed constraints, explicit dimensions, adjacency,
+        inferred preferences, defaults. If a latest move directly conflicts with a
+        locked instruction, ask for confirmation in reply and do not emit the
+        conflicting operation until confirmed. A newer explicit resize replaces the
+        older constraint for that room rather than accumulating both.
 """.strip()
 
 
@@ -862,6 +983,28 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
     room_preferences = state.get("room_preferences")
     if not isinstance(room_preferences, list):
         room_preferences = []
+
+    layout_operations = state.get("layout_operations")
+    if not isinstance(layout_operations, list):
+        layout_operations = []
+    deduplicated_operations: list[dict[str, Any]] = []
+    operation_keys: set[tuple[Any, ...]] = set()
+    for operation in layout_operations:
+        if not isinstance(operation, dict):
+            continue
+        key = (
+            operation.get("operation"), operation.get("source_room"),
+            operation.get("target_room"), operation.get("donor_room"),
+            operation.get("side"), operation.get("width"), operation.get("depth"),
+            operation.get("area"), operation.get("amount_sqft"),
+            operation.get("amount_percent"), operation.get("requested_width"),
+            operation.get("requested_depth"), operation.get("priority"),
+            operation.get("preserve_total_area"), operation.get("preserve_room_usability"),
+        )
+        if key in operation_keys:
+            continue
+        operation_keys.add(key)
+        deduplicated_operations.append(operation)
 
     room_constraints = state.get("room_constraints")
     if not isinstance(room_constraints, list):
@@ -878,6 +1021,10 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
     layout_directives = state.get("layout_directives")
     if not isinstance(layout_directives, dict):
         layout_directives = {}
+
+    current_layout_summary = state.get("current_layout_summary")
+    if not isinstance(current_layout_summary, dict):
+        current_layout_summary = None
 
     return {
         "plot": {
@@ -896,12 +1043,14 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
         "site_context": state.get("site_context"),
         "special_requirements": special_requirements,
         "room_preferences": room_preferences,
+        "layout_operations": deduplicated_operations,
         "room_constraints": room_constraints,
         "target_internal_area": {
             "area": target_internal_area.get("area"),
             "unit": target_internal_area.get("unit"),
         },
         "layout_directives": layout_directives,
+        "current_layout_summary": current_layout_summary,
     }
 
 

@@ -621,6 +621,9 @@ function applyRoomConstraints(rooms, constraints, plotUnit) {
   const aliases = room => {
     const values = [room.id, room.name, room.type];
     if (room.id === "bedroom-1") values.push("master", "master bedroom", "masterbedroom");
+    const bedroomNumber = room.id.match(/^bedroom-(\d+)$/)?.[1];
+    if (bedroomNumber) values.push(`bedroom${bedroomNumber}`, `bed room ${bedroomNumber}`);
+    if (room.id === "family-lounge") values.push("familyLounge", "family room", "lounge");
     if (room.id === "living") values.push("living dining", "living room");
     if (room.id === "common-toilet") values.push("common bathroom", "common washroom");
     return values.map(normalize);

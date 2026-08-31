@@ -933,6 +933,8 @@
         // Raw {room, preference} pairs from AI state.room_preferences, resolved
         // into concrete adjacency swaps by js/layout/adjacency.js at render time.
         roomPreferences: [],
+        layoutOperations: [],
+        appliedLayoutOperationKeys: [],
 
         // Explicit dimensions/areas and usable-area target remain separate
         // from plot dimensions throughout the deterministic planner flow.
@@ -942,6 +944,16 @@
 
       function setStatus(html) {
         statusEl.innerHTML = html;
+      }
+
+      function layoutOperationKey(operation) {
+        return [
+          operation.operation, operation.source_room, operation.target_room,
+          operation.donor_room, operation.side, operation.width, operation.depth,
+          operation.area, operation.amount_sqft, operation.amount_percent,
+          operation.requested_width, operation.requested_depth,
+          operation.priority, operation.preserve_total_area, operation.preserve_room_usability
+        ].join("|");
       }
 
       function directionName(code) {
@@ -1471,6 +1483,12 @@ Click “Render Concept 1” to generate the technical blueprint.`;
 
         if (Array.isArray(s.room_preferences)) {
           layoutState.roomPreferences = s.room_preferences;
+        }
+
+        if (Array.isArray(s.layout_operations)) {
+          layoutState.layoutOperations = s.layout_operations.filter((operation, index, all) =>
+            index === all.findIndex(candidate => layoutOperationKey(candidate) === layoutOperationKey(operation))
+          );
         }
 
         if (Array.isArray(s.room_constraints)) {
@@ -2653,7 +2671,10 @@ Click “Render Concept 1” to generate the technical blueprint.`;
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               message: text,
-              state: aiState,
+              state: {
+                ...(aiState || {}),
+                current_layout_summary: currentLayoutSummary()
+              },
               history: historyForApi
             })
           });
@@ -2885,6 +2906,80 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         }
 
         return lines.join("\n");
+      }
+
+      function formatLayoutOperationReport(report) {
+        if (!Array.isArray(report) || !report.length) return null;
+        const labels = {
+          familyLounge: "Family Lounge",
+          masterBedroom: "Master Bedroom",
+          bedroom2: "Bedroom 2",
+          bedroom3: "Bedroom 3",
+          bedroom4: "Bedroom 4",
+          commonBathroom: "Common Bathroom"
+        };
+        const label = id => labels[id] || String(id || "room").replace(/([A-Z])/g, " $1").replace(/^./, value => value.toUpperCase());
+        return report.map(result => {
+          const source = label(result.source_room);
+          const target = result.target_room ? label(result.target_room) : null;
+          if (["transfer_area", "redistribute_area", "resize"].includes(result.operation)) {
+            const request = result.operation === "transfer_area"
+              ? `Transfer area from ${source} to ${target}`
+              : `Increase ${target || source} using local redistribution`;
+            const changes = Array.isArray(result.changes) && result.changes.length
+              ? result.changes.map(change =>
+                  `${change.room}: ${change.before_area.toFixed(1)} → ${change.after_area.toFixed(1)} sq ${window.currentConstraintLayout?.unit || "ft"}`
+                ).join("\n")
+              : "No geometry changed.";
+            const suggestion = result.suggestion
+              ? "\n\nSUGGESTION\n" + result.suggestion
+              : "";
+            return "REQUEST\n" + request +
+              "\n\nRESULT\n" + result.reason +
+              "\n\nCHANGES\n" + changes +
+              "\n\nSTATUS\n" + result.status + suggestion;
+          }
+          if (result.operation === "optimize_layout") {
+            const suggestions = Array.isArray(result.suggestions)
+              ? result.suggestions.map((suggestion, index) => `${index + 1}. ${suggestion}`).join("\n")
+              : result.reason;
+            return `PRACTICAL LAYOUT REVIEW\n\n${suggestions}\n\nSTATUS\nproposed — confirmation required before geometry changes`;
+          }
+          if (result.status === "applied" && result.operation === "swap") return `✓ Swapped ${source} ↔ ${target}`;
+          if (result.status === "applied") return `✓ ${source}: ${result.reason}`;
+          if (result.status === "approximated") return `~ ${source}${target ? ` ↔ ${target}` : ""}: ${result.reason}`;
+          return `⚠ ${source}${target ? ` ↔ ${target}` : ""} ${result.operation} could not be applied.\nReason: ${result.reason}`;
+        }).join("\n");
+      }
+
+      function currentLayoutSummary() {
+        const layout = window.currentConstraintLayout;
+        if (!layout?.success) return null;
+        const canonicalId = room => ({
+          "family-lounge": "familyLounge",
+          "bedroom-1": "masterBedroom",
+          "bedroom-2": "bedroom2",
+          "bedroom-3": "bedroom3",
+          "bedroom-4": "bedroom4",
+          "common-toilet": "commonBathroom",
+          "attached-toilet-1": "masterBathroom",
+          "attached-toilet-2": "bathroom2"
+        })[room.id] || room.id;
+        return {
+          unit: layout.unit,
+          rooms: layout.rooms.map(room => ({
+            id: canonicalId(room),
+            name: room.name,
+            width: room.width,
+            depth: room.height,
+            area: room.area
+          })),
+          validation: {
+            accessible: layout.accessibilityReport?.valid === true,
+            geometry_valid: layout.validationReport?.valid === true
+          },
+          internal_area: layout.areaSummary?.calculatedInternalArea || null
+        };
       }
 
       /*
@@ -3158,7 +3253,10 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           const structuredSmaller = Array.isArray(layoutState.layoutDirectives?.rooms_scaled_smaller)
             ? layoutState.layoutDirectives.rooms_scaled_smaller
             : [];
-          if (structuredBigger.length || structuredSmaller.length) return;
+          const hasStructuredAreaOperation = (layoutState.layoutOperations || []).some(operation =>
+            ["resize", "transfer_area", "redistribute_area"].includes(operation.operation)
+          );
+          if (structuredBigger.length || structuredSmaller.length || hasStructuredAreaOperation) return;
 
           for (
             const content
@@ -3764,9 +3862,12 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
         );
 
         preferences.roomAdjacency = layoutState.roomPreferences || [];
+        preferences.layoutOperations = (layoutState.layoutOperations || []).filter(operation =>
+          !layoutState.appliedLayoutOperationKeys.includes(layoutOperationKey(operation))
+        );
         preferences.roomConstraints = layoutState.roomConstraints || [];
 
-        return {
+        const requirements = {
           country,
           plot: {
             width: plotWidth,
@@ -3790,6 +3891,13 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
             : null,
           preferences
         };
+        if (
+          window.currentConstraintLayout?.success &&
+          (preferences.layoutOperations.length || preferences.roomConstraints.length)
+        ) {
+          requirements.currentLayout = window.currentConstraintLayout;
+        }
+        return requirements;
       }
 
       function directionCodeToWord(code) {
@@ -3931,6 +4039,12 @@ This is useful test information. The planner has refused to draw a knowingly inv
 
           window.currentConstraintLayout = layout;
           window.currentConstraintRequirements = requirements;
+          for (const operation of requirements.preferences.layoutOperations || []) {
+            const key = layoutOperationKey(operation);
+            if (!layoutState.appliedLayoutOperationKeys.includes(key)) {
+              layoutState.appliedLayoutOperationKeys.push(key);
+            }
+          }
 
           showBlueprintTab();
           showBuyerSubtab();
@@ -3987,6 +4101,17 @@ Buyer Plan uses the same geometry with a softer presentation style.${adaptations
             addMessage(
               "assistant",
               `Positional request check (from the geometry engine, not the chat model):\n\n${adjacencyMessage}`
+            );
+          }
+
+          const operationMessage = formatLayoutOperationReport(layout.operationReport);
+          if (operationMessage) {
+            const hasAreaOperation = layout.operationReport.some(result =>
+              ["resize", "transfer_area", "redistribute_area", "optimize_layout"].includes(result.operation)
+            );
+            addMessage(
+              "assistant",
+              `${hasAreaOperation ? "LAYOUT CHANGES" : "POSITIONAL CHANGES"}\n\n${operationMessage}`
             );
           }
 

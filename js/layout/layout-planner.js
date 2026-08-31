@@ -12,11 +12,14 @@ import {
 } from "./feasibility.js";
 
 import {
-  getDesignProfile
+  getDesignProfile,
+  PLANNING_ROOM_POLICIES
 } from "./plan-schema.js";
 
 import {
-  applyAdjacencyPairs
+  applyAdjacencyPairs,
+  applyLayoutOperations,
+  resolveCanonicalRoom
 } from "./adjacency.js";
 
 import {
@@ -44,6 +47,19 @@ import {
 */
 
 export function generateLayout(requirements) {
+  if (requirements.currentLayout?.success) {
+    return postProcessLayout({
+      ...requirements.currentLayout,
+      rooms: requirements.currentLayout.rooms.map(room => ({ ...room })),
+      circulation: (requirements.currentLayout.circulation || []).map(item => ({ ...item })),
+      entrances: (requirements.currentLayout.entrances || []).map(item => ({ ...item })),
+      operationReport: [],
+      adjacencyReport: [],
+      constraintReport: [],
+      success: true
+    }, requirements);
+  }
+
   const bhk =
     Number(
       requirements.house?.bhk ||
@@ -139,6 +155,20 @@ function postProcessLayout(layout, requirements) {
   }
 
   const rooms = layout.rooms.map(room => ({ ...room }));
+  const requestedProgram = new Map(
+    buildRoomProgram(requirements).map(room => [room.id, room])
+  );
+  for (const room of rooms) {
+    const requested = requestedProgram.get(room.id);
+    if (!requested) continue;
+    room.minWidth = requested.minWidth;
+    room.minHeight = requested.minHeight;
+    room.preferredWidth = requested.preferredWidth;
+    room.preferredHeight = requested.preferredHeight;
+    room.requestedSizeScale = requested.requestedSizeScale;
+    if (requested.requestedConstraint) room.requestedConstraint = requested.requestedConstraint;
+    else delete room.requestedConstraint;
+  }
 
   const beforeBalcony = rooms.map(room => ({ ...room }));
   const balconyReport = ensureExteriorBalcony(rooms, layout.buildableArea, requirements);
@@ -151,15 +181,42 @@ function postProcessLayout(layout, requirements) {
     });
   }
 
+  const circulationRepairReport = repairCommonToiletAccess(rooms, layout);
+
   // Satisfy chat-driven "place X near/adjacent to Y" requests (works across
   // every internal strategy, including the rigid hand-built templates that
   // otherwise ignore preferredNear entirely) before reclaiming dead space.
   // Same-footprint swaps can never introduce overlaps, so this is folded
   // into the "original" snapshot the growth pass falls back to on failure.
   const roomPreferences = requirements?.preferences?.roomAdjacency;
+  const layoutOperations = requirements?.preferences?.layoutOperations;
+  const positionalOperations = Array.isArray(layoutOperations)
+    ? layoutOperations.filter(operation => ["swap", "adjacent", "near", "position"].includes(operation.operation))
+    : [];
+  const areaOperations = Array.isArray(layoutOperations)
+    ? layoutOperations.filter(operation => ["resize", "transfer_area", "redistribute_area", "optimize_layout"].includes(operation.operation))
+    : [];
   let adjacencyReport = [];
+  let operationReport = [];
   const beforeAdjacency = rooms.map(room => ({ ...room }));
-  if (Array.isArray(roomPreferences) && roomPreferences.length) {
+  if (positionalOperations.length) {
+    operationReport = applyLayoutOperations(rooms, layout.circulation, positionalOperations, buildable);
+    repairAttachedBathroomsAfterOperations(rooms, layout, operationReport);
+    const operationChangedGeometry = rooms.some((room, index) =>
+      room.x !== beforeAdjacency[index]?.x ||
+      room.y !== beforeAdjacency[index]?.y ||
+      room.width !== beforeAdjacency[index]?.width ||
+      room.height !== beforeAdjacency[index]?.height
+    );
+    if (operationChangedGeometry && !hasValidCandidateRooms(layout, rooms)) {
+      rooms.splice(0, rooms.length, ...beforeAdjacency);
+      operationReport = operationReport.map(result =>
+        ["applied", "approximated"].includes(result.status)
+          ? { ...result, status: "rejected", reason: "The operation would break room access, attachments, or layout validity." }
+          : result
+      );
+    }
+  } else if (!areaOperations.length && Array.isArray(roomPreferences) && roomPreferences.length) {
     adjacencyReport = applyAdjacencyPairs(rooms, layout.circulation, roomPreferences);
     if (!hasValidCandidateRooms(layout, rooms)) {
       rooms.splice(0, rooms.length, ...beforeAdjacency);
@@ -171,8 +228,26 @@ function postProcessLayout(layout, requirements) {
     }
   }
 
+  if (areaOperations.length) {
+    operationReport.push(...applyAreaOperations(rooms, layout, areaOperations));
+  }
+
   const beforeConstraints = rooms.map(room => ({ ...room }));
   const constraintReport = applyRoomSizeConstraints(rooms, layout);
+  const constrainedRooms = constraintReport
+    .map(result => rooms.find(room => room.id === result.roomId))
+    .filter(Boolean);
+  const constrainedBedroomOperations = constrainedRooms
+    .filter(room => ["bedroom", "masterBedroom"].includes(room.type))
+    .map(room => ({
+      status: "applied",
+      source_room: room.id === "bedroom-1"
+        ? "masterBedroom"
+        : `bedroom${room.id.split("-")[1]}`,
+      target_room: null
+    }));
+  repairAttachedBathroomsAfterOperations(rooms, layout, constrainedBedroomOperations);
+  repairBedroomAccessAfterTransfer(rooms, layout, constrainedRooms);
   if (!hasValidCandidateRooms(layout, rooms)) {
     rooms.splice(0, rooms.length, ...beforeConstraints);
     constraintReport.forEach(result => {
@@ -181,8 +256,6 @@ function postProcessLayout(layout, requirements) {
       if (room) result.actual = { width: room.width, depth: room.height, area: room.area };
     });
   }
-
-  const circulationRepairReport = repairCommonToiletAccess(rooms, layout);
 
   const originalRooms = rooms.map(room => ({ ...room }));
   const growable = rooms.filter(room => room.type !== "corridor");
@@ -234,11 +307,11 @@ function postProcessLayout(layout, requirements) {
   }
 
   // Larger public/social rooms claim leftover space before small service rooms.
-  const growthOrder = growable
-    .filter(room => !room.requestedConstraint && !room.requestedSizeScale)
-    .sort(
-    (a, b) => b.width * b.height - a.width * a.height
-  );
+  const growthOrder = requirements.currentLayout
+    ? []
+    : growable
+        .filter(room => !room.requestedConstraint && !room.requestedSizeScale && !room.operationLocked)
+        .sort((a, b) => b.width * b.height - a.width * a.height);
   for (const room of growthOrder) {
     growRight(room);
     growDown(room);
@@ -273,6 +346,7 @@ function postProcessLayout(layout, requirements) {
       ...layout,
       rooms: originalRooms,
       adjacencyReport,
+      operationReport,
       constraintReport,
       balconyReport,
       circulationRepairReport,
@@ -302,6 +376,7 @@ function postProcessLayout(layout, requirements) {
     ...layout,
     rooms,
     adjacencyReport,
+    operationReport,
     constraintReport,
     balconyReport,
     circulationRepairReport,
@@ -317,6 +392,592 @@ function postProcessLayout(layout, requirements) {
       buildableUtilizationPercent: utilizationPercent
     }
   });
+}
+
+function applyAreaOperations(rooms, layout, operations) {
+  const reports = [];
+
+  for (const operation of operations) {
+    if (operation.operation === "optimize_layout") {
+      reports.push(evaluateLayoutOptimization(rooms, layout, operation));
+      continue;
+    }
+
+    const snapshot = rooms.map(room => ({ ...room }));
+    const circulationSnapshot = (layout.circulation || []).map(item => ({ ...item }));
+    const source = operation.source_room
+      ? resolveCanonicalRoom(rooms, layout.circulation || [], operation.source_room)
+      : null;
+    const targetId = operation.target_room || (operation.operation === "resize" ? operation.source_room : null);
+    const target = targetId
+      ? resolveCanonicalRoom(rooms, layout.circulation || [], targetId)
+      : null;
+    const explicitDonorId = operation.donor_room ||
+      (operation.operation === "transfer_area" ? operation.source_room : null);
+    const explicitDonor = explicitDonorId
+      ? resolveCanonicalRoom(rooms, layout.circulation || [], explicitDonorId)
+      : null;
+    const baseReport = {
+      operation: operation.operation,
+      source_room: operation.source_room || null,
+      target_room: targetId || null,
+      requested_area: null,
+      actual_area: 0,
+      status: "rejected",
+      changes: [],
+      circulation_changes: [],
+      total_donor_loss: 0,
+      total_recipient_gain: 0,
+      circulation_area_change: 0,
+      residual_difference: 0,
+      conservation_tolerance: 0.2,
+      footprint_before: footprintSummary(layout.buildableArea),
+      footprint_after: footprintSummary(layout.buildableArea),
+      footprint_changed: false,
+      interpretation: operation.reason || "Practical local area adjustment"
+    };
+
+    if (!target) {
+      reports.push({ ...baseReport, reason: "The target room is not present in the generated layout." });
+      continue;
+    }
+    if (operation.operation === "transfer_area" && !source) {
+      reports.push({ ...baseReport, reason: "The named source room is not present in the generated layout." });
+      continue;
+    }
+
+    const requestedArea = determineRequestedTransferArea(operation, source, target, layout.unit);
+    baseReport.requested_area = round(requestedArea);
+    if (!(requestedArea > 0)) {
+      reports.push({ ...baseReport, reason: "The request does not produce a positive transferable area." });
+      continue;
+    }
+
+    let plan = null;
+    const requestedReshape = operation.operation === "transfer_area" && source &&
+      Number(operation.requested_width) > 0 && Number(operation.requested_depth) > 0
+      ? reshapeSourceZone(
+          rooms,
+          layout,
+          source,
+          Number(operation.requested_width),
+          Number(operation.requested_depth)
+        )
+      : null;
+    if (requestedReshape) {
+      const donorChoice = chooseDonor(rooms, target, requestedReshape.releasedArea);
+      if (donorChoice && donorChoice.maximumArea >= requestedReshape.releasedArea - 0.5) {
+        plan = {
+          amount: requestedReshape.releasedArea,
+          moves: [{ transfer: donorChoice, amount: requestedReshape.releasedArea }],
+          sourceReshaped: true
+        };
+      }
+    } else if (explicitDonor && explicitDonor !== target) {
+      const direct = describeBoundaryTransfer(explicitDonor, target);
+      if (direct) {
+        plan = { amount: Math.min(requestedArea, direct.maximumArea), moves: [{ transfer: direct, amount: null }] };
+      } else if (operation.operation === "transfer_area") {
+        plan = describeSeparatedTransfer(rooms, source, target, requestedArea);
+      }
+    } else {
+      const donorChoice = chooseDonor(rooms, target, requestedArea);
+      if (donorChoice) {
+        plan = { amount: Math.min(requestedArea, donorChoice.maximumArea), moves: [{ transfer: donorChoice, amount: null }] };
+      }
+    }
+
+    if (!plan || !(plan.amount > 0.5)) {
+      restoreRoomSnapshots(rooms, snapshot);
+      layout.circulation.splice(0, layout.circulation.length, ...circulationSnapshot);
+      reports.push({
+        ...baseReport,
+        reason: "No adjacent room has sufficient transferable area while maintaining practical minimum dimensions and access.",
+        suggestion: "Allow a neighboring flexible room to become smaller or permit a larger local rearrangement."
+      });
+      continue;
+    }
+
+    for (const move of plan.moves) {
+      const currentTransfer = describeBoundaryTransfer(move.transfer.donor, move.transfer.receiver);
+      if (currentTransfer) applyBoundaryTransfer(currentTransfer, move.amount || plan.amount);
+    }
+    rooms.forEach(room => {
+      room.x = round(room.x);
+      room.y = round(room.y);
+      room.width = round(room.width);
+      room.height = round(room.height);
+      room.area = round(room.width * room.height);
+    });
+    repairBedroomAccessAfterTransfer(rooms, layout, [source, target].filter(Boolean));
+
+    if (!hasValidCandidateRooms(layout, rooms)) {
+      restoreRoomSnapshots(rooms, snapshot);
+      layout.circulation.splice(0, layout.circulation.length, ...circulationSnapshot);
+      reports.push({
+        ...baseReport,
+        reason: "The best local transfer would violate room usability, access, or geometry.",
+        suggestion: "Permit a smaller increase or a wider local rearrangement."
+      });
+      continue;
+    }
+
+    const changes = rooms.flatMap((room, index) => {
+      const before = snapshot[index];
+      const beforeArea = round(before.width * before.height);
+      const afterArea = round(room.width * room.height);
+      return Math.abs(afterArea - beforeArea) > 0.1
+        ? [{
+            room: room.name,
+            room_id: room.id,
+            before_area: beforeArea,
+            after_area: afterArea,
+            delta: round(afterArea - beforeArea)
+          }]
+        : [];
+    });
+    const circulationChanges = buildCirculationChanges(circulationSnapshot, layout.circulation || []);
+    const totalDonorLoss = round(-changes
+      .filter(change => change.delta < 0)
+      .reduce((sum, change) => sum + change.delta, 0));
+    const totalRecipientGain = round(changes
+      .filter(change => change.delta > 0)
+      .reduce((sum, change) => sum + change.delta, 0));
+    const circulationAreaChange = round(circulationChanges
+      .reduce((sum, change) => sum + change.conservation_delta, 0));
+    const residualDifference = round(
+      totalDonorLoss - totalRecipientGain - circulationAreaChange
+    );
+    const targetBefore = snapshot.find(room => room.id === target.id);
+    const actualArea = round(target.area - targetBefore.width * targetBefore.height);
+    reports.push({
+      ...baseReport,
+      actual_area: actualArea,
+      status: Math.abs(actualArea - requestedArea) <= Math.max(1, requestedArea * 0.05) ? "applied" : "approximated",
+      changes,
+      circulation_changes: circulationChanges,
+      total_donor_loss: totalDonorLoss,
+      total_recipient_gain: totalRecipientGain,
+      circulation_area_change: circulationAreaChange,
+      residual_difference: residualDifference,
+      footprint_changed: false,
+      reason: buildTransferReason(
+        plan,
+        target,
+        requestedArea,
+        actualArea,
+        layout.unit,
+        changes,
+        circulationAreaChange
+      )
+    });
+  }
+
+  return reports;
+}
+
+function footprintSummary(buildable) {
+  return {
+    x: round(Number(buildable?.x || 0)),
+    y: round(Number(buildable?.y || 0)),
+    width: round(Number(buildable?.width || 0)),
+    height: round(Number(buildable?.height || 0)),
+    area: round(Number(buildable?.width || 0) * Number(buildable?.height || 0))
+  };
+}
+
+function buildCirculationChanges(beforeItems, afterItems) {
+  const beforeById = new Map(beforeItems.map(item => [item.id, item]));
+  const afterById = new Map(afterItems.map(item => [item.id, item]));
+  const ids = new Set([...beforeById.keys(), ...afterById.keys()]);
+
+  return [...ids].flatMap(id => {
+    const before = beforeById.get(id);
+    const after = afterById.get(id);
+    const beforeArea = before ? round(before.width * before.height) : 0;
+    const afterArea = after ? round(after.width * after.height) : 0;
+    const delta = round(afterArea - beforeArea);
+    if (Math.abs(delta) <= 0.1) return [];
+    const overlay = Boolean(after?.overlay ?? before?.overlay);
+    return [{
+      id,
+      name: after?.name || before?.name || "Circulation",
+      before_area: beforeArea,
+      after_area: afterArea,
+      delta,
+      overlay,
+      conservation_delta: overlay ? 0 : delta
+    }];
+  });
+}
+
+function reshapeSourceZone(rooms, layout, source, requestedWidth, requestedDepth) {
+  const tolerance = 0.05;
+  const width = Math.max(Number(source.minWidth || 0), requestedWidth);
+  const depth = Math.max(Number(source.minHeight || 0), requestedDepth);
+  if (width > source.width || depth > source.height) return null;
+
+  const sameRowNeighbor = rooms.find(room => room !== source &&
+    Math.abs(room.y - source.y) < tolerance &&
+    Math.abs(room.height - source.height) < tolerance &&
+    (Math.abs(room.x - source.x - source.width) < tolerance ||
+      Math.abs(source.x - room.x - room.width) < tolerance));
+  if (!sameRowNeighbor) return null;
+
+  const oldArea = source.width * source.height;
+  const oldBottom = source.y + source.height;
+  const sourceOnLeft = source.x < sameRowNeighbor.x;
+  if (sourceOnLeft) {
+    const combinedRight = sameRowNeighbor.x + sameRowNeighbor.width;
+    source.width = width;
+    sameRowNeighbor.x = source.x + width;
+    sameRowNeighbor.width = combinedRight - sameRowNeighbor.x;
+  } else {
+    const combinedLeft = sameRowNeighbor.x;
+    const sourceRight = source.x + source.width;
+    source.x = sourceRight - width;
+    source.width = width;
+    sameRowNeighbor.width = source.x - combinedLeft;
+  }
+  source.height = depth;
+  source.area = round(width * depth);
+  sameRowNeighbor.area = round(sameRowNeighbor.width * sameRowNeighbor.height);
+  source.operationLocked = true;
+  sameRowNeighbor.operationLocked = true;
+
+  const remainderHeight = oldBottom - source.y - depth;
+  if (remainderHeight > tolerance) {
+    layout.circulation.push({
+      id: `transfer-flex-${source.id}`,
+      name: "Local Circulation",
+      type: "corridor",
+      x: source.x,
+      y: source.y + depth,
+      width,
+      height: remainderHeight,
+      operationLocked: true
+    });
+  }
+
+  return {
+    releasedArea: round(oldArea - source.area),
+    neighbor: sameRowNeighbor
+  };
+}
+
+function introducesNewLayoutDefect(layout, beforeRooms, afterRooms) {
+  const beforeLayout = { ...layout, rooms: beforeRooms };
+  const afterLayout = { ...layout, rooms: afterRooms };
+  const beforeAccess = buildAccessibilityReport(beforeLayout);
+  const afterAccess = buildAccessibilityReport(afterLayout);
+  const beforeInvalid = new Set(beforeAccess.inaccessibleRooms.map(room => room.id));
+  const addedInaccessibleRoom = afterAccess.inaccessibleRooms.some(room => !beforeInvalid.has(room.id));
+  const beforeErrors = new Set(validateGeneratedLayout(beforeLayout).errors);
+  const addedValidationError = validateGeneratedLayout(afterLayout).errors.some(error => !beforeErrors.has(error));
+  return addedInaccessibleRoom || addedValidationError;
+}
+
+function restoreRoomSnapshots(rooms, snapshot) {
+  rooms.forEach((room, index) => {
+    for (const key of Object.keys(room)) {
+      if (!(key in snapshot[index])) delete room[key];
+    }
+    Object.assign(room, snapshot[index]);
+  });
+}
+
+function determineRequestedTransferArea(operation, source, target, unit) {
+  const squareFactor = String(unit || "ft").toLowerCase() === "m" ? 1 / 10.7639 : 1;
+  if (Number(operation.amount_sqft) > 0) return Number(operation.amount_sqft) * squareFactor;
+  if (Number(operation.amount_percent) > 0) {
+    const basis = operation.operation === "transfer_area" && source ? source.area : target.area;
+    return basis * Number(operation.amount_percent) / 100;
+  }
+  if (Number(operation.requested_width) > 0 && Number(operation.requested_depth) > 0) {
+    const requestedArea = Number(operation.requested_width) * Number(operation.requested_depth);
+    if (operation.operation === "transfer_area" && source) return Math.max(0, source.area - requestedArea);
+    return Math.max(0, requestedArea - target.area);
+  }
+  if (Number(operation.area) > 0) return Math.max(0, Number(operation.area) * squareFactor - target.area);
+  if (operation.priority === "high") return target.area * 2;
+  return (operation.operation === "transfer_area" && source ? source.area : target.area) * 0.08;
+}
+
+function describeSeparatedTransfer(rooms, source, target, requestedArea) {
+  const sourceReceivers = rooms
+    .filter(room => room !== source && room !== target)
+    .map(room => describeBoundaryTransfer(source, room))
+    .filter(Boolean)
+    .sort(compareTransferCandidates);
+  const targetDonors = rooms
+    .filter(room => room !== source && room !== target)
+    .map(room => describeBoundaryTransfer(room, target))
+    .filter(Boolean)
+    .sort(compareTransferCandidates);
+  if (!sourceReceivers.length || !targetDonors.length) return null;
+
+  for (const targetMove of targetDonors) {
+    const sourceMoves = [];
+    let remaining = Math.min(requestedArea, targetMove.maximumArea);
+    for (const sourceMove of sourceReceivers) {
+      if (sourceMove.receiver === targetMove.donor) continue;
+      const amount = Math.min(remaining, sourceMove.maximumArea);
+      if (amount > 0.5) sourceMoves.push({ transfer: sourceMove, amount });
+      remaining -= amount;
+      if (remaining <= 0.5 || sourceMoves.length === 2) break;
+    }
+    const amount = sourceMoves.reduce((sum, move) => sum + move.amount, 0);
+    if (amount > 0.5) {
+      return {
+        amount,
+        moves: [
+          ...sourceMoves,
+          { transfer: targetMove, amount }
+        ]
+      };
+    }
+  }
+  return null;
+}
+
+function repairBedroomAccessAfterTransfer(rooms, layout, affectedRooms) {
+  const inaccessibleIds = new Set(
+    buildAccessibilityReport({ ...layout, rooms }).inaccessibleRooms.map(room => room.id)
+  );
+  const hall = (layout.circulation || []).find(item => item.overlay && item.height >= item.width);
+  if (!hall) return;
+
+  for (const room of affectedRooms) {
+    if (!room || !["bedroom", "masterBedroom"].includes(room.type) || !inaccessibleIds.has(room.id)) continue;
+    const passageHeight = Math.min(3, room.height);
+    const roomEdge = room.x + room.width;
+    const x = Math.min(roomEdge - 2, hall.x);
+    const right = Math.max(roomEdge, hall.x + hall.width);
+    const y = Math.min(room.y, layout.buildableArea.y + layout.buildableArea.height - passageHeight);
+    if (hall.y + hall.height < y + passageHeight) hall.height = y + passageHeight - hall.y;
+    layout.circulation.push({
+      id: `operation-passage-${room.id}`,
+      name: "Local Landing",
+      type: "corridor",
+      overlay: true,
+      x,
+      y,
+      width: right - x,
+      height: passageHeight
+    });
+  }
+}
+
+function chooseDonor(rooms, target, requestedArea) {
+  return rooms
+    .filter(room => room !== target)
+    .map(room => describeBoundaryTransfer(room, target))
+    .filter(candidate => candidate && candidate.maximumArea > 0.5)
+    .sort((first, second) => {
+      const firstEnough = first.maximumArea >= requestedArea ? 0 : 1;
+      const secondEnough = second.maximumArea >= requestedArea ? 0 : 1;
+      return firstEnough - secondEnough || compareTransferCandidates(first, second);
+    })[0] || null;
+}
+
+function compareTransferCandidates(first, second) {
+  const rank = room => {
+    const index = PLANNING_ROOM_POLICIES.donorPreference.indexOf(room.type);
+    return index < 0 ? 50 : index;
+  };
+  return rank(first.donor) - rank(second.donor) || second.maximumArea - first.maximumArea;
+}
+
+function describeBoundaryTransfer(donor, receiver) {
+  if (!donor || !receiver || donor.isCirculation || receiver.isCirculation) return null;
+  const tolerance = 0.05;
+  const sameRows = Math.abs(donor.y - receiver.y) < tolerance && Math.abs(donor.height - receiver.height) < tolerance;
+  const sameColumns = Math.abs(donor.x - receiver.x) < tolerance && Math.abs(donor.width - receiver.width) < tolerance;
+  const minimumWidth = minimumDimensionForAxis(donor, "width");
+  const minimumHeight = minimumDimensionForAxis(donor, "height");
+  const maximumReceiverWidth = receiver.height * PLANNING_ROOM_POLICIES.maximumAspectRatio;
+  const maximumReceiverHeight = receiver.width * PLANNING_ROOM_POLICIES.maximumAspectRatio;
+  const receiverWidthCapacity = Math.max(0, maximumReceiverWidth - receiver.width) * receiver.height;
+  const receiverHeightCapacity = Math.max(0, maximumReceiverHeight - receiver.height) * receiver.width;
+
+  if (sameRows && Math.abs(donor.x + donor.width - receiver.x) < tolerance) {
+    return { donor, receiver, axis: "x", direction: "donor-left", span: donor.height, maximumArea: Math.min(Math.max(0, donor.width - minimumWidth) * donor.height, receiverWidthCapacity) };
+  }
+  if (sameRows && Math.abs(receiver.x + receiver.width - donor.x) < tolerance) {
+    return { donor, receiver, axis: "x", direction: "donor-right", span: donor.height, maximumArea: Math.min(Math.max(0, donor.width - minimumWidth) * donor.height, receiverWidthCapacity) };
+  }
+  if (sameColumns && Math.abs(donor.y + donor.height - receiver.y) < tolerance) {
+    return { donor, receiver, axis: "y", direction: "donor-top", span: donor.width, maximumArea: Math.min(Math.max(0, donor.height - minimumHeight) * donor.width, receiverHeightCapacity) };
+  }
+  if (sameColumns && Math.abs(receiver.y + receiver.height - donor.y) < tolerance) {
+    return { donor, receiver, axis: "y", direction: "donor-bottom", span: donor.width, maximumArea: Math.min(Math.max(0, donor.height - minimumHeight) * donor.width, receiverHeightCapacity) };
+  }
+  return null;
+}
+
+function minimumDimensionForAxis(room, axis) {
+  const minWidth = Number(room.minWidth || 3);
+  const minHeight = Number(room.minHeight || 3);
+  if (axis === "width") {
+    const candidates = [];
+    if (room.height >= minHeight) candidates.push(minWidth);
+    if (room.height >= minWidth) candidates.push(minHeight);
+    return Math.min(...(candidates.length ? candidates : [Math.max(minWidth, minHeight)]));
+  }
+  const candidates = [];
+  if (room.width >= minWidth) candidates.push(minHeight);
+  if (room.width >= minHeight) candidates.push(minWidth);
+  return Math.min(...(candidates.length ? candidates : [Math.max(minWidth, minHeight)]));
+}
+
+function applyBoundaryTransfer(transfer, amount) {
+  const delta = Math.min(amount, transfer.maximumArea) / transfer.span;
+  const { donor, receiver, direction } = transfer;
+  if (direction === "donor-left") {
+    donor.width -= delta;
+    receiver.x -= delta;
+    receiver.width += delta;
+  } else if (direction === "donor-right") {
+    donor.x += delta;
+    donor.width -= delta;
+    receiver.width += delta;
+  } else if (direction === "donor-top") {
+    donor.height -= delta;
+    receiver.y -= delta;
+    receiver.height += delta;
+  } else {
+    donor.y += delta;
+    donor.height -= delta;
+    receiver.height += delta;
+  }
+  donor.area = donor.width * donor.height;
+  receiver.area = receiver.width * receiver.height;
+  donor.operationLocked = true;
+  receiver.operationLocked = true;
+}
+
+function buildTransferReason(plan, target, requestedArea, actualArea, unit, changes, circulationAreaChange) {
+  const donors = changes.filter(change => change.delta < 0).map(change => change.room);
+  const otherRecipients = changes
+    .filter(change => change.delta > 0 && change.room !== target.name)
+    .map(change => `${change.room} +${change.delta}`);
+  const requested = round(requestedArea);
+  const actual = round(actualArea);
+  const areaUnit = String(unit || "ft").toLowerCase() === "m" ? "sq m" : "sq ft";
+  const allocations = [
+    otherRecipients.length ? `other recipients: ${otherRecipients.join(", ")}` : null,
+    circulationAreaChange ? `local circulation: +${circulationAreaChange}` : null
+  ].filter(Boolean).join("; ");
+  return `${target.name} increased by ${actual} ${areaUnit} toward the ${requested} requested. Donor losses: ${donors.join(", ")}.${allocations ? ` Additional allocations: ${allocations} ${areaUnit}.` : ""}`;
+}
+
+function evaluateLayoutOptimization(rooms, layout, operation) {
+  const suggestions = [];
+  const circulationArea = (layout.circulation || []).reduce((sum, item) => sum + item.width * item.height, 0);
+  const roomArea = rooms.reduce((sum, room) => sum + room.width * room.height, 0);
+  if (circulationArea > roomArea * 0.15) suggestions.push("Shorten excessive circulation where access can be preserved.");
+  const kitchen = rooms.find(room => room.id === "kitchen");
+  const dining = rooms.find(room => room.id === "dining");
+  if (kitchen && dining && !describeBoundaryTransfer(kitchen, dining) && !describeBoundaryTransfer(dining, kitchen)) {
+    suggestions.push("Improve the Kitchen and Dining relationship with a local adjacency change.");
+  }
+  const awkwardRooms = rooms.filter(room => Math.max(room.width / room.height, room.height / room.width) > PLANNING_ROOM_POLICIES.maximumAspectRatio);
+  if (awkwardRooms.length) suggestions.push(`Improve narrow proportions in ${awkwardRooms.map(room => room.name).join(", ")}.`);
+  if (!suggestions.length) suggestions.push("No low-impact improvement is necessary; preserve the current arrangement.");
+  return {
+    operation: "optimize_layout",
+    source_room: null,
+    target_room: null,
+    requested_area: null,
+    actual_area: 0,
+    status: "proposed",
+    changes: [],
+    footprint_changed: false,
+    confirmation_required: true,
+    suggestions,
+    reason: operation.reason || "Evaluated practical local improvements without changing geometry."
+  };
+}
+
+function repairAttachedBathroomsAfterOperations(rooms, layout, operationReport) {
+  const movedCanonicalIds = new Set(
+    operationReport
+      .filter(result => ["applied", "approximated"].includes(result.status))
+      .flatMap(result => [result.source_room, result.target_room])
+  );
+  const canonicalBedroomIds = {
+    masterBedroom: "bedroom-1",
+    bedroom2: "bedroom-2",
+    bedroom3: "bedroom-3",
+    bedroom4: "bedroom-4"
+  };
+  const movedBedroomIds = new Set(
+    [...movedCanonicalIds]
+      .map(id => canonicalBedroomIds[id])
+      .filter(Boolean)
+  );
+  const tolerance = 0.05;
+  const touches = (first, second) => {
+    const verticalOverlap = Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y);
+    const horizontalOverlap = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
+    return (
+      (Math.abs(first.x + first.width - second.x) < tolerance || Math.abs(second.x + second.width - first.x) < tolerance) && verticalOverlap > 1.6
+    ) || (
+      (Math.abs(first.y + first.height - second.y) < tolerance || Math.abs(second.y + second.height - first.y) < tolerance) && horizontalOverlap > 1.6
+    );
+  };
+  const overlaps = (first, second) => !(
+    first.x + first.width <= second.x + tolerance ||
+    second.x + second.width <= first.x + tolerance ||
+    first.y + first.height <= second.y + tolerance ||
+    second.y + second.height <= first.y + tolerance
+  );
+
+  for (const bathroom of rooms.filter(room => room.type === "attachedToilet" && movedBedroomIds.has(room.attachedTo))) {
+    const bedroom = rooms.find(room => room.id === bathroom.attachedTo);
+    if (!bedroom || touches(bathroom, bedroom)) continue;
+    const snapshot = { ...bathroom };
+    const sizes = [
+      { width: bathroom.width, height: bathroom.height },
+      { width: Number(bathroom.preferredWidth), height: Number(bathroom.preferredHeight) },
+      { width: Number(bathroom.minWidth), height: Number(bathroom.minHeight) },
+      { width: Number(bathroom.minHeight), height: Number(bathroom.minWidth) }
+    ].filter(size => size.width > 0 && size.height > 0);
+    let repaired = false;
+
+    for (const size of sizes) {
+      const candidates = [
+        { x: bedroom.x, y: bedroom.y - size.height },
+        { x: bedroom.x + bedroom.width - size.width, y: bedroom.y - size.height },
+        { x: bedroom.x, y: bedroom.y + bedroom.height },
+        { x: bedroom.x + bedroom.width - size.width, y: bedroom.y + bedroom.height },
+        { x: bedroom.x - size.width, y: bedroom.y },
+        { x: bedroom.x - size.width, y: bedroom.y + bedroom.height - size.height },
+        { x: bedroom.x + bedroom.width, y: bedroom.y },
+        { x: bedroom.x + bedroom.width, y: bedroom.y + bedroom.height - size.height }
+      ];
+      for (const candidate of candidates) {
+        Object.assign(bathroom, {
+          x: round(candidate.x),
+          y: round(candidate.y),
+          width: size.width,
+          height: size.height,
+          area: round(size.width * size.height)
+        });
+        const inside = bathroom.x >= layout.buildableArea.x - tolerance &&
+          bathroom.y >= layout.buildableArea.y - tolerance &&
+          bathroom.x + bathroom.width <= layout.buildableArea.x + layout.buildableArea.width + tolerance &&
+          bathroom.y + bathroom.height <= layout.buildableArea.y + layout.buildableArea.height + tolerance;
+        if (inside && touches(bathroom, bedroom) && !rooms.some(room => room !== bathroom && overlaps(bathroom, room))) {
+          repaired = true;
+          break;
+        }
+      }
+      if (repaired) break;
+    }
+
+    if (!repaired) Object.assign(bathroom, snapshot);
+  }
 }
 
 function repairCommonToiletAccess(rooms, layout) {
@@ -401,7 +1062,7 @@ function repairCommonToiletAccess(rooms, layout) {
 }
 
 function hasValidCandidateRooms(layout, rooms) {
-  const candidate = { ...layout, rooms };
+  const candidate = { ...layout, rooms, areaSummary: null };
   return buildAccessibilityReport(candidate).valid && validateGeneratedLayout(candidate).valid;
 }
 
@@ -472,7 +1133,13 @@ function applyRoomSizeConstraints(rooms, layout) {
     if (Math.abs(delta) < EPSILON) return true;
     if (delta < 0) {
       const accessWall = accessByRoom.get(room.id)?.wall;
-      if (accessWall === "east") room.x += room.width - targetWidth;
+      const touchesExteriorLeft = room.requiresExteriorWall &&
+        Math.abs(room.x - layout.buildableArea.x) < EPSILON;
+      const touchesExteriorRight = room.requiresExteriorWall &&
+        Math.abs(room.x + room.width - layout.buildableArea.x - layout.buildableArea.width) < EPSILON;
+      if (touchesExteriorRight || accessWall === "east" && !touchesExteriorLeft) {
+        room.x += room.width - targetWidth;
+      }
       room.width = targetWidth;
       return true;
     }
@@ -503,7 +1170,13 @@ function applyRoomSizeConstraints(rooms, layout) {
     if (Math.abs(delta) < EPSILON) return true;
     if (delta < 0) {
       const accessWall = accessByRoom.get(room.id)?.wall;
-      if (accessWall === "south") room.y += room.height - targetHeight;
+      const touchesExteriorTop = room.requiresExteriorWall &&
+        Math.abs(room.y - layout.buildableArea.y) < EPSILON;
+      const touchesExteriorBottom = room.requiresExteriorWall &&
+        Math.abs(room.y + room.height - layout.buildableArea.y - layout.buildableArea.height) < EPSILON;
+      if (touchesExteriorBottom || accessWall === "south" && !touchesExteriorTop) {
+        room.y += room.height - targetHeight;
+      }
       room.height = targetHeight;
       return true;
     }
