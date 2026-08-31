@@ -485,7 +485,7 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                                 "type": "string",
                                 "enum": [
                                     "swap", "adjacent", "near", "position", "resize",
-                                    "transfer_area", "redistribute_area", "architectural_rebalance", "balcony_access", "site_feature", "optimize_layout",
+                                    "transfer_area", "redistribute_area", "architectural_rebalance", "balcony_access", "site_feature", "improve_relationship", "optimize_layout",
                                 ],
                             },
                             "source_room": {
@@ -618,12 +618,13 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                             "depth": {"type": ["number", "null"]},
                             "area": {"type": ["number", "null"]},
                             "area_delta": {"type": ["number", "null"]},
+                            "orientation_locked": {"type": "boolean"},
                             "unit": {
                                 "type": ["string", "null"],
                                 "enum": ["ft", "m", None],
                             },
                         },
-                        "required": ["room", "width", "depth", "area", "area_delta", "unit"],
+                        "required": ["room", "width", "depth", "area", "area_delta", "orientation_locked", "unit"],
                         "additionalProperties": False,
                     },
                 },
@@ -1042,6 +1043,23 @@ IMPORTANT BEHAVIOUR
       tentative phrasing for room_preferences-style positional requests.
 
 18. Capture explicit room sizes in "room_constraints":
+    - Set orientation_locked=false for ordinary phrases such as "10 x 11 ft".
+      Those dimensions may rotate to 11 x 10 if that is the better architectural fit.
+    - Set orientation_locked=true only when the user explicitly fixes orientation, e.g.
+      "10 ft wide and 11 ft deep", "keep the 10 ft side east-west", or equivalent.
+
+18A. Relationship-quality requests such as "make kitchen and dining work better together",
+    "improve the connection between living and dining", or "better access between X and Y"
+    are NOT plain adjacency requests. Emit operation="improve_relationship" with the two
+    canonical rooms. The deterministic planner will evaluate shared boundary/direct access
+    and may perform a bounded local adjustment while protecting explicit constraints.
+
+18B. Geometry edits are transactional. layout_operations represent pending user intent,
+    not permanent commands to re-run forever. Preserve explicit room_constraints as design
+    requirements, but do not invent repeated operations from old conversation turns when the
+    current_state no longer contains them.
+
+18. Capture explicit room sizes in "room_constraints":
         - "master bedroom 14 by 16 ft" -> width=14, depth=16, area=null.
         - "living room should be 300 sq ft" -> area=300, width/depth=null.
         - "increase living by 40 sq ft" -> area_delta=40, area/width/depth=null.
@@ -1380,6 +1398,12 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
     room_constraints = state.get("room_constraints")
     if not isinstance(room_constraints, list):
         room_constraints = []
+    else:
+        room_constraints = [
+            {**constraint, "orientation_locked": bool(constraint.get("orientation_locked", False))}
+            if isinstance(constraint, dict) else constraint
+            for constraint in room_constraints
+        ]
 
     target_internal_area = state.get("target_internal_area")
     if not isinstance(target_internal_area, dict):
