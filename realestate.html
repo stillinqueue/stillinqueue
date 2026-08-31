@@ -960,15 +960,30 @@
       function updateLayoutButtons() {
         updateStage();
 
+        const hasCommittedConcept = Boolean(committedConstraintLayout?.success);
+        const hasPendingEdit = Boolean(
+          hasCommittedConcept &&
+          Array.isArray(aiState?.layout_operations) &&
+          aiState.layout_operations.length
+        );
+
         if (btnAcceptProposal) {
-          btnAcceptProposal.disabled = !layoutState.proposalReady || layoutState.proposalAccepted;
-          btnAcceptProposal.textContent = layoutState.proposalAccepted ? "Proposal Accepted" : "Accept Proposal";
+          btnAcceptProposal.disabled = hasCommittedConcept || !layoutState.proposalReady || layoutState.proposalAccepted;
+          btnAcceptProposal.textContent = hasCommittedConcept
+            ? "Concept Accepted"
+            : (layoutState.proposalAccepted ? "Proposal Accepted" : "Accept Proposal");
         }
 
-        btnRender.disabled = !(layoutState.proposalAccepted && layoutState.proposal && isConceptReady());
+        btnRender.disabled = !(
+          isConceptReady() &&
+          ((hasCommittedConcept && layoutState.proposalAccepted) ||
+           (layoutState.proposalAccepted && layoutState.proposal))
+        );
         btnConfirm.disabled = !layoutState.rendered;
         btnPdf.disabled = !layoutState.confirmed || !layoutState.rendered;
-        btnRender.textContent = layoutState.rendered ? "Re-render Layout" : "Render Concept 1";
+        btnRender.textContent = hasCommittedConcept
+          ? (hasPendingEdit ? "Render Revision" : "Re-render Current")
+          : "Render Concept 1";
       }
 
       function extractPlotSize(text) {
@@ -1431,31 +1446,39 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           previousState !== nextState ||
           previousProposal !== nextProposal;
 
-        if (proposal) {
+        const hasCommittedConcept = Boolean(committedConstraintLayout?.success);
+
+        if (proposal && !hasCommittedConcept) {
           layoutState.proposalReady = true;
           layoutState.proposal = convertAIProposalToPlannerProposal(proposal, s);
-        } else if (!isConceptReady()) {
+        } else if (!isConceptReady() && !hasCommittedConcept) {
           layoutState.proposalReady = false;
           layoutState.proposal = null;
         }
 
-        // Any AI-understood requirement change invalidates the previously accepted/rendered plan.
-        // This guarantees the next render is built from the latest state and proposal.
         if (requirementsChanged) {
-          layoutState.proposalAccepted = false;
-          layoutState.rendered = false;
-          layoutState.confirmed = false;
           draftPlan = null;
+          layoutState.confirmed = false;
           isConfirmed = false;
           lastPdfBase64 = null;
 
-          if (preview) {
-            preview.innerHTML =
-              '<div class="preview-placeholder">Requirements changed. Accept the updated proposal and render again.</div>';
-          }
-          if (buyerPreview) {
-            buyerPreview.innerHTML =
-              '<div class="preview-placeholder">Requirements changed. Buyer plan will regenerate after the updated proposal is accepted.</div>';
+          if (hasCommittedConcept) {
+            // Iterative edit mode: keep the accepted proposal and last valid drawing visible.
+            // The user's new structured operation is a pending candidate, not a new proposal.
+            layoutState.proposalAccepted = true;
+            layoutState.proposalReady = true;
+            layoutState.rendered = true;
+          } else {
+            layoutState.proposalAccepted = false;
+            layoutState.rendered = false;
+            if (preview) {
+              preview.innerHTML =
+                '<div class="preview-placeholder">Requirements changed. Accept the updated proposal and render again.</div>';
+            }
+            if (buyerPreview) {
+              buyerPreview.innerHTML =
+                '<div class="preview-placeholder">Requirements changed. Buyer plan will regenerate after the updated proposal is accepted.</div>';
+            }
           }
         }
 
@@ -2682,6 +2705,13 @@ Click “Render Concept 1” to generate the technical blueprint.`;
                 ? `OpenAI · still needed: <strong>${missing.join(", ")}</strong>.`
                 : "OpenAI · requirements are still being refined."
             );
+          } else if (committedConstraintLayout?.success) {
+            const pendingCount = Array.isArray(aiState?.layout_operations) ? aiState.layout_operations.length : 0;
+            setStatus(
+              pendingCount
+                ? `Design change ready ✅ ${pendingCount} pending architect operation${pendingCount === 1 ? "" : "s"}. Click <strong>Render Revision</strong>.`
+                : "Current concept remains valid ✅ Continue refining or re-render the current design."
+            );
           } else if (data.proposal_ready && !layoutState.proposalAccepted) {
             setStatus("Updated OpenAI proposal ready ✅ Review the revised requirements, accept the proposal, then render the new layout.");
           } else {
@@ -3599,7 +3629,12 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
             bhk: Number(layoutState.bedrooms || 1),
             floors: Number(layoutState.floors || 1)
           },
-          preferences
+          preferences,
+          // Iterative edits MUST start from the last fully valid committed geometry.
+          // Initial concept generation leaves currentLayout null and uses the normal planner.
+          currentLayout: committedConstraintLayout?.success
+            ? structuredClone(committedConstraintLayout)
+            : null
         };
       }
 
@@ -3712,7 +3747,8 @@ The requested change was not committed. The previous valid concept and its requi
             );
 
             setStatus("Constraint planner needs another arrangement.");
-            layoutState.rendered = false;
+            layoutState.rendered = Boolean(committedConstraintLayout?.success);
+            layoutState.proposalAccepted = Boolean(committedConstraintLayout?.success) || layoutState.proposalAccepted;
             updateLayoutButtons();
             return;
           }
@@ -3804,6 +3840,21 @@ The requested change was not committed. The previous valid concept and its requi
                   .join("\n")
               : "";
 
+          const operationOutcome = Array.isArray(layout.operationReport) && layout.operationReport.length
+            ? "\n\nDESIGN CHANGE RESULTS\n" + layout.operationReport.map(result => {
+                const status = String(result.status || "unknown").toUpperCase();
+                const label = result.operation || "design change";
+                return `• ${status} · ${label}: ${result.reason || "Validated by the geometry engine."}`;
+              }).join("\n")
+            : "";
+
+          const featureOutcome = Array.isArray(layout.featureReport) && layout.featureReport.length
+            ? "\n\nARCHITECTURAL FEATURE RESULTS\n" + layout.featureReport.map(result => {
+                const status = String(result.status || "unknown").toUpperCase();
+                return `• ${status} · ${result.feature_type || result.operation || "feature"}: ${result.reason || "Validated by the geometry engine."}`;
+              }).join("\n")
+            : "";
+
           addMessage(
             "assistant",
             `Blueprint generated.
@@ -3830,7 +3881,7 @@ Engineer Drawing now includes:
 • plot dimensions
 • north arrow and road orientation
 
-Buyer Plan uses the same geometry with a softer presentation style.${adaptations}`
+Buyer Plan uses the same geometry with a softer presentation style.${adaptations}${operationOutcome}${featureOutcome}`
           );
 
           setStatus(
@@ -3845,7 +3896,20 @@ Buyer Plan uses the same geometry with a softer presentation style.${adaptations
 
           console.error("Constraint planner error:", err);
 
-          layoutState.rendered = false;
+          // Runtime exceptions are failed transactions too. Restore the last committed
+          // AI state/geometry so an implementation bug in one feature cannot poison the
+          // next user request.
+          if (pendingAiStateBase) {
+            aiState = structuredClone(pendingAiStateBase);
+          } else if (committedAiState) {
+            aiState = structuredClone(committedAiState);
+          }
+          if (committedConstraintLayout) {
+            window.currentConstraintLayout = committedConstraintLayout;
+          }
+          pendingAiStateBase = null;
+          layoutState.rendered = Boolean(committedConstraintLayout?.success);
+          layoutState.proposalAccepted = Boolean(committedConstraintLayout?.success) || layoutState.proposalAccepted;
 
           renderInProgress =
             false;
@@ -3884,7 +3948,7 @@ Buyer Plan uses the same geometry with a softer presentation style.${adaptations
 
 The Engineer Drawing can now be exported as SVG.
 
-You can still request a design change in chat. Any understood requirement change will invalidate this confirmation and create a new proposal before the next render.`
+You can still request design changes in chat. The agent will treat them as revisions of this committed concept and validate a candidate before replacing it.`
         );
 
         setStatus(
