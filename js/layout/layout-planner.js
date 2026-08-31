@@ -213,6 +213,12 @@ function postProcessLayout(layout, requirements) {
       )
     : [];
 
+  const featureOperations = Array.isArray(layoutOperations)
+    ? layoutOperations.filter(operation =>
+        ["balcony_access", "site_feature"].includes(operation.operation)
+      )
+    : [];
+
   /*
     If OpenAI supplied a structured operation, that structured intent is
     authoritative. In particular, a resize operation should not fall back
@@ -302,7 +308,7 @@ function postProcessLayout(layout, requirements) {
   );
 
   if (remainingAreaOperations.length) {
-    operationReport.push(...applyAreaOperations(rooms, layout, remainingAreaOperations));
+    operationReport.push(...applyAreaOperations(rooms, layout, remainingAreaOperations, requirements));
   }
 
   const beforeConstraints = rooms.map(room => ({ ...room }));
@@ -389,6 +395,13 @@ function postProcessLayout(layout, requirements) {
       }
     });
   }
+
+  const featureReport = applyArchitecturalFeatureOperations(
+    rooms,
+    layout,
+    featureOperations,
+    requirements
+  );
 
   const originalRooms = rooms.map(room => ({ ...room }));
   const growable = rooms.filter(room => room.type !== "corridor");
@@ -482,6 +495,7 @@ function postProcessLayout(layout, requirements) {
       operationReport,
       constraintReport,
       balconyReport,
+      featureReport,
       circulationRepairReport,
       areaSummary: buildAreaSummary(originalRooms, layout.circulation, requirements?.targetInternalArea),
       statistics: {
@@ -512,6 +526,7 @@ function postProcessLayout(layout, requirements) {
     operationReport,
     constraintReport,
     balconyReport,
+    featureReport,
     circulationRepairReport,
     areaSummary: buildAreaSummary(rooms, layout.circulation, requirements?.targetInternalArea),
     statistics: {
@@ -527,7 +542,7 @@ function postProcessLayout(layout, requirements) {
   });
 }
 
-function applyAreaOperations(rooms, layout, operations) {
+function applyAreaOperations(rooms, layout, operations, requirements = null) {
   const reports = [];
 
   for (const operation of operations) {
@@ -537,7 +552,7 @@ function applyAreaOperations(rooms, layout, operations) {
     }
 
     if (operation.operation === "architectural_rebalance") {
-      reports.push(applyArchitecturalRebalance(rooms, layout, operation));
+      reports.push(applyArchitecturalRebalance(rooms, layout, operation, requirements));
       continue;
     }
 
@@ -798,7 +813,7 @@ function applyAreaOperations(rooms, layout, operations) {
 
   For adjacent source/target rooms a direct transfer is still preferred.
 */
-function applyArchitecturalRebalance(rooms, layout, operation) {
+function applyArchitecturalRebalance(rooms, layout, operation, requirements = null) {
   const snapshot = rooms.map(room => ({ ...room }));
   const circulationSnapshot = (layout.circulation || []).map(item => ({ ...item }));
   const source = resolveCanonicalRoom(
@@ -910,10 +925,48 @@ function applyArchitecturalRebalance(rooms, layout, operation) {
   if (!sourceSide?.success) {
     restoreRoomSnapshots(rooms, snapshot);
     layout.circulation.splice(0, layout.circulation.length, ...circulationSnapshot);
+
+    /*
+      LEVEL 3 · CONSTRAINED ARCHITECTURAL REPLAN
+
+      When a local source-zone redraw cannot satisfy the exact room shape,
+      do what an architect would normally do: redraw the private bedroom
+      bands as a coherent zone instead of forcing the old wall positions.
+
+      This fallback is deliberately conservative:
+      - plot/buildable area stays fixed;
+      - service/wet rooms stay where they are;
+      - the source bedroom gets the exact requested dimensions;
+      - the other bedroom row absorbs the small depth change;
+      - the source row is repartitioned instead of incrementally pushed;
+      - the beneficiary grows from a practical adjacent social-room donor;
+      - access is repaired and the COMPLETE plan is validated atomically.
+    */
+    const fullReplan = attemptConstrainedArchitecturalFullReplan({
+      rooms,
+      layout,
+      source,
+      target,
+      requestedWidth,
+      requestedDepth,
+      releasedArea,
+      operation,
+      requirements,
+      snapshot,
+      circulationSnapshot,
+      baseReport
+    });
+
+    if (fullReplan?.success) {
+      return fullReplan.report;
+    }
+
+    restoreRoomSnapshots(rooms, snapshot);
+    layout.circulation.splice(0, layout.circulation.length, ...circulationSnapshot);
     return {
       ...baseReport,
-      reason: sourceSide?.reason || "No practical local source-side rearrangement could reach the exact requested room dimensions.",
-      suggestion: "Allow a slightly wider local rearrangement around the resized room or choose an approximated source dimension."
+      reason: fullReplan?.reason || sourceSide?.reason || "No practical constrained architectural replan could reach the requested room dimensions.",
+      suggestion: "Allow an approximated room dimension or permit a broader concept-level redesign."
     };
   }
 
@@ -1008,6 +1061,321 @@ function applyArchitecturalRebalance(rooms, layout, operation) {
       source_replan_mode: sourceSide?.replanMode || null
     },
     baseReport
+  });
+}
+
+
+/*
+  =========================================================
+  LEVEL 3 · CONSTRAINED FULL ARCHITECTURAL REPLAN
+  =========================================================
+
+  This is intentionally different from the generic rectangle packer.
+  It preserves the existing architectural zoning of the large connected
+  family layout and redraws only the dimensional STRUCTURE of the private
+  bedroom bands plus the beneficiary-side shared wall.
+
+  Typical use:
+    Bedroom 3: 18 x 10.8 -> exact 10 x 11
+    Family Lounge: + released area
+
+  The private zone keeps the same total footprint. A 0.2 ft increase in one
+  bedroom row is balanced by a 0.2 ft reduction in the other row. Within the
+  source row, the requested bedroom receives its exact width and the remaining
+  bedrooms share the remaining width. This is a real re-partition, not a
+  sequence of fragile wall pushes.
+*/
+function attemptConstrainedArchitecturalFullReplan({
+  rooms,
+  layout,
+  source,
+  target,
+  requestedWidth,
+  requestedDepth,
+  releasedArea,
+  operation,
+  requirements,
+  snapshot,
+  circulationSnapshot,
+  baseReport
+}) {
+  const supportedStrategy = String(layout.placementStrategy || "")
+    .startsWith("large-connected-family");
+  const sourceIsBedroom = ["bedroom", "masterBedroom"].includes(source?.type);
+
+  if (!supportedStrategy || !sourceIsBedroom) {
+    return {
+      success: false,
+      reason: "The current layout is not a banded connected-family plan that can use the constrained full-replan fallback safely."
+    };
+  }
+
+  const buildable = layout.buildableArea;
+  const originalRooms = snapshot.map(room => ({ ...room }));
+  const originalCirculation = circulationSnapshot.map(item => ({ ...item }));
+  const orientationLocked = operationOrientationLockedFromSource(source);
+  const shapes = uniqueArchitecturalShapes(
+    requestedWidth,
+    requestedDepth,
+    orientationLocked
+  );
+
+  const bedroomRows = groupArchitecturalBedroomRows(rooms);
+  const sourceRowIndex = bedroomRows.findIndex(row =>
+    row.some(room => room.id === source.id)
+  );
+
+  if (bedroomRows.length !== 2 || sourceRowIndex < 0) {
+    return {
+      success: false,
+      reason: "The private zone could not be reduced to two stable bedroom bands for a constrained architectural replan."
+    };
+  }
+
+  const otherRowIndex = sourceRowIndex === 0 ? 1 : 0;
+  const privateTop = Math.min(...bedroomRows.flat().map(room => room.y));
+  const privateBottom = Math.max(...bedroomRows.flat().map(room => room.y + room.height));
+  const privateHeight = privateBottom - privateTop;
+  const sourceOriginalIndex = bedroomRows[sourceRowIndex]
+    .slice()
+    .sort((a, b) => a.x - b.x)
+    .findIndex(room => room.id === source.id);
+
+  const sourcePositionCandidates = uniqueNumbers([
+    sourceOriginalIndex,
+    0,
+    bedroomRows[sourceRowIndex].length - 1
+  ]).filter(index => index >= 0 && index < bedroomRows[sourceRowIndex].length);
+
+  for (const shape of shapes) {
+    const sourceRowHeight = shape.height;
+    const otherRowHeight = privateHeight - sourceRowHeight;
+
+    if (!(sourceRowHeight > 0) || !(otherRowHeight > 0)) continue;
+
+    const sourceRowOriginal = bedroomRows[sourceRowIndex];
+    const otherRowOriginal = bedroomRows[otherRowIndex];
+
+    const sourceDepthOkay = sourceRowOriginal.every(room =>
+      room.id === source.id || sourceRowHeight + 0.05 >= Number(room.minHeight || 0)
+    );
+    const otherDepthOkay = otherRowOriginal.every(room =>
+      otherRowHeight + 0.05 >= Number(room.minHeight || 0)
+    );
+    if (!sourceDepthOkay || !otherDepthOkay) continue;
+
+    for (const sourcePosition of sourcePositionCandidates) {
+      restoreRoomSnapshots(rooms, originalRooms);
+      layout.circulation.splice(0, layout.circulation.length, ...originalCirculation.map(item => ({ ...item })));
+
+      const currentRows = groupArchitecturalBedroomRows(rooms);
+      const currentSourceRowIndex = currentRows.findIndex(row => row.some(room => room.id === source.id));
+      if (currentRows.length !== 2 || currentSourceRowIndex < 0) continue;
+      const currentOtherRowIndex = currentSourceRowIndex === 0 ? 1 : 0;
+      const sourceRow = currentRows[currentSourceRowIndex].slice().sort((a, b) => a.x - b.x);
+      const otherRow = currentRows[currentOtherRowIndex].slice().sort((a, b) => a.x - b.x);
+
+      const sourceIsTopRow = Math.min(...sourceRow.map(room => room.y)) < Math.min(...otherRow.map(room => room.y));
+      const sourceY = sourceIsTopRow ? privateTop : privateTop + otherRowHeight;
+      const otherY = sourceIsTopRow ? privateTop + sourceRowHeight : privateTop;
+
+      for (const room of sourceRow) {
+        room.y = round(sourceY);
+        room.height = round(sourceRowHeight);
+      }
+      for (const room of otherRow) {
+        room.y = round(otherY);
+        room.height = round(otherRowHeight);
+        room.area = round(room.width * room.height);
+      }
+
+      const sourceRoom = rooms.find(room => room.id === source.id);
+      const peers = sourceRow.filter(room => room.id !== source.id);
+      const remainingWidth = buildable.width - shape.width;
+      if (!(remainingWidth > 0) || !peers.length) continue;
+
+      const peerOriginalWidths = peers.map(room => {
+        const before = originalRooms.find(item => item.id === room.id);
+        return Number(before?.width || room.width || 1);
+      });
+      const peerWidthTotal = peerOriginalWidths.reduce((sum, value) => sum + value, 0) || peers.length;
+      const peerWidths = peers.map((room, index) => {
+        if (index === peers.length - 1) return null;
+        return remainingWidth * peerOriginalWidths[index] / peerWidthTotal;
+      });
+      let assignedPeerWidth = peerWidths.reduce((sum, value) => sum + Number(value || 0), 0);
+      peerWidths[peerWidths.length - 1] = remainingWidth - assignedPeerWidth;
+
+      let widthValid = true;
+      peers.forEach((room, index) => {
+        if (peerWidths[index] + 0.05 < Number(room.minWidth || 0)) widthValid = false;
+      });
+      if (shape.width + 0.05 < Number(sourceRoom.minWidth || 0)) widthValid = false;
+      if (!widthValid) continue;
+
+      const ordered = [];
+      let peerCursor = 0;
+      for (let index = 0; index < sourceRow.length; index++) {
+        if (index === sourcePosition) {
+          ordered.push({ room: sourceRoom, width: shape.width, isSource: true });
+        } else {
+          ordered.push({ room: peers[peerCursor], width: peerWidths[peerCursor], isSource: false });
+          peerCursor += 1;
+        }
+      }
+
+      let cursorX = buildable.x;
+      for (let index = 0; index < ordered.length; index++) {
+        const item = ordered[index];
+        const width = index === ordered.length - 1
+          ? (buildable.x + buildable.width) - cursorX
+          : item.width;
+        item.room.x = round(cursorX);
+        item.room.width = round(width);
+        item.room.y = round(sourceY);
+        item.room.height = round(sourceRowHeight);
+        item.room.area = round(item.room.width * item.room.height);
+        item.room.operationLocked = true;
+        cursorX += width;
+      }
+
+      sourceRoom.width = round(shape.width);
+      sourceRoom.height = round(shape.height);
+      sourceRoom.area = round(shape.width * shape.height);
+      sourceRoom.operationLocked = true;
+
+      /*
+        Beneficiary-side replan: use an actual adjacent flexible room. The
+        direct boundary operation preserves the entire front/social band's
+        footprint while giving the beneficiary the requested equivalent gain.
+      */
+      const currentTarget = rooms.find(room => room.id === target.id);
+      let donorChoice = null;
+      if (operation.preferred_target_donor) {
+        const preferred = resolveCanonicalRoom(
+          rooms,
+          layout.circulation || [],
+          operation.preferred_target_donor
+        );
+        if (preferred && preferred !== currentTarget) {
+          const transfer = describeBoundaryTransfer(preferred, currentTarget);
+          if (transfer && transfer.maximumArea >= releasedArea - 0.5) donorChoice = transfer;
+        }
+      }
+      if (!donorChoice) {
+        donorChoice = chooseArchitecturalTargetDonor(
+          rooms,
+          currentTarget,
+          releasedArea,
+          new Set(sourceRow.map(room => room.id).concat(otherRow.map(room => room.id)))
+        );
+      }
+      if (!donorChoice || donorChoice.maximumArea < releasedArea - 0.5) continue;
+
+      applyBoundaryTransfer(donorChoice, releasedArea);
+      rooms.forEach(room => {
+        room.x = round(room.x);
+        room.y = round(room.y);
+        room.width = round(room.width);
+        room.height = round(room.height);
+        room.area = round(room.width * room.height);
+      });
+
+      const affectedBedrooms = rooms.filter(room =>
+        ["bedroom", "masterBedroom"].includes(room.type)
+      );
+      repairBedroomAccessAfterTransfer(rooms, layout, affectedBedrooms);
+
+      const finalSource = rooms.find(room => room.id === source.id);
+      const finalTarget = rooms.find(room => room.id === target.id);
+      const targetBefore = originalRooms.find(room => room.id === target.id);
+      const finalSourceExact = finalSource &&
+        Math.abs(finalSource.width - shape.width) < 0.1 &&
+        Math.abs(finalSource.height - shape.height) < 0.1;
+      const targetGain = finalTarget && targetBefore
+        ? finalTarget.width * finalTarget.height - targetBefore.width * targetBefore.height
+        : 0;
+      const targetClose = Math.abs(targetGain - releasedArea) <= Math.max(1.5, releasedArea * 0.04);
+
+      if (!finalSourceExact || !targetClose || !hasValidCandidateRooms(layout, rooms)) {
+        continue;
+      }
+
+      /*
+        The room-size constraint is now physically satisfied by the replan.
+        Keep the requestedConstraint for reporting, but the later generic
+        constraint pass will see an already-satisfied room and leave it alone.
+      */
+      finalSource.operationLocked = true;
+
+      return {
+        success: true,
+        report: buildArchitecturalRebalanceSuccessReport({
+          rooms,
+          snapshot: originalRooms,
+          source: finalSource,
+          target: finalTarget,
+          releasedArea,
+          sourceReceiver: null,
+          targetDonor: donorChoice.donor,
+          strategy: "constrained_full_architectural_replan",
+          operation: {
+            ...operation,
+            applied_source_orientation: { width: shape.width, depth: shape.height },
+            source_orientation_rotated:
+              Math.abs(shape.width - requestedWidth) > 0.05 ||
+              Math.abs(shape.height - requestedDepth) > 0.05,
+            source_replan_mode: "private-band-repartition"
+          },
+          baseReport: {
+            ...baseReport,
+            interpretation:
+              operation.reason ||
+              "Constrained architect-style replan preserving zoning, wet areas, access, and total footprint"
+          }
+        })
+      };
+    }
+  }
+
+  restoreRoomSnapshots(rooms, originalRooms);
+  layout.circulation.splice(0, layout.circulation.length, ...originalCirculation);
+  return {
+    success: false,
+    reason: "The planner tried a full private-band architectural replan, including alternate source orientation and bedroom-row repartitioning, but no candidate satisfied exact dimensions, beneficiary gain, minimum room sizes, and full-plan access at the same time."
+  };
+}
+
+function groupArchitecturalBedroomRows(rooms) {
+  const bedrooms = rooms
+    .filter(room => ["bedroom", "masterBedroom"].includes(room.type))
+    .slice()
+    .sort((a, b) => a.y - b.y || a.x - b.x);
+
+  const rows = [];
+  for (const room of bedrooms) {
+    let row = rows.find(candidate =>
+      Math.abs(candidate.anchorY - room.y) <= 0.35
+    );
+    if (!row) {
+      row = { anchorY: room.y, rooms: [] };
+      rows.push(row);
+    }
+    row.rooms.push(room);
+  }
+
+  return rows
+    .sort((a, b) => a.anchorY - b.anchorY)
+    .map(row => row.rooms.sort((a, b) => a.x - b.x));
+}
+
+function uniqueNumbers(values) {
+  const seen = new Set();
+  return values.filter(value => {
+    const key = Number(value);
+    if (!Number.isFinite(key) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 
@@ -2742,6 +3110,10 @@ function hasValidCandidateRooms(layout, rooms) {
 }
 
 function ensureExteriorBalcony(rooms, buildable, requirements) {
+  const structuredBalcony = Array.isArray(requirements?.preferences?.layoutOperations) &&
+    requirements.preferences.layoutOperations.some(operation => operation?.operation === "balcony_access");
+  if (structuredBalcony) return [];
+
   if (requirements?.preferences?.balcony !== true || rooms.some(room => room.type === "balcony")) {
     return [];
   }
@@ -2779,6 +3151,405 @@ function ensureExteriorBalcony(rooms, buildable, requirements) {
   }
 
   return [{ room: "Balcony", status: "not-feasible", reason: "The living room has no exterior edge with enough depth." }];
+}
+
+function applyArchitecturalFeatureOperations(rooms, layout, operations, requirements) {
+  const reports = [];
+  if (!Array.isArray(operations) || !operations.length) return reports;
+
+  if (!Array.isArray(layout.siteFeatures)) layout.siteFeatures = [];
+
+  for (const operation of operations) {
+    if (operation.operation === "balcony_access") {
+      reports.push(applyBalconyAccessOperation(rooms, layout, operation, requirements));
+      continue;
+    }
+
+    if (operation.operation === "site_feature") {
+      reports.push(applySiteFeatureOperation(layout, operation, requirements));
+    }
+  }
+
+  return reports;
+}
+
+function applyBalconyAccessOperation(rooms, layout, operation, requirements) {
+  const targets = Array.isArray(operation.target_rooms) && operation.target_rooms.length
+    ? operation.target_rooms
+    : [operation.target_room || operation.source_room].filter(Boolean);
+
+  const report = {
+    operation: "balcony_access",
+    feature_type: "balcony",
+    requested_rooms: targets,
+    applied_rooms: [],
+    unresolved_rooms: [],
+    created_features: [],
+    status: "rejected",
+    reason: null
+  };
+
+  if (!targets.length) {
+    report.reason = "No rooms were specified for balcony access.";
+    return report;
+  }
+
+  const snapshot = rooms.map(room => ({ ...room }));
+  const existingBalconies = rooms.filter(room => room.type === "balcony");
+  const buildable = layout.buildableArea;
+  const unit = String(requirements?.plot?.unit || "ft").toLowerCase();
+  const preferredDepth = Number(operation.depth || (unit === "m" ? 1.5 : 5));
+  const minDepth = unit === "m" ? 1.2 : 4;
+
+  for (const targetId of targets) {
+    const room = resolveCanonicalRoom(rooms, layout.circulation || [], targetId);
+    if (!room || room.type === "corridor") {
+      report.unresolved_rooms.push({ room: targetId, reason: "Room was not found in the current plan." });
+      continue;
+    }
+
+    // Existing balcony already attached to this room counts as satisfied.
+    const existing = existingBalconies.find(item =>
+      item.attachedTo === room.id ||
+      item.attachedTo === targetId ||
+      (Array.isArray(item.attachedToRooms) && item.attachedToRooms.includes(room.id))
+    );
+    if (existing) {
+      report.applied_rooms.push(targetId);
+      continue;
+    }
+
+    const edges = exteriorEdges(room, buildable);
+    if (!edges.length) {
+      report.unresolved_rooms.push({
+        room: targetId,
+        reason: "This room is internal in the current concept. It needs a perimeter replan before balcony access can be created."
+      });
+      continue;
+    }
+
+    let applied = false;
+    const orderedEdges = edges.sort((a, b) => b.length - a.length);
+    for (const edge of orderedEdges) {
+      const roomSnapshot = { ...room };
+      const depth = Math.max(minDepth, Math.min(preferredDepth, edge.axisSize * 0.35));
+      const minWidth = Number(room.minWidth || (unit === "m" ? 2.7 : 9));
+      const minHeight = Number(room.minHeight || (unit === "m" ? 2.7 : 9));
+      let balcony = null;
+
+      if (edge.side === "left" || edge.side === "right") {
+        if (room.width - depth < minWidth - 0.02) continue;
+        balcony = {
+          id: uniqueFeatureRoomId(rooms, `balcony-${room.id}`),
+          name: `Balcony · ${room.name}`,
+          type: "balcony",
+          attachedTo: room.id,
+          attachedToRooms: [room.id],
+          requiresExteriorWall: true,
+          requiresCirculationAccess: false,
+          x: edge.side === "left" ? room.x : room.x + room.width - depth,
+          y: room.y,
+          width: depth,
+          height: room.height,
+          minWidth: minDepth,
+          minHeight: unit === "m" ? 2.0 : 6,
+          area: round(depth * room.height)
+        };
+        if (edge.side === "left") room.x += depth;
+        room.width -= depth;
+      } else {
+        if (room.height - depth < minHeight - 0.02) continue;
+        balcony = {
+          id: uniqueFeatureRoomId(rooms, `balcony-${room.id}`),
+          name: `Balcony · ${room.name}`,
+          type: "balcony",
+          attachedTo: room.id,
+          attachedToRooms: [room.id],
+          requiresExteriorWall: true,
+          requiresCirculationAccess: false,
+          x: room.x,
+          y: edge.side === "top" ? room.y : room.y + room.height - depth,
+          width: room.width,
+          height: depth,
+          minWidth: unit === "m" ? 2.0 : 6,
+          minHeight: minDepth,
+          area: round(room.width * depth)
+        };
+        if (edge.side === "top") room.y += depth;
+        room.height -= depth;
+      }
+
+      room.area = round(room.width * room.height);
+      rooms.push(balcony);
+
+      if (hasValidCandidateRooms(layout, rooms)) {
+        report.applied_rooms.push(targetId);
+        report.created_features.push({
+          id: balcony.id,
+          room: targetId,
+          width: balcony.width,
+          depth: balcony.height,
+          area: balcony.area,
+          side: edge.side
+        });
+        applied = true;
+        break;
+      }
+
+      rooms.pop();
+      Object.assign(room, roomSnapshot);
+    }
+
+    if (!applied) {
+      report.unresolved_rooms.push({
+        room: targetId,
+        reason: "The room reaches the exterior, but carving a usable balcony would make the room or full plan invalid."
+      });
+    }
+  }
+
+  if (report.applied_rooms.length === targets.length) {
+    report.status = "applied";
+    report.reason = `Balcony access was created for ${report.applied_rooms.join(", ")}.`;
+    return report;
+  }
+
+  if (report.applied_rooms.length) {
+    report.status = "approximated";
+    report.reason = "Balcony access was created where the current perimeter geometry allowed it. Remaining requested rooms need an architectural perimeter replan.";
+    return report;
+  }
+
+  restoreRoomSnapshots(rooms, snapshot);
+  report.status = "rejected";
+  report.created_features = [];
+  report.reason = "None of the requested rooms could receive a valid balcony in the current perimeter arrangement. Replan those rooms onto an exterior edge or use a shared balcony/terrace concept.";
+  return report;
+}
+
+function exteriorEdges(room, buildable) {
+  const tolerance = 0.05;
+  const edges = [];
+  if (Math.abs(room.x - buildable.x) <= tolerance) {
+    edges.push({ side: "left", length: room.height, axisSize: room.width });
+  }
+  if (Math.abs(room.x + room.width - (buildable.x + buildable.width)) <= tolerance) {
+    edges.push({ side: "right", length: room.height, axisSize: room.width });
+  }
+  if (Math.abs(room.y - buildable.y) <= tolerance) {
+    edges.push({ side: "top", length: room.width, axisSize: room.height });
+  }
+  if (Math.abs(room.y + room.height - (buildable.y + buildable.height)) <= tolerance) {
+    edges.push({ side: "bottom", length: room.width, axisSize: room.height });
+  }
+  return edges;
+}
+
+function uniqueFeatureRoomId(rooms, base) {
+  let id = base;
+  let index = 2;
+  while (rooms.some(room => room.id === id)) {
+    id = `${base}-${index++}`;
+  }
+  return id;
+}
+
+function applySiteFeatureOperation(layout, operation, requirements) {
+  const featureType = operation.feature_type;
+  const report = {
+    operation: "site_feature",
+    feature_type: featureType,
+    status: "rejected",
+    created_features: [],
+    reason: null
+  };
+
+  if (!featureType) {
+    report.reason = "No site feature type was supplied.";
+    return report;
+  }
+
+  const plotWidth = Number(requirements?.plot?.width || 0);
+  const plotHeight = Number(requirements?.plot?.height || 0);
+  const buildable = layout.buildableArea;
+  if (!(plotWidth > 0 && plotHeight > 0 && buildable)) {
+    report.reason = "Plot and buildable-area geometry are required for site planning.";
+    return report;
+  }
+
+  const zones = availableSiteZones(plotWidth, plotHeight, buildable, layout.siteFeatures || []);
+  if (!zones.length) {
+    report.reason = "No usable yard/setback zone remains around the current building footprint.";
+    return report;
+  }
+
+  const requestedPlacement = String(operation.placement || "auto").toLowerCase();
+  const roadSide = String(requirements?.plot?.roadSide || "north").toLowerCase();
+  const preferredSide = requestedPlacement === "front"
+    ? cardinalToSiteSide(roadSide)
+    : requestedPlacement === "rear"
+      ? oppositeSiteSide(cardinalToSiteSide(roadSide))
+      : cardinalToSiteSide(requestedPlacement);
+
+  const ranked = zones.slice().sort((a, b) => {
+    const aPref = preferredSide && a.side === preferredSide ? 1 : 0;
+    const bPref = preferredSide && b.side === preferredSide ? 1 : 0;
+    if (aPref !== bPref) return bPref - aPref;
+    if (["parking", "driveway", "carport"].includes(featureType)) {
+      const road = cardinalToSiteSide(roadSide);
+      const ar = a.side === road ? 1 : 0;
+      const br = b.side === road ? 1 : 0;
+      if (ar !== br) return br - ar;
+    }
+    return b.area - a.area;
+  });
+
+  const unit = String(requirements?.plot?.unit || "ft").toLowerCase();
+  const count = Math.max(1, Number(operation.count || (featureType === "parking" ? requirements?.preferences?.parkingSpaces : 1) || 1));
+  const defaults = defaultSiteFeatureSize(featureType, count, unit);
+  const wantedWidth = Number(operation.width || defaults.width);
+  const wantedDepth = Number(operation.depth || defaults.depth);
+  const wantedArea = Number(operation.area || 0);
+
+  for (const zone of ranked) {
+    let width = Math.min(zone.width, wantedWidth || zone.width);
+    let depth = Math.min(zone.height, wantedDepth || zone.height);
+
+    if (["garden", "lawn"].includes(featureType) && !operation.width && !operation.depth) {
+      width = zone.width;
+      depth = zone.height;
+    }
+
+    if (wantedArea > 0 && width * depth < wantedArea) {
+      const possibleDepth = Math.min(zone.height, wantedArea / Math.max(width, 0.01));
+      depth = Math.max(depth, possibleDepth);
+    }
+
+    const minimum = minimumSiteFeatureSize(featureType, count, unit);
+    if (width < minimum.width - 0.02 || depth < minimum.depth - 0.02) continue;
+
+    const rect = anchorSiteFeature(zone, width, depth, featureType, roadSide);
+    const feature = {
+      id: uniqueSiteFeatureId(layout.siteFeatures, featureType),
+      name: siteFeatureName(featureType, count),
+      type: featureType,
+      x: round(rect.x),
+      y: round(rect.y),
+      width: round(rect.width),
+      height: round(rect.height),
+      area: round(rect.width * rect.height),
+      placement: zone.side,
+      count: ["parking", "carport"].includes(featureType) ? count : null,
+      covered: operation.covered ?? (featureType === "carport" ? true : null),
+      isSiteFeature: true
+    };
+
+    layout.siteFeatures.push(feature);
+    report.created_features.push(feature);
+    report.status = (wantedArea > 0 && feature.area + 0.5 < wantedArea) ? "approximated" : "applied";
+    report.reason = report.status === "applied"
+      ? `${feature.name} was allocated in the ${zone.side} site zone without disturbing the current building footprint.`
+      : `${feature.name} was fitted into the available ${zone.side} yard at ${feature.area} area; the full requested area does not fit without reducing/replanning the building footprint.`;
+    return report;
+  }
+
+  report.reason = `The current yard/setback bands cannot fit a practical ${featureType}. A constrained site-and-building replan is required.`;
+  return report;
+}
+
+function availableSiteZones(plotWidth, plotHeight, buildable, existingFeatures) {
+  const raw = [
+    { side: "top", x: 0, y: 0, width: plotWidth, height: Math.max(0, buildable.y) },
+    { side: "bottom", x: 0, y: buildable.y + buildable.height, width: plotWidth, height: Math.max(0, plotHeight - buildable.y - buildable.height) },
+    { side: "left", x: 0, y: buildable.y, width: Math.max(0, buildable.x), height: buildable.height },
+    { side: "right", x: buildable.x + buildable.width, y: buildable.y, width: Math.max(0, plotWidth - buildable.x - buildable.width), height: buildable.height }
+  ];
+
+  return raw
+    .filter(zone => zone.width > 0.5 && zone.height > 0.5)
+    .map(zone => ({ ...zone, area: round(zone.width * zone.height) }))
+    .filter(zone => !(existingFeatures || []).some(feature => rectanglesOverlap(zone, feature)));
+}
+
+function rectanglesOverlap(a, b) {
+  return a.x < b.x + b.width - 0.02 &&
+    a.x + a.width > b.x + 0.02 &&
+    a.y < b.y + b.height - 0.02 &&
+    a.y + a.height > b.y + 0.02;
+}
+
+function cardinalToSiteSide(value) {
+  const side = String(value || "").toLowerCase();
+  if (["north", "top"].includes(side)) return "top";
+  if (["south", "bottom"].includes(side)) return "bottom";
+  if (["west", "left"].includes(side)) return "left";
+  if (["east", "right"].includes(side)) return "right";
+  return null;
+}
+
+function oppositeSiteSide(side) {
+  return { top: "bottom", bottom: "top", left: "right", right: "left" }[side] || null;
+}
+
+function defaultSiteFeatureSize(type, count, unit) {
+  const metric = unit === "m";
+  if (["parking", "carport"].includes(type)) {
+    return { width: metric ? 2.7 * count : 9 * count, depth: metric ? 5.4 : 18 };
+  }
+  if (type === "driveway") return { width: metric ? 3 : 10, depth: metric ? 5 : 16 };
+  if (type === "sitout") return { width: metric ? 2.5 : 8, depth: metric ? 1.8 : 6 };
+  if (type === "courtyard") return { width: metric ? 3 : 10, depth: metric ? 3 : 10 };
+  return { width: 0, depth: 0 };
+}
+
+function minimumSiteFeatureSize(type, count, unit) {
+  const metric = unit === "m";
+  if (["parking", "carport"].includes(type)) {
+    return { width: metric ? 2.4 * count : 8 * count, depth: metric ? 4.8 : 16 };
+  }
+  if (type === "driveway") return { width: metric ? 2.7 : 9, depth: metric ? 3 : 10 };
+  if (["garden", "lawn"].includes(type)) return { width: metric ? 1.5 : 5, depth: metric ? 1.5 : 5 };
+  if (type === "sitout") return { width: metric ? 1.8 : 6, depth: metric ? 1.2 : 4 };
+  if (type === "courtyard") return { width: metric ? 2 : 7, depth: metric ? 2 : 7 };
+  return { width: metric ? 1.5 : 5, depth: metric ? 1.5 : 5 };
+}
+
+function anchorSiteFeature(zone, width, depth, type, roadSide) {
+  let x = zone.x;
+  let y = zone.y;
+
+  if (zone.side === "top" || zone.side === "bottom") {
+    x = zone.x + Math.max(0, (zone.width - width) / 2);
+    y = zone.side === "top" ? zone.y + zone.height - depth : zone.y;
+  } else {
+    y = zone.y + Math.max(0, (zone.height - depth) / 2);
+    x = zone.side === "left" ? zone.x + zone.width - width : zone.x;
+  }
+
+  return { x, y, width, height: depth };
+}
+
+function uniqueSiteFeatureId(features, type) {
+  let id = `site-${type}`;
+  let index = 2;
+  while ((features || []).some(feature => feature.id === id)) {
+    id = `site-${type}-${index++}`;
+  }
+  return id;
+}
+
+function siteFeatureName(type, count) {
+  const labels = {
+    parking: `${count}-Car Parking`,
+    carport: `${count}-Car Carport`,
+    garden: "Garden",
+    lawn: "Lawn",
+    sitout: "Sit-out",
+    courtyard: "Courtyard",
+    driveway: "Driveway",
+    terrace: "Terrace"
+  };
+  return labels[type] || type;
 }
 
 function applyRoomSizeConstraints(rooms, layout) {
