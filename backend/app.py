@@ -485,7 +485,7 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                                 "type": "string",
                                 "enum": [
                                     "swap", "adjacent", "near", "position", "resize",
-                                    "transfer_area", "redistribute_area", "architectural_rebalance", "balcony_access", "site_feature", "improve_relationship", "optimize_layout",
+                                    "transfer_area", "redistribute_area", "architectural_rebalance", "balcony_access", "site_feature", "improve_relationship", "improve_privacy", "optimize_layout",
                                 ],
                             },
                             "source_room": {
@@ -1054,6 +1054,16 @@ IMPORTANT BEHAVIOUR
     canonical rooms. The deterministic planner will evaluate shared boundary/direct access
     and may perform a bounded local adjustment while protecting explicit constraints.
 
+18AA. Privacy requests are architectural objectives, not generic adjacency commands.
+    For requests such as "give the master bedroom more privacy from the entrance" or
+    "hide bedroom 2 from the living room", emit operation="improve_privacy".
+    - source_room = the room whose privacy should improve.
+    - target_rooms = the public/entrance spaces to protect it from, using foyer and/or living.
+    - target_room may hold the primary one when useful.
+    - Do NOT claim the privacy is improved before render. The geometry engine evaluates
+      existing separation, may reposition the room in the private zone, or may report that
+      a broader entrance/private-zone replan is needed.
+
 18B. Geometry edits are transactional. layout_operations represent pending user intent,
     not permanent commands to re-run forever. Preserve explicit room_constraints as design
     requirements, but do not invent repeated operations from old conversation turns when the
@@ -1206,9 +1216,15 @@ IMPORTANT BEHAVIOUR
 
 35. DO NOT REBUILD THE WHOLE PROPOSAL FOR SMALL EDITS
     Once an accepted/rendered concept exists and current_layout_summary is available,
-    resize, swap, move, allocation, enlargement, and corridor changes are edits to the
-    existing concept. Keep the proposal stable whenever possible; proposal may be null
-    for a small edit. Do not regenerate the full room schedule for every tweak.
+    resize, swap, move, allocation, enlargement, privacy, balcony, relationship, and
+    corridor changes are EDITS to the existing concept. For these edit turns:
+    - set proposal_ready=false;
+    - set proposal=null;
+    - keep concept_ready=true;
+    - preserve the original accepted proposal/brief in state;
+    - return only the structured pending layout_operations/constraints plus a concise reply.
+    Generate a new proposal only when the user changes the core brief (plot, BHK, floors,
+    facing) or explicitly asks for a new/reworked concept.
 
 36. PENDING DECISION DOES NOT INVALIDATE THE EXISTING CONCEPT
     If a valid concept already exists and a new edit is awaiting clarification, keep
@@ -1389,6 +1405,8 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
             operation.get("preferred_local_receiver"), operation.get("preferred_target_donor"),
             operation.get("allow_auto_fallback"), operation.get("priority"),
             operation.get("preserve_total_area"), operation.get("preserve_room_usability"),
+            operation.get("feature_type"), tuple(operation.get("target_rooms") or []),
+            operation.get("count"), operation.get("placement"), operation.get("shared"),
         )
         if key in operation_keys:
             continue
@@ -1476,6 +1494,110 @@ def trim_realestate_history(history: Optional[list[dict[str, Any]]]) -> list[dic
 
     return cleaned
 
+
+
+def _stabilize_initial_proposal(
+    proposal: Any,
+    state: dict[str, Any],
+    user_text: str,
+    history: list[dict[str, str]],
+) -> Any:
+    """Keep identical baseline briefs reproducible while preserving explicit sizes."""
+    if not isinstance(proposal, dict):
+        return proposal
+    if isinstance(state.get("current_layout_summary"), dict):
+        return proposal
+
+    spaces = proposal.get("spaces")
+    if not isinstance(spaces, list):
+        return proposal
+
+    unit = str((state.get("plot") or {}).get("unit") or "ft").lower()
+    bedrooms = int(state.get("bedrooms") or 0)
+    if bedrooms < 1:
+        return proposal
+
+    # Concept defaults only — not legal/code minima. OpenAI still interprets intent;
+    # these defaults make repeat baseline tests deterministic.
+    defaults_ft = {
+        "living": (14.0, 16.0),
+        "dining": (10.0, 12.0),
+        "kitchen": (10.0, 11.0),
+        "utility": (5.0, 8.0),
+        "foyer": (5.0, 6.0),
+        "passage": (4.0, 18.0),
+        "masterbedroom": (13.0, 14.0),
+        "bedroom2": (11.0, 12.0),
+        "bedroom3": (11.0, 12.0),
+        "bedroom4": (10.0, 11.0),
+        "masterbathroom": (6.0, 8.0),
+        "commonbathroom": (5.0, 8.0),
+    }
+
+    explicit = set()
+    for constraint in state.get("room_constraints") or []:
+        if isinstance(constraint, dict) and constraint.get("room"):
+            explicit.add(str(constraint["room"]).replace(" ", "").lower())
+
+    def canonical_name(name: str) -> str | None:
+        n = "".join(ch for ch in str(name).lower() if ch.isalnum())
+        if "living" in n: return "living"
+        if "dining" in n: return "dining"
+        if "kitchen" in n: return "kitchen"
+        if "utility" in n: return "utility"
+        if "foyer" in n or n == "entry": return "foyer"
+        if "passage" in n or "circulation" in n: return "passage"
+        if "master" in n and ("bed" in n or "room" in n): return "masterbedroom"
+        if "bedroom2" in n or "bed2" in n: return "bedroom2"
+        if "bedroom3" in n or "bed3" in n: return "bedroom3"
+        if "bedroom4" in n or "bed4" in n: return "bedroom4"
+        if "master" in n and ("bath" in n or "toilet" in n): return "masterbathroom"
+        if "common" in n and ("bath" in n or "toilet" in n): return "commonbathroom"
+        return None
+
+    factor = 0.3048 if unit == "m" else 1.0
+    stabilized = []
+    for raw in spaces:
+        if not isinstance(raw, dict):
+            continue
+        item = dict(raw)
+        key = canonical_name(item.get("name", ""))
+        explicit_key = {
+            "masterbedroom": "masterbedroom",
+            "bedroom2": "bedroom2",
+            "bedroom3": "bedroom3",
+            "bedroom4": "bedroom4",
+            "living": "living",
+            "dining": "dining",
+            "kitchen": "kitchen",
+        }.get(key)
+        if key in defaults_ft and explicit_key not in explicit:
+            w_ft, d_ft = defaults_ft[key]
+            w = round(w_ft * factor, 2)
+            d = round(d_ft * factor, 2)
+            # Proposal schema labels these fields *_ft for legacy compatibility;
+            # the app currently uses feet-based concept proposals. Keep ft values here.
+            if unit == "ft":
+                item["width_ft"] = w_ft
+                item["depth_ft"] = d_ft
+                item["area_sqft"] = round(w_ft * d_ft, 1)
+        stabilized.append(item)
+
+    all_user_text = " ".join(
+        [str(entry.get("content") or "") for entry in history if entry.get("role") == "user"]
+        + [user_text]
+    )
+    parking_explicit = bool(__import__("re").search(r"\b(parking|car\s*port|carport|garage|\d+\s*cars?)\b", all_user_text, __import__("re").I))
+    if not parking_explicit:
+        stabilized = [
+            item for item in stabilized
+            if not __import__("re").search(r"parking|car\s*porch|carport|garage", str(item.get("name") or ""), __import__("re").I)
+        ]
+        state["parking_spaces"] = None
+
+    result = dict(proposal)
+    result["spaces"] = stabilized
+    return result
 
 def _normalize_agent_pending_decision(state: dict[str, Any]) -> None:
     pending = state.get("pending_decision")
@@ -1613,10 +1735,20 @@ def realestate_chat(payload: RealEstateChatRequest) -> RealEstateChatResponse:
     if not isinstance(missing_fields, list):
         missing_fields = []
 
+    proposal = result.get("proposal")
+    if bool(result.get("proposal_ready")) and proposal is not None:
+        proposal = _stabilize_initial_proposal(proposal, state, message, history)
+
     reply = str(result.get("reply") or "").strip()
     pending_decision = state.get("pending_decision")
     if not reply and isinstance(pending_decision, dict):
         reply = str(pending_decision.get("question") or "").strip()
+
+    # In initial proposal mode the frontend appends the structured proposal itself.
+    # Keep the conversational sentence concise so model-generated room schedules do not
+    # fight with the deterministic baseline schedule.
+    if bool(result.get("proposal_ready")) and proposal is not None and not state.get("current_layout_summary"):
+        reply = "Your brief is complete. I’ve prepared a consistent first concept for review; tell me what you’d like changed, or accept it to continue."
 
     return RealEstateChatResponse(
         reply=reply,
@@ -1624,7 +1756,7 @@ def realestate_chat(payload: RealEstateChatRequest) -> RealEstateChatResponse:
         missing_fields=[str(item) for item in missing_fields],
         concept_ready=bool(result.get("concept_ready")),
         proposal_ready=bool(result.get("proposal_ready")),
-        proposal=result.get("proposal"),
+        proposal=proposal,
         interpreted_message=str(result.get("interpreted_message") or message),
         model=OPENAI_MODEL,
     )
