@@ -1,4 +1,4 @@
-import base64
+
 import io
 import json
 import os
@@ -647,6 +647,76 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                     ],
                     "additionalProperties": False,
                 },
+                "pending_decision": {
+                    "type": ["object", "null"],
+                    "description": (
+                        "A material design choice that must be resolved with the user "
+                        "before the related geometry edit is finalized."
+                    ),
+                    "properties": {
+                        "decision_type": {
+                            "type": "string",
+                            "enum": [
+                                "released_area_allocation",
+                                "space_source_selection",
+                                "room_reference",
+                                "dimension_conflict",
+                                "layout_conflict",
+                                "practicality_choice",
+                            ],
+                        },
+                        "source_room": {
+                            "type": ["string", "null"],
+                            "enum": [
+                                "living", "familyLounge", "dining", "kitchen", "utility",
+                                "masterBedroom", "bedroom2", "bedroom3", "bedroom4",
+                                "commonBathroom", "masterBathroom", "bathroom2", "bathroom3",
+                                "bathroom4", "foyer", "passage", "balcony", "parking",
+                                "study", "storage", "sitout", None,
+                            ],
+                        },
+                        "target_room": {
+                            "type": ["string", "null"],
+                            "enum": [
+                                "living", "familyLounge", "dining", "kitchen", "utility",
+                                "masterBedroom", "bedroom2", "bedroom3", "bedroom4",
+                                "commonBathroom", "masterBathroom", "bathroom2", "bathroom3",
+                                "bathroom4", "foyer", "passage", "balcony", "parking",
+                                "study", "storage", "sitout", None,
+                            ],
+                        },
+                        "requested_width": {"type": ["number", "null"]},
+                        "requested_depth": {"type": ["number", "null"]},
+                        "requested_area": {"type": ["number", "null"]},
+                        "requested_area_delta": {"type": ["number", "null"]},
+                        "estimated_released_area": {"type": ["number", "null"]},
+                        "unit": {
+                            "type": ["string", "null"],
+                            "enum": ["ft", "m", None],
+                        },
+                        "question": {"type": "string"},
+                        "suggested_options": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "original_user_request": {"type": "string"},
+                    },
+                    "required": [
+                        "decision_type",
+                        "source_room",
+                        "target_room",
+                        "requested_width",
+                        "requested_depth",
+                        "requested_area",
+                        "requested_area_delta",
+                        "estimated_released_area",
+                        "unit",
+                        "question",
+                        "suggested_options",
+                        "original_user_request",
+                    ],
+                    "additionalProperties": False,
+                },
             },
             "required": [
                 "plot",
@@ -665,6 +735,7 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                 "room_constraints",
                 "target_internal_area",
                 "layout_directives",
+                "pending_decision",
             ],
             "additionalProperties": False,
         },
@@ -973,6 +1044,124 @@ IMPORTANT BEHAVIOUR
         locked instruction, ask for confirmation in reply and do not emit the
         conflicting operation until confirmed. A newer explicit resize replaces the
         older constraint for that room rather than accumulating both.
+
+
+23. COLLABORATIVE DESIGN BEHAVIOUR
+    Behave like a collaborative residential planning assistant, not just a command
+    parser. Balance the user's preference, practical usability, geometric feasibility,
+    previously confirmed requirements, and minimum disruption to the accepted plan.
+    Ask ONE concise question only when the answer materially changes the design.
+
+24. PENDING DESIGN DECISIONS
+    Use state.pending_decision when an important design choice must be resolved before
+    the requested geometry edit is finalized. While pending_decision is active:
+    - remember the original request and requested dimensions/area;
+    - preserve unrelated existing state;
+    - ask one focused question;
+    - DO NOT emit the incomplete new geometry operation;
+    - DO NOT activate an incomplete new room_constraint yet;
+    - do not silently choose on the user's behalf.
+    When the user answers, interpret the short answer using pending_decision, complete
+    the room_constraint and/or layout operation, clear pending_decision to null, and
+    briefly confirm what will be attempted on the next render.
+
+25. SHRINKING A ROOM CREATES RELEASED FLOOR AREA
+    If the user specifies the recipient in the SAME request, e.g. "Make Bedroom 3
+    exactly 10x11 and give the remaining area to Family Lounge", create/update the
+    Bedroom 3 room_constraint and create transfer_area from bedroom3 to familyLounge
+    with preserve_total_area=true. Do not ask again.
+    If the user only asks to shrink a room and current_layout_summary shows that the
+    requested room is smaller than the current room, do NOT activate the new resize
+    immediately. Create pending_decision with decision_type="released_area_allocation"
+    and ask where the released area should go.
+
+26. RELEASED AREA ESTIMATE
+    If current_layout_summary contains the current room area or dimensions, calculate
+    an approximate released amount. Say "about X sq ft" rather than implying survey
+    precision. If current geometry is unavailable, simply say that some floor area
+    will be released.
+
+27. PRACTICAL RELEASED-AREA OPTIONS
+    Offer a small number of meaningful choices, such as Family Lounge, an adjacent
+    flexible room, circulation, or "choose the most practical option". Never claim
+    adjacency unless current_layout_summary supports it.
+
+28. AUTOMATIC PRACTICAL CHOICE
+    Understand "choose for me", "whatever is practical", "best option", "you
+    decide", and similar wording as permission for deterministic practical
+    redistribution. Use redistribute_area as appropriate. JavaScript remains
+    authoritative for actual geometric donor/recipient selection.
+
+29. GROWING A ROOM CAN REQUIRE A SOURCE
+    If the user wants to enlarge a room but does not say where the extra area should
+    come from, and this is a meaningful trade-off, use pending_decision with
+    decision_type="space_source_selection" and ask whether to take area from one of
+    a few sensible spaces or choose the least disruptive option. Do not ask when the
+    user already named a donor or authorized automatic choice.
+
+30. PRACTICALITY VS USER PREFERENCE
+    If an exact preference appears likely to create a major usability problem, do not
+    immediately reject it. Explain the trade-off briefly and offer one or two useful
+    alternatives. Do not claim something is impossible until deterministic validation
+    has established it.
+
+31. PREVIOUS GEOMETRY FAILURE
+    If current_layout_summary shows that a previous exact request failed, do not keep
+    repeating the same operation while promising success. Explain the previous result
+    briefly and propose one or two practical alternatives. Ask only one decision
+    question.
+
+32. DO NOT OVER-QUESTION
+    Ask clarification only when it materially changes room allocation, dimensions,
+    donor/recipient choice, conflicting room relationships, an ambiguous numbered room,
+    or a major redesign compromise. Do not ask about exact coordinates, tiny rounding
+    differences, solver strategy, or other technical details JavaScript can decide.
+
+33. PRESERVE THE ORIGINAL GOAL THROUGH FOLLOW-UP
+    Example: user says "Bedroom 3 must be 10x11"; assistant asks where released area
+    should go; user says "Family Lounge". The completed state must still preserve
+    Bedroom 3 = 10x11 and also add the transfer to Family Lounge. The follow-up answer
+    completes the first request; it does not replace it.
+
+34. CANCELLING OR REPLACING A PENDING CHANGE
+    Understand "forget it", "cancel that", "leave it as it was", and "never mind"
+    as cancellation when they refer to the pending request. Clear pending_decision and
+    do not activate the pending constraint/operation. If the user instead gives a new
+    explicit instruction, that new instruction may replace the pending request.
+
+35. DO NOT REBUILD THE WHOLE PROPOSAL FOR SMALL EDITS
+    Once an accepted/rendered concept exists and current_layout_summary is available,
+    resize, swap, move, allocation, enlargement, and corridor changes are edits to the
+    existing concept. Keep the proposal stable whenever possible; proposal may be null
+    for a small edit. Do not regenerate the full room schedule for every tweak.
+
+36. PENDING DECISION DOES NOT INVALIDATE THE EXISTING CONCEPT
+    If a valid concept already exists and a new edit is awaiting clarification, keep
+    concept_ready=true. The existing concept remains valid; only the new edit is waiting
+    for a choice.
+
+37. FRIENDLY, PRECISE REPLIES
+    Prefer natural language like: "That will free some floor area. Would you like it
+    added to the Family Lounge, Bedroom 4, circulation, or should I choose the most
+    practical option?" Avoid robotic phrases such as "target_room unresolved".
+
+38. NEVER CLAIM AN UNRENDERED RESULT
+    Until geometry runs, say "I'll ask the engine to...", "the engine will attempt...",
+    or "we can try...". Never claim exact dimensions, transferred area, or validity
+    before Render verifies it.
+
+39. ROOM SIZE AND AREA MOVEMENT ARE SEPARATE RESPONSIBILITIES
+    A room size belongs in room_constraints. Movement of released/required area between
+    rooms belongs in transfer_area/redistribute_area. Example: "Master Bedroom 14x16,
+    take required area from Bedroom 3" means a Master Bedroom room_constraint plus a
+    transfer/redistribution operation identifying Bedroom 3 as donor, not one hybrid
+    resize operation.
+
+40. OVERALL COLLABORATIVE FLOW
+    Follow this pattern: understand preference -> identify meaningful consequence -> ask
+    one useful question if needed -> reach a shared decision -> emit complete structured
+    intent -> let deterministic geometry validate it -> if geometry fails, explain why
+    and negotiate the nearest practical alternative.
 """.strip()
 
 
@@ -1026,6 +1215,10 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
     if not isinstance(current_layout_summary, dict):
         current_layout_summary = None
 
+    pending_decision = state.get("pending_decision")
+    if not isinstance(pending_decision, dict):
+        pending_decision = None
+
     return {
         "plot": {
             "width": plot.get("width"),
@@ -1050,6 +1243,7 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
             "unit": target_internal_area.get("unit"),
         },
         "layout_directives": layout_directives,
+        "pending_decision": pending_decision,
         "current_layout_summary": current_layout_summary,
     }
 
@@ -1075,6 +1269,69 @@ def trim_realestate_history(history: Optional[list[dict[str, Any]]]) -> list[dic
         })
 
     return cleaned
+
+
+def _normalize_agent_pending_decision(state: dict[str, Any]) -> None:
+    pending = state.get("pending_decision")
+    if pending is None:
+        return
+    if not isinstance(pending, dict):
+        state["pending_decision"] = None
+        return
+    question = str(pending.get("question") or "").strip()
+    decision_type = str(pending.get("decision_type") or "").strip()
+    if not question or not decision_type:
+        state["pending_decision"] = None
+
+
+def _deduplicate_agent_operations(state: dict[str, Any]) -> None:
+    operations = state.get("layout_operations")
+    if not isinstance(operations, list):
+        state["layout_operations"] = []
+        return
+
+    unique: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+    for operation in operations:
+        if not isinstance(operation, dict):
+            continue
+        key = (
+            operation.get("operation"), operation.get("source_room"),
+            operation.get("target_room"), operation.get("donor_room"),
+            operation.get("side"), operation.get("width"), operation.get("depth"),
+            operation.get("area"), operation.get("amount_sqft"),
+            operation.get("amount_percent"), operation.get("requested_width"),
+            operation.get("requested_depth"), operation.get("priority"),
+            operation.get("preserve_total_area"),
+            operation.get("preserve_room_usability"),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(operation)
+    state["layout_operations"] = unique
+
+
+def _keep_latest_room_constraint_per_room(state: dict[str, Any]) -> None:
+    constraints = state.get("room_constraints")
+    if not isinstance(constraints, list):
+        state["room_constraints"] = []
+        return
+
+    latest_by_room: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for constraint in constraints:
+        if not isinstance(constraint, dict):
+            continue
+        room = str(constraint.get("room") or "").strip()
+        if not room:
+            continue
+        key = room.lower()
+        if key not in latest_by_room:
+            order.append(key)
+        latest_by_room[key] = constraint
+
+    state["room_constraints"] = [latest_by_room[key] for key in order]
 
 
 @app.post("/api/realestate/chat", response_model=RealEstateChatResponse)
@@ -1139,12 +1396,21 @@ def realestate_chat(payload: RealEstateChatRequest) -> RealEstateChatResponse:
     if not isinstance(state, dict):
         raise HTTPException(status_code=502, detail="OpenAI response is missing state.")
 
+    _normalize_agent_pending_decision(state)
+    _deduplicate_agent_operations(state)
+    _keep_latest_room_constraint_per_room(state)
+
     missing_fields = result.get("missing_fields")
     if not isinstance(missing_fields, list):
         missing_fields = []
 
+    reply = str(result.get("reply") or "").strip()
+    pending_decision = state.get("pending_decision")
+    if not reply and isinstance(pending_decision, dict):
+        reply = str(pending_decision.get("question") or "").strip()
+
     return RealEstateChatResponse(
-        reply=str(result.get("reply") or ""),
+        reply=reply,
         state=state,
         missing_fields=[str(item) for item in missing_fields],
         concept_ready=bool(result.get("concept_ready")),
@@ -1787,29 +2053,3 @@ def _draw_brochure_page(c: pdf_canvas.Canvas, page_size: tuple[float, float], im
 @app.post("/api/realestate/brochure", response_model=BrochureResponse)
 def realestate_brochure(payload: BrochureRequest) -> BrochureResponse:
     engineer_image = _decode_brochure_image(payload.engineer_view_png, "engineer_view_png")
-    buyer_image = _decode_brochure_image(payload.buyer_view_png, "buyer_view_png")
-    brochure_image = _decode_brochure_image(payload.brochure_view_png, "brochure_view_png")
-
-    title = _clean_brochure_title(payload.title or "Still In Queue · Layout Brochure")
-    page_size = landscape(A4)
-
-    try:
-        buf = io.BytesIO()
-        c = pdf_canvas.Canvas(buf, pagesize=page_size)
-
-        _draw_brochure_page(c, page_size, engineer_image, f"{title} — Engineer Drawing")
-        c.showPage()
-
-        _draw_brochure_page(c, page_size, buyer_image, f"{title} — Buyer Plan")
-        c.showPage()
-
-        _draw_brochure_page(c, page_size, brochure_image, f"{title} — 3D View")
-        c.showPage()
-
-        c.save()
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail="Failed to build brochure PDF.") from exc
-
-    return BrochureResponse(pdf_base64=base64.b64encode(buf.getvalue()).decode("ascii"))
