@@ -61,6 +61,29 @@
 
     .logo { display: flex; align-items: center; text-decoration: none; }
     .logo-img { height: 150px; width: auto; display: block; }
+    .logo-fallback {
+      display: inline-flex;
+      align-items: center;
+      gap: .55rem;
+      color: #e0f2fe;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      font-size: .95rem;
+      white-space: nowrap;
+    }
+    .logo-fallback-mark {
+      width: 2rem;
+      height: 2rem;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid rgba(56,189,248,.75);
+      border-radius: 50%;
+      color: #7dd3fc;
+      box-shadow: 0 0 18px rgba(56,189,248,.22);
+      font-size: .72rem;
+      letter-spacing: 0;
+    }
 
     .header-right { display: flex; align-items: center; gap: 1.2rem; }
 
@@ -581,7 +604,16 @@
 
   <header class="site-header">
     <a href="agents.html" class="logo" title="Back to Agents">
-      <img src="SQ-AI-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
+      <img
+        src="/SQ-AI-Photoroom.png"
+        alt="Still In Queue Group"
+        class="logo-img"
+        onerror="this.hidden=true; this.nextElementSibling.hidden=false;"
+      />
+      <span class="logo-fallback" hidden aria-label="Still In Queue Group">
+        <span class="logo-fallback-mark">SQ</span>
+        <span>Still In Queue</span>
+      </span>
     </a>
 
     <div class="header-right">
@@ -781,7 +813,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "ai-native-chat-v22";
+      const REAL_ESTATE_VERSION = "ai-native-chat-v24";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -3716,24 +3748,44 @@ Review the revised proposal below. If it looks right, click â€œAccept Proposalâ€
               ? layout.failedRooms.map(r => r.name).join(", ")
               : "";
 
-            preview.innerHTML = `
-              <div style="
-                padding:24px;
-                background:#fff7ed;
-                color:#9a3412;
-                border:1px solid #fdba74;
-                border-radius:12px;
-                font-family:Arial,sans-serif;
-                line-height:1.6;
-              ">
-                <strong>Constraint planner could not create a complete layout.</strong>
-                <br><br>
-                Feasibility: <strong>${feasibilityStatus}</strong>
-                ${failedNames ? `<br>Rooms not placed: ${failedNames}` : ""}
-                <br><br>
-                We will improve the packing strategy rather than drawing an invalid plan.
-              </div>
-            `;
+            /*
+              Failed revisions must never replace the last valid drawing with an
+              error card. The transaction has already rolled the requirement state
+              back; restore the committed geometry visually as well.
+            */
+            if (committedConstraintLayout?.success) {
+              const rollbackTitle =
+                `${layoutState.plot.width}Ã—${layoutState.plot.depth} ${layoutState.bedrooms}BHK Concept`;
+              renderBlueprintLayout(
+                committedConstraintLayout,
+                preview,
+                { requirements, title: rollbackTitle }
+              );
+              renderBuyerLayout(
+                committedConstraintLayout,
+                buyerPreview,
+                { requirements, title: rollbackTitle }
+              );
+              renderLayoutLegend(committedConstraintLayout, legendEl);
+              window.currentConstraintLayout = committedConstraintLayout;
+            } else {
+              preview.innerHTML = `
+                <div style="
+                  padding:24px;
+                  background:#fff7ed;
+                  color:#9a3412;
+                  border:1px solid #fdba74;
+                  border-radius:12px;
+                  font-family:Arial,sans-serif;
+                  line-height:1.6;
+                ">
+                  <strong>Constraint planner could not create a complete layout.</strong>
+                  <br><br>
+                  Feasibility: <strong>${feasibilityStatus}</strong>
+                  ${failedNames ? `<br>Unsatisfied request: ${failedNames}` : ""}
+                </div>
+              `;
+            }
 
             addMessage(
               "assistant",
@@ -3741,7 +3793,7 @@ Review the revised proposal below. If it looks right, click â€œAccept Proposalâ€
 
 Feasibility: ${feasibilityStatus}
 
-${failedNames ? `Rooms not placed: ${failedNames}` : ""}
+${failedNames ? `Unsatisfied request: ${failedNames}` : ""}
 
 The requested change was not committed. The previous valid concept and its requirements remain active. You can ask for an alternative or another change.`
             );
