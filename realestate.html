@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>Still In Queue · Real Estate</title>
-  <link rel="icon" type="image/png" href="assets/Fav-Photoroom.png">
+  <link rel="icon" type="image/png" href="Fav-Photoroom.png">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Fonts -->
@@ -475,8 +475,6 @@
     }
 
     .preview-3d-placeholder {
-      position: absolute;
-      inset: 0;
       min-height: 420px;
       display: flex;
       align-items: center;
@@ -485,7 +483,6 @@
       text-align: center;
       padding: 2rem;
       line-height: 1.6;
-      pointer-events: none;
     }
 
     .preview-3d-icon {
@@ -584,7 +581,7 @@
 
   <header class="site-header">
     <a href="agents.html" class="logo" title="Back to Agents">
-      <img src="assets/SQ-AI-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
+      <img src="SQ-AI-Photoroom.png" alt="Still In Queue Group" class="logo-img" />
     </a>
 
     <div class="header-right">
@@ -673,7 +670,7 @@
           <div class="chat-input-row">
             <textarea id="chatInput" class="chat-input chat-textarea"
               rows="3"
-              placeholder="Describe your requirements or changes...&#10;Example: Make the kitchen face northeast and add a puja room."></textarea>
+              placeholder="Describe your requirements or changes...&#10;Example: Move the common bathroom near Bedroom 2 and add a utility beside the kitchen."></textarea>
             <button id="chatSend" class="chat-send">Send</button>
           </div>
 
@@ -682,7 +679,6 @@
             <button id="btnRender" class="studio-btn" disabled>Render Concept 1</button>
             <button id="btnConfirm" class="studio-btn-secondary" disabled>Confirm Layout</button>
             <button id="btnDownloadPdf" class="studio-btn-secondary" disabled>Download SVG</button>
-            <button id="btnDownloadBrochure" class="studio-btn-secondary" disabled>Download Brochure (PDF)</button>
           </div>
 
           <!-- Predictable wait UI -->
@@ -706,11 +702,11 @@
 
         <div id="blueprintPanel">
           <div class="blueprint-subtabs">
-            <button class="blueprint-subtab" id="tabEngineer">Engineer Drawing</button>
-            <button class="blueprint-subtab active" id="tabBuyer">Buyer Plan</button>
+            <button class="blueprint-subtab active" id="tabEngineer">Engineer Drawing</button>
+            <button class="blueprint-subtab" id="tabBuyer">Buyer Plan</button>
           </div>
 
-          <div id="engineerPanel" style="display:none;">
+          <div id="engineerPanel">
             <div class="viewer-toolbar">
               <div>
                 <div class="studio-label" style="margin-bottom:.35rem;">Engineer Drawing</div>
@@ -734,7 +730,7 @@
             <div class="legend" id="legend"></div>
           </div>
 
-          <div id="buyerPanel">
+          <div id="buyerPanel" style="display:none;">
             <div class="viewer-toolbar">
               <div>
                 <div class="studio-label" style="margin-bottom:.35rem;">Buyer Plan</div>
@@ -754,21 +750,17 @@
           <div class="viewer-toolbar">
             <div>
               <div class="studio-label" style="margin-bottom:.35rem;">3D Preview</div>
-              <div class="viewer-hint">Drag to orbit · scroll to zoom · built from the same room geometry as the blueprint (ground floor)</div>
-            </div>
-            <div class="viewer-controls">
-              <button class="viewer-pill" id="reset3dView">Reset View</button>
+              <div class="viewer-hint">Concept visualization based on the current plan. Detailed furniture comes later.</div>
             </div>
           </div>
 
-          <div class="viewer-stage" id="viewer3dStage">
-            <canvas id="canvas3d" style="width:100%;height:100%;display:block;"></canvas>
-            <div id="preview3dPlaceholder" class="preview-3d-placeholder">
+          <div class="viewer-stage">
+            <div id="preview3d" class="preview-3d-placeholder">
               <div>
                 <div class="preview-3d-icon">◇</div>
-                <strong>Render a layout first.</strong>
+                <strong>3D preview is the next stage.</strong>
                 <div style="margin-top:.45rem;">
-                  The 3D view is built from the same room geometry as the blueprint.
+                  The technical blueprint is rendered separately so we can build a proper 3D view from the same plan data.
                 </div>
               </div>
             </div>
@@ -782,15 +774,6 @@
     <p>© 2025 Still in Queue · SQ-AI Real Estate. All rights reserved.</p>
   </footer>
 
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-      }
-    }
-  </script>
-
   <script type="module">
     import { generateLayout } from "./js/layout/layout-planner.js";
     import { renderBlueprintLayout, renderBuyerLayout, renderLayoutLegend } from "./js/layout/blueprint-renderer.js";
@@ -798,7 +781,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "ai-native-chat-v21";
+      const REAL_ESTATE_VERSION = "ai-native-chat-v22";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -814,7 +797,6 @@
       const btnRender  = document.getElementById("btnRender");
       const btnConfirm = document.getElementById("btnConfirm");
       const btnPdf     = document.getElementById("btnDownloadPdf");
-      const btnBrochure = document.getElementById("btnDownloadBrochure");
 
       const progressFill = document.getElementById("progressFill");
       const progressText = document.getElementById("progressText");
@@ -824,9 +806,7 @@
       const tab3d = document.getElementById("tab3d");
       const blueprintPanel = document.getElementById("blueprintPanel");
       const preview3dPanel = document.getElementById("preview3dPanel");
-      const canvas3d = document.getElementById("canvas3d");
-      const preview3dPlaceholder = document.getElementById("preview3dPlaceholder");
-      const reset3dViewBtn = document.getElementById("reset3dView");
+      const preview3d = document.getElementById("preview3d");
 
       const tabEngineer = document.getElementById("tabEngineer");
       const tabBuyer = document.getElementById("tabBuyer");
@@ -880,8 +860,10 @@
       let lastPdfBase64 = null;
       let isConfirmed = false;
       let aiState = null;
+      let committedAiState = null;
+      let pendingAiStateBase = null;
+      let committedConstraintLayout = null;
       let aiProposal = null;
-      let lastShownProposalSignature = null; // avoids reprinting the full space program every turn
 
       const layoutState = {
         stage: 1,
@@ -925,35 +907,11 @@
         proposalAccepted: false,
         proposal: null,
         rendered: false,
-        confirmed: false,
-
-        // AI-understood edit directives (see backend layout_directives schema).
-        layoutDirectives: {},
-
-        // Raw {room, preference} pairs from AI state.room_preferences, resolved
-        // into concrete adjacency swaps by js/layout/adjacency.js at render time.
-        roomPreferences: [],
-        layoutOperations: [],
-        appliedLayoutOperationKeys: [],
-
-        // Explicit dimensions/areas and usable-area target remain separate
-        // from plot dimensions throughout the deterministic planner flow.
-        roomConstraints: [],
-        targetInternalArea: null
+        confirmed: false
       };
 
       function setStatus(html) {
         statusEl.innerHTML = html;
-      }
-
-      function layoutOperationKey(operation) {
-        return [
-          operation.operation, operation.source_room, operation.target_room,
-          operation.donor_room, operation.side, operation.width, operation.depth,
-          operation.area, operation.amount_sqft, operation.amount_percent,
-          operation.requested_width, operation.requested_depth,
-          operation.priority, operation.preserve_total_area, operation.preserve_room_usability
-        ].join("|");
       }
 
       function directionName(code) {
@@ -978,14 +936,9 @@
       }
 
       function isConceptReady() {
-        const hasPlanningEnvelope = Boolean(
-          layoutState.plot.width && layoutState.plot.depth
-        );
-        const hasInternalAreaTarget = Boolean(
-          Number(layoutState.targetInternalArea?.area) > 0
-        );
         return Boolean(
-          (hasPlanningEnvelope || hasInternalAreaTarget) &&
+          layoutState.plot.width &&
+          layoutState.plot.depth &&
           layoutState.facing &&
           layoutState.bedrooms &&
           layoutState.floors
@@ -1015,7 +968,6 @@
         btnRender.disabled = !(layoutState.proposalAccepted && layoutState.proposal && isConceptReady());
         btnConfirm.disabled = !layoutState.rendered;
         btnPdf.disabled = !layoutState.confirmed || !layoutState.rendered;
-        if (btnBrochure) btnBrochure.disabled = !layoutState.confirmed || !layoutState.rendered;
         btnRender.textContent = layoutState.rendered ? "Re-render Layout" : "Render Concept 1";
       }
 
@@ -1456,7 +1408,6 @@ Click “Render Concept 1” to generate the technical blueprint.`;
       function syncLayoutStateFromAI(state, proposal) {
         const previousState = JSON.stringify(aiState || {});
         const previousProposal = JSON.stringify(aiProposal || {});
-        const wasAccepted = layoutState.proposalAccepted;
 
         aiState = state || aiState;
         aiProposal = proposal ?? aiProposal;
@@ -1473,34 +1424,6 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         layoutState.planningStyle = s.planning_style ?? layoutState.planningStyle;
         layoutState.bathrooms = s.bathrooms ?? layoutState.bathrooms;
         layoutState.parking = s.parking_spaces ?? layoutState.parking;
-
-        if (s.layout_directives && typeof s.layout_directives === "object") {
-          layoutState.layoutDirectives = {
-            ...layoutState.layoutDirectives,
-            ...s.layout_directives
-          };
-        }
-
-        if (Array.isArray(s.room_preferences)) {
-          layoutState.roomPreferences = s.room_preferences;
-        }
-
-        if (Array.isArray(s.layout_operations)) {
-          layoutState.layoutOperations = s.layout_operations.filter((operation, index, all) =>
-            index === all.findIndex(candidate => layoutOperationKey(candidate) === layoutOperationKey(operation))
-          );
-        }
-
-        if (Array.isArray(s.room_constraints)) {
-          layoutState.roomConstraints = s.room_constraints;
-        }
-
-        if (s.target_internal_area && typeof s.target_internal_area === "object") {
-          layoutState.targetInternalArea = {
-            area: s.target_internal_area.area,
-            unit: s.target_internal_area.unit
-          };
-        }
 
         const nextState = JSON.stringify(aiState || {});
         const nextProposal = JSON.stringify(aiProposal || {});
@@ -1519,7 +1442,7 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         // Any AI-understood requirement change invalidates the previously accepted/rendered plan.
         // This guarantees the next render is built from the latest state and proposal.
         if (requirementsChanged) {
-          layoutState.proposalAccepted = wasAccepted;
+          layoutState.proposalAccepted = false;
           layoutState.rendered = false;
           layoutState.confirmed = false;
           draftPlan = null;
@@ -1528,11 +1451,11 @@ Click “Render Concept 1” to generate the technical blueprint.`;
 
           if (preview) {
             preview.innerHTML =
-              `<div class="preview-placeholder">Requirements changed. ${wasAccepted ? "Render again to apply the edit." : "Accept the updated proposal and render again."}</div>`;
+              '<div class="preview-placeholder">Requirements changed. Accept the updated proposal and render again.</div>';
           }
           if (buyerPreview) {
             buyerPreview.innerHTML =
-              `<div class="preview-placeholder">Requirements changed. ${wasAccepted ? "Buyer plan will update on the next render." : "Buyer plan will regenerate after the updated proposal is accepted."}</div>`;
+              '<div class="preview-placeholder">Requirements changed. Buyer plan will regenerate after the updated proposal is accepted.</div>';
           }
         }
 
@@ -2630,6 +2553,13 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         const text = (chatInput.value || "").trim();
         if (!text) return;
 
+        // Save the last committed AI state before interpreting a new edit.
+        // If the following render fails, we restore this state so failed wishes
+        // do not poison every later request.
+        pendingAiStateBase = committedAiState
+          ? structuredClone(committedAiState)
+          : (aiState ? structuredClone(aiState) : null);
+
         addMessage("user", text);
         chatInput.value = "";
 
@@ -2671,10 +2601,7 @@ Click “Render Concept 1” to generate the technical blueprint.`;
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               message: text,
-              state: {
-                ...(aiState || {}),
-                current_layout_summary: currentLayoutSummary()
-              },
+              state: aiState,
               history: historyForApi
             })
           });
@@ -2724,34 +2651,22 @@ Click “Render Concept 1” to generate the technical blueprint.`;
             data.proposal_ready &&
             data.proposal
           ) {
-            // Only show the full space program when it's actually new/changed
-            // since we last displayed it -- otherwise the model's own short
-            // reply already covers this turn, and reprinting the whole
-            // proposal every message is exactly the robotic repetition users
-            // complained about.
-            const proposalSignature = JSON.stringify(data.proposal);
-            const proposalChanged = proposalSignature !== lastShownProposalSignature;
+            const proposalText =
+              aiProposalText();
 
-            if (proposalChanged) {
-              const proposalText =
-                aiProposalText();
-
-              /*
-                Avoid duplicating the proposal when the backend/model
-                already included it in data.reply.
-              */
-              if (
-                proposalText &&
-                !reply.includes(
-                  proposalText
-                )
-              ) {
-                reply +=
-                  "\n\n" +
-                  proposalText;
-              }
-
-              lastShownProposalSignature = proposalSignature;
+            /*
+              Avoid duplicating the proposal when the backend/model
+              already included it in data.reply.
+            */
+            if (
+              proposalText &&
+              !reply.includes(
+                proposalText
+              )
+            ) {
+              reply +=
+                "\n\n" +
+                proposalText;
             }
           }
 
@@ -2840,185 +2755,6 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           left: 1.5,
           right: 1.5
         };
-      }
-
-      /*
-        Turns the deterministic engine's own adjacency report into a plain,
-        ground-truth status message -- this is what actually happened to the
-        geometry, independent of anything the chat model claimed.
-      */
-      function formatAdjacencyReport(report) {
-        if (!Array.isArray(report) || !report.length) return null;
-
-        const applied = report.filter(r => r.status === "applied");
-        const already = report.filter(r => r.status === "already-satisfied");
-        const unmet = report.filter(r => r.status === "no-swap-candidate");
-        const unresolvedSource = report.filter(r => r.status === "unresolved-source");
-        const unresolvedTarget = report.filter(r => r.status === "unresolved-target");
-
-        const lines = [];
-
-        if (applied.length) {
-          lines.push("Applied:");
-          applied.forEach(r => {
-            if (r.action === "swap") lines.push(`• ${r.sourceLabel} swapped with ${r.targetLabel}.`);
-            else if (r.action === "side") lines.push(`• ${r.sourceLabel} moved toward the ${r.phrase}.`);
-            else if (r.action === "opposite") lines.push(`• ${r.sourceLabel} placed approximately opposite ${r.targetLabel}.`);
-            else lines.push(`• ${r.sourceLabel} moved next to ${r.targetLabel}.`);
-          });
-        }
-        if (already.length) {
-          lines.push("Already matched what you asked:");
-          already.forEach(r => lines.push(`• ${r.sourceLabel} is already next to ${r.targetLabel}.`));
-        }
-        if (unmet.length) {
-          lines.push("Understood, but could not apply safely (no matching room to swap with without breaking the plan):");
-          unmet.forEach(r => lines.push(`• "${r.roomText}" near ${r.targetLabel || r.phrase}.`));
-        }
-        if (unresolvedSource.length) {
-          lines.push("Could not identify which room you meant -- please be more specific:");
-          unresolvedSource.forEach(r => lines.push(`• "${r.roomText}" — try the exact name shown in the plan (e.g. "Common Toilet", "Bedroom 2").`));
-        }
-        if (unresolvedTarget.length) {
-          lines.push("Could not identify where you wanted it placed -- please be more specific:");
-          unresolvedTarget.forEach(r => lines.push(`• "${r.roomText}"${r.phrase ? ` near "${r.phrase}"` : ""} — name a specific room, or the hall/passage.`));
-        }
-
-        return lines.join("\n");
-      }
-
-      function formatConstraintReport(layout) {
-        const lines = [];
-        const constraints = Array.isArray(layout.constraintReport) ? layout.constraintReport : [];
-        const balcony = Array.isArray(layout.balconyReport) ? layout.balconyReport : [];
-
-        [...constraints, ...balcony].forEach(result => {
-          const actual = result.actual;
-          const dimensions = actual
-            ? `${actual.width.toFixed(1)} × ${actual.depth.toFixed(1)} ${layout.unit} (${actual.area.toFixed(1)} sq ${layout.unit})`
-            : result.reason || "could not be applied";
-          lines.push(`• ${result.status}: ${result.room} — ${dimensions}`);
-        });
-
-        const area = layout.areaSummary;
-        if (area?.targetInternalArea) {
-          lines.push(`• ${area.status}: internal area ${area.calculatedInternalArea.toFixed(1)} / target ${area.targetInternalArea.toFixed(1)} ${area.unit}`);
-        }
-
-        return lines.join("\n");
-      }
-
-      function formatLayoutOperationReport(report) {
-        if (!Array.isArray(report) || !report.length) return null;
-        const labels = {
-          familyLounge: "Family Lounge",
-          masterBedroom: "Master Bedroom",
-          bedroom2: "Bedroom 2",
-          bedroom3: "Bedroom 3",
-          bedroom4: "Bedroom 4",
-          commonBathroom: "Common Bathroom"
-        };
-        const label = id => labels[id] || String(id || "room").replace(/([A-Z])/g, " $1").replace(/^./, value => value.toUpperCase());
-        return report.map(result => {
-          const source = label(result.source_room);
-          const target = result.target_room ? label(result.target_room) : null;
-          if (["transfer_area", "redistribute_area", "resize"].includes(result.operation)) {
-            const request = result.operation === "transfer_area"
-              ? `Transfer area from ${source} to ${target}`
-              : `Increase ${target || source} using local redistribution`;
-            const changes = Array.isArray(result.changes) && result.changes.length
-              ? result.changes.map(change =>
-                  `${change.room}: ${change.before_area.toFixed(1)} → ${change.after_area.toFixed(1)} sq ${window.currentConstraintLayout?.unit || "ft"}`
-                ).join("\n")
-              : "No geometry changed.";
-            const suggestion = result.suggestion
-              ? "\n\nSUGGESTION\n" + result.suggestion
-              : "";
-            return "REQUEST\n" + request +
-              "\n\nRESULT\n" + result.reason +
-              "\n\nCHANGES\n" + changes +
-              "\n\nSTATUS\n" + result.status + suggestion;
-          }
-          if (result.operation === "optimize_layout") {
-            const suggestions = Array.isArray(result.suggestions)
-              ? result.suggestions.map((suggestion, index) => `${index + 1}. ${suggestion}`).join("\n")
-              : result.reason;
-            return `PRACTICAL LAYOUT REVIEW\n\n${suggestions}\n\nSTATUS\nproposed — confirmation required before geometry changes`;
-          }
-          if (result.status === "applied" && result.operation === "swap") return `✓ Swapped ${source} ↔ ${target}`;
-          if (result.status === "applied") return `✓ ${source}: ${result.reason}`;
-          if (result.status === "approximated") return `~ ${source}${target ? ` ↔ ${target}` : ""}: ${result.reason}`;
-          return `⚠ ${source}${target ? ` ↔ ${target}` : ""} ${result.operation} could not be applied.\nReason: ${result.reason}`;
-        }).join("\n");
-      }
-
-      function currentLayoutSummary() {
-        const layout = window.currentConstraintLayout;
-        if (!layout?.success) return null;
-        const canonicalId = room => ({
-          "family-lounge": "familyLounge",
-          "bedroom-1": "masterBedroom",
-          "bedroom-2": "bedroom2",
-          "bedroom-3": "bedroom3",
-          "bedroom-4": "bedroom4",
-          "common-toilet": "commonBathroom",
-          "attached-toilet-1": "masterBathroom",
-          "attached-toilet-2": "bathroom2"
-        })[room.id] || room.id;
-        return {
-          unit: layout.unit,
-          rooms: layout.rooms.map(room => ({
-            id: canonicalId(room),
-            name: room.name,
-            width: room.width,
-            depth: room.height,
-            area: room.area
-          })),
-          validation: {
-            accessible: layout.accessibilityReport?.valid === true,
-            geometry_valid: layout.validationReport?.valid === true
-          },
-          internal_area: layout.areaSummary?.calculatedInternalArea || null
-        };
-      }
-
-      /*
-        Applies the AI's structured layout_directives (backend chat state)
-        onto the planner preferences. This is the primary edit-understanding
-        path -- it handles typos/paraphrasing far better than regex -- while
-        applyUserChatDesignOverrides() below stays as a text-based fallback.
-        Only non-null directive fields are applied so an unset directive
-        never clobbers a previously established preference.
-      */
-      function applyAIDirectives(preferences) {
-        const d = layoutState.layoutDirectives || {};
-
-        if (typeof d.family_lounge === "boolean") preferences.familyLounge = d.family_lounge;
-        if (typeof d.utility === "boolean") preferences.utility = d.utility;
-        if (typeof d.puja === "boolean") preferences.puja = d.puja;
-        if (typeof d.store === "boolean") preferences.store = d.store;
-        if (typeof d.balcony === "boolean") preferences.balcony = d.balcony;
-        if (d.kitchen_direction) preferences.kitchenDirection = d.kitchen_direction;
-        if (d.master_bedroom_direction) preferences.masterBedroomDirection = d.master_bedroom_direction;
-        if (typeof d.extend_bedroom_passage === "boolean") preferences.extendBedroomPassage = d.extend_bedroom_passage;
-        if (typeof d.direct_master_entry === "boolean") preferences.directMasterEntry = d.direct_master_entry;
-        if (typeof d.opposite_bedroom_entries === "boolean") preferences.oppositeBedroomEntries = d.opposite_bedroom_entries;
-
-        preferences.layoutDirectives = preferences.layoutDirectives || {};
-        if (typeof d.common_toilet_independent_access === "boolean") {
-          preferences.layoutDirectives.commonToiletIndependentAccess = d.common_toilet_independent_access;
-        }
-        if (typeof d.dining_below_family === "boolean") {
-          preferences.layoutDirectives.diningBelowFamily = d.dining_below_family;
-        }
-
-        preferences.roomScales = preferences.roomScales || {};
-        (Array.isArray(d.rooms_scaled_bigger) ? d.rooms_scaled_bigger : []).forEach(key => {
-          preferences.roomScales[key] = 1.18;
-        });
-        (Array.isArray(d.rooms_scaled_smaller) ? d.rooms_scaled_smaller : []).forEach(key => {
-          preferences.roomScales[key] = 0.86;
-        });
       }
 
       function applyUserChatDesignOverrides(
@@ -3247,17 +2983,6 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           roomRegex,
           key
         ) => {
-          const structuredBigger = Array.isArray(layoutState.layoutDirectives?.rooms_scaled_bigger)
-            ? layoutState.layoutDirectives.rooms_scaled_bigger
-            : [];
-          const structuredSmaller = Array.isArray(layoutState.layoutDirectives?.rooms_scaled_smaller)
-            ? layoutState.layoutDirectives.rooms_scaled_smaller
-            : [];
-          const hasStructuredAreaOperation = (layoutState.layoutOperations || []).some(operation =>
-            ["resize", "transfer_area", "redistribute_area"].includes(operation.operation)
-          );
-          if (structuredBigger.length || structuredSmaller.length || hasStructuredAreaOperation) return;
-
           for (
             const content
             of userTexts
@@ -3315,15 +3040,8 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           "masterBedroom"
         );
 
-        for (let bedroomNumber = 2; bedroomNumber <= 5; bedroomNumber++) {
-          applySizeIntent(
-            new RegExp(`\\bbed(?:room)?\\s*${bedroomNumber}\\b`, "i"),
-            `bedroom${bedroomNumber}`
-          );
-        }
-
         applySizeIntent(
-          /\bbedrooms\b(?!\s*\d)|\b(?:all|every)\s+bedrooms?\b/i,
+          /\bbedrooms?\b/i,
           "bedroom"
         );
 
@@ -3361,6 +3079,37 @@ Click “Render Concept 1” to generate the technical blueprint.`;
             )
           ) {
             preferences.layoutDirectives.commonToiletIndependentAccess =
+              true;
+          }
+        }
+
+        /*
+          More architectural directives from natural-language chat.
+          OpenAI still writes the conversational reply; these values
+          make sure the deterministic renderer actually follows it.
+        */
+        for (
+          const content
+          of userTexts
+        ) {
+          if (
+            /\bcommon\s*(?:bath|bathroom|toilet|wc|washroom)\b/i.test(content) &&
+            /\b(?:passage|hall|corridor)\b/i.test(content) &&
+            /\b(?:near|beside|next|accessible|access|door|entry|entrance)\b/i.test(content)
+          ) {
+            preferences.layoutDirectives.commonToiletNearPassage =
+              true;
+
+            preferences.layoutDirectives.commonToiletIndependentAccess =
+              true;
+          }
+
+          if (
+            /\b(?:use|utili[sz]e|occupy|fill|expand)\b.*\b(?:entire|whole|available|remaining|extra)\b.*\b(?:space|area|plot)\b/i.test(content) ||
+            /\b(?:most|too much)\b.*\b(?:empty|unused|open)\b/i.test(content) ||
+            /\bexpand\b.*\b(?:built|house|layout)\b/i.test(content)
+          ) {
+            preferences.layoutDirectives.maximizeBuiltUp =
               true;
           }
         }
@@ -3690,18 +3439,6 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
 
       function buildConstraintPlannerRequirements() {
         const unit = String(layoutState.plot.unit || "ft").toLowerCase();
-        const targetAreaValue = Number(layoutState.targetInternalArea?.area || 0);
-        const targetAreaUnit = layoutState.targetInternalArea?.unit || (unit === "m" ? "sq m" : "sq ft");
-        const targetAreaInPlotUnits = targetAreaUnit === "sq m" && unit === "ft"
-          ? targetAreaValue * 10.7639
-          : targetAreaUnit === "sq ft" && unit === "m"
-            ? targetAreaValue / 10.7639
-            : targetAreaValue;
-        const hasExplicitPlot = Number(layoutState.plot.width) > 0 && Number(layoutState.plot.depth) > 0;
-        const derivedEnvelopeArea = targetAreaInPlotUnits > 0 ? targetAreaInPlotUnits * 1.04 : 0;
-        const derivedWidth = Math.sqrt(derivedEnvelopeArea * 0.75);
-        const plotWidth = hasExplicitPlot ? Number(layoutState.plot.width) : derivedWidth;
-        const plotDepth = hasExplicitPlot ? Number(layoutState.plot.depth) : derivedEnvelopeArea / derivedWidth;
 
         // Prefer a country returned by OpenAI. For this Stage 8 test only,
         // metre plots fall back to Germany and feet plots fall back to India.
@@ -3734,34 +3471,12 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
 
         const roadSide = facingMap[layoutState.facing] || "north";
 
-        const defaultSetbacks = getConceptPlannerSetbacks(
+        const oldSetbacks = getConceptPlannerSetbacks(
           country,
-          plotWidth,
-          plotDepth,
+          Number(layoutState.plot.width),
+          Number(layoutState.plot.depth),
           unit
         );
-
-        const oldSetbacks = !hasExplicitPlot
-          ? { front: 0, rear: 0, left: 0, right: 0 }
-          : { ...defaultSetbacks };
-
-        if (hasExplicitPlot && targetAreaInPlotUnits > 0) {
-          const availableWidth = plotWidth - oldSetbacks.left - oldSetbacks.right;
-          const availableDepth = plotDepth - oldSetbacks.front - oldSetbacks.rear;
-          const availableArea = availableWidth * availableDepth;
-          const desiredEnvelopeArea = targetAreaInPlotUnits * 1.04;
-          if (desiredEnvelopeArea < availableArea) {
-            const aspectRatio = availableWidth / availableDepth;
-            const desiredWidth = Math.sqrt(desiredEnvelopeArea * aspectRatio);
-            const desiredDepth = desiredEnvelopeArea / desiredWidth;
-            const extraHorizontal = (availableWidth - desiredWidth) / 2;
-            const extraVertical = (availableDepth - desiredDepth) / 2;
-            oldSetbacks.left += extraHorizontal;
-            oldSetbacks.right += extraHorizontal;
-            oldSetbacks.front += extraVertical;
-            oldSetbacks.rear += extraVertical;
-          }
-        }
 
         const convertSetback = (value) => Number(value || 0);
 
@@ -3799,7 +3514,7 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
           messages.some(
             message =>
               message.role === "user" &&
-              /\b(?:\d+\s*)?(?:bathroom|bathrooms|bath|baths|toilet|toilets|wc|washroom|washrooms)\b/i
+              /\b\d+\s*(?:bathroom|bathrooms|bath|baths|toilet|toilets|wc|washroom|washrooms)\b/i
                 .test(String(message.content || ""))
           );
 
@@ -3857,24 +3572,22 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
           preferences
         );
 
-        applyAIDirectives(
-          preferences
-        );
+        // Structured OpenAI intent is authoritative for the CURRENT transaction.
+        // Do not reconstruct these operations from the entire chat history.
+        if (Array.isArray(aiState?.layout_operations)) {
+          preferences.layoutOperations = structuredClone(aiState.layout_operations);
+        }
+        if (Array.isArray(aiState?.room_constraints)) {
+          preferences.roomConstraints = structuredClone(aiState.room_constraints);
+        }
 
-        preferences.roomAdjacency = layoutState.roomPreferences || [];
-        preferences.layoutOperations = (layoutState.layoutOperations || []).filter(operation =>
-          !layoutState.appliedLayoutOperationKeys.includes(layoutOperationKey(operation))
-        );
-        preferences.roomConstraints = layoutState.roomConstraints || [];
-
-        const requirements = {
+        return {
           country,
           plot: {
-            width: plotWidth,
-            height: plotDepth,
+            width: Number(layoutState.plot.width),
+            height: Number(layoutState.plot.depth),
             unit,
-            roadSide,
-            derivedFromInternalArea: !hasExplicitPlot
+            roadSide
           },
           setbacks: {
             front: convertSetback(oldSetbacks.front),
@@ -3886,18 +3599,8 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
             bhk: Number(layoutState.bedrooms || 1),
             floors: Number(layoutState.floors || 1)
           },
-          targetInternalArea: targetAreaInPlotUnits > 0
-            ? { area: targetAreaInPlotUnits, unit: unit === "m" ? "sq m" : "sq ft" }
-            : null,
           preferences
         };
-        if (
-          window.currentConstraintLayout?.success &&
-          (preferences.layoutOperations.length || preferences.roomConstraints.length)
-        ) {
-          requirements.currentLayout = window.currentConstraintLayout;
-        }
-        return requirements;
       }
 
       function directionCodeToWord(code) {
@@ -3959,6 +3662,16 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
           console.log("Constraint planner result:", layout);
 
           if (!layout.success) {
+            // Transaction failed: restore the last valid AI/design state.
+            if (pendingAiStateBase) {
+              aiState = structuredClone(pendingAiStateBase);
+            } else if (committedAiState) {
+              aiState = structuredClone(committedAiState);
+            }
+            if (committedConstraintLayout) {
+              window.currentConstraintLayout = committedConstraintLayout;
+            }
+            pendingAiStateBase = null;
             finishWait(performance.now() - t0, false);
 
             const feasibilityStatus =
@@ -3966,10 +3679,6 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
 
             const failedNames = Array.isArray(layout.failedRooms)
               ? layout.failedRooms.map(r => r.name).join(", ")
-              : "";
-
-            const inaccessibleNames = Array.isArray(layout.accessibilityReport?.inaccessibleRooms)
-              ? layout.accessibilityReport.inaccessibleRooms.map(room => room.name).join(", ")
               : "";
 
             preview.innerHTML = `
@@ -3986,7 +3695,6 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
                 <br><br>
                 Feasibility: <strong>${feasibilityStatus}</strong>
                 ${failedNames ? `<br>Rooms not placed: ${failedNames}` : ""}
-                ${inaccessibleNames ? `<br>Rooms without a valid entrance route: ${inaccessibleNames}` : ""}
                 <br><br>
                 We will improve the packing strategy rather than drawing an invalid plan.
               </div>
@@ -3999,9 +3707,8 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
 Feasibility: ${feasibilityStatus}
 
 ${failedNames ? `Rooms not placed: ${failedNames}` : ""}
-${inaccessibleNames ? `Rooms without a valid entrance route: ${inaccessibleNames}` : ""}
 
-This is useful test information. The planner has refused to draw a knowingly invalid layout.`
+The requested change was not committed. The previous valid concept and its requirements remain active. You can ask for an alternative or another change.`
             );
 
             setStatus("Constraint planner needs another arrangement.");
@@ -4010,9 +3717,8 @@ This is useful test information. The planner has refused to draw a knowingly inv
             return;
           }
 
-          const title = layoutState.plot.width && layoutState.plot.depth
-            ? `${layoutState.plot.width}×${layoutState.plot.depth} ${layoutState.bedrooms}BHK Concept`
-            : `${layoutState.bedrooms}BHK · ${layoutState.targetInternalArea?.area || ""} ${layoutState.targetInternalArea?.unit || ""} Concept`;
+          const title =
+            `${layoutState.plot.width}×${layoutState.plot.depth} ${layoutState.bedrooms}BHK Concept`;
 
           renderBlueprintLayout(
             layout,
@@ -4039,15 +3745,46 @@ This is useful test information. The planner has refused to draw a knowingly inv
 
           window.currentConstraintLayout = layout;
           window.currentConstraintRequirements = requirements;
-          for (const operation of requirements.preferences.layoutOperations || []) {
-            const key = layoutOperationKey(operation);
-            if (!layoutState.appliedLayoutOperationKeys.includes(key)) {
-              layoutState.appliedLayoutOperationKeys.push(key);
-            }
+
+          // Commit only after the geometry engine has returned a fully valid candidate.
+          // Completed operations are cleared so they are not replayed on every later render;
+          // persistent explicit room constraints remain as part of the committed design brief.
+          if (aiState) {
+            const committed = structuredClone(aiState);
+            committed.layout_operations = [];
+            committed.pending_decision = null;
+            aiState = committed;
+            committedAiState = structuredClone(committed);
           }
+          committedConstraintLayout = structuredClone(layout);
+          if (aiState) {
+            aiState.current_layout_summary = {
+              placement_strategy: layout.placementStrategy || null,
+              valid: true,
+              rooms: (layout.rooms || [])
+                .filter(room => !room.isSiteFeature)
+                .map(room => ({
+                  id: room.id,
+                  name: room.name,
+                  width: Number(room.width || 0),
+                  depth: Number(room.height || 0),
+                  area: Number(room.area || (room.width || 0) * (room.height || 0))
+                })),
+              site_features: (layout.siteFeatures || []).map(feature => ({
+                id: feature.id,
+                type: feature.type,
+                placement: feature.placement || null,
+                width: Number(feature.width || 0),
+                depth: Number(feature.height || 0),
+                area: Number(feature.area || 0)
+              }))
+            };
+            committedAiState = structuredClone(aiState);
+          }
+          pendingAiStateBase = null;
 
           showBlueprintTab();
-          showBuyerSubtab();
+          showEngineerSubtab();
 
           layoutState.rendered = true;
           layoutState.confirmed = false;
@@ -4095,33 +3832,6 @@ Engineer Drawing now includes:
 
 Buyer Plan uses the same geometry with a softer presentation style.${adaptations}`
           );
-
-          const adjacencyMessage = formatAdjacencyReport(layout.adjacencyReport);
-          if (adjacencyMessage) {
-            addMessage(
-              "assistant",
-              `Positional request check (from the geometry engine, not the chat model):\n\n${adjacencyMessage}`
-            );
-          }
-
-          const operationMessage = formatLayoutOperationReport(layout.operationReport);
-          if (operationMessage) {
-            const hasAreaOperation = layout.operationReport.some(result =>
-              ["resize", "transfer_area", "redistribute_area", "optimize_layout"].includes(result.operation)
-            );
-            addMessage(
-              "assistant",
-              `${hasAreaOperation ? "LAYOUT CHANGES" : "POSITIONAL CHANGES"}\n\n${operationMessage}`
-            );
-          }
-
-          const constraintMessage = formatConstraintReport(layout);
-          if (constraintMessage) {
-            addMessage(
-              "assistant",
-              `Constraint result (from generated geometry):\n\n${constraintMessage}`
-            );
-          }
 
           setStatus(
             "Architectural concept ready — review the entrance, circulation and room relationships, then confirm."
@@ -4291,268 +4001,6 @@ You can still request a design change in chat. Any understood requirement change
       tabBuyer?.addEventListener("click", showBuyerSubtab);
 
       // ---------------------------
-      // Real 3D viewer (Three.js) — built from the same room geometry
-      // (layout.rooms: x, y, width, height, zone, type) as the blueprint.
-      // ---------------------------
-      const ROOM_3D_COLORS = {
-        living: 0x3b82f6,
-        familyLounge: 0x60a5fa,
-        dining: 0x38bdf8,
-        kitchen: 0x22c55e,
-        masterBedroom: 0xa78bfa,
-        bedroom: 0x8b7cf6,
-        attachedToilet: 0xf59e0b,
-        commonToilet: 0xf59e0b,
-        utility: 0x14b8a6,
-        puja: 0xf472b6,
-        store: 0x94a3b8
-      };
-      const WALL_HEIGHT_FT = 9;
-      const WALL_HEIGHT_M = 2.7;
-
-      let three3d = null; // { THREE, scene, camera, renderer, controls, group }
-      let builtLayoutRef = null;
-
-      async function ensureThreeLoaded() {
-        if (three3d) return three3d;
-
-        const THREE = await import("three");
-        const { OrbitControls } = await import("three/addons/controls/OrbitControls.js");
-
-        const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, preserveDrawingBuffer: true });
-        renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xeef2f7);
-
-        const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 2000);
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-
-        scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-        const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-        sun.position.set(1, 2, 1).multiplyScalar(40);
-        scene.add(sun);
-
-        const group = new THREE.Group();
-        scene.add(group);
-
-        three3d = { THREE, scene, camera, renderer, controls, group };
-
-        (function animate() {
-          requestAnimationFrame(animate);
-          controls.update();
-          renderer.render(scene, camera);
-        })();
-
-        return three3d;
-      }
-
-      function resize3d() {
-        if (!three3d || !canvas3d) return;
-        const rect = canvas3d.parentElement.getBoundingClientRect();
-        const w = Math.max(1, rect.width);
-        const h = Math.max(1, rect.height);
-        three3d.renderer.setSize(w, h, false);
-        three3d.camera.aspect = w / h;
-        three3d.camera.updateProjectionMatrix();
-      }
-      window.addEventListener("resize", resize3d);
-
-      function layout3dBounds(layout) {
-        const w = Number(layout?.plot?.width) || 40;
-        const h = Number(layout?.plot?.height) || 60;
-        return { w, h, cx: w / 2, cz: h / 2 };
-      }
-
-      function frameHeroCamera(layout) {
-        if (!three3d) return;
-        const b = layout3dBounds(layout);
-        // Elevated "doll's-house" angle: mostly looking down so room floor
-        // colors read clearly instead of being hidden behind tall walls.
-        const dist = Math.max(b.w, b.h) * 1.3;
-        three3d.camera.position.set(b.cx + dist * 0.42, dist * 0.95, b.cz + dist * 0.42);
-        three3d.controls.target.set(b.cx, 0, b.cz);
-        three3d.controls.update();
-      }
-
-      async function rebuild3dScene(layout) {
-        const t = await ensureThreeLoaded();
-        const { THREE, group } = t;
-
-        while (group.children.length) group.remove(group.children[0]);
-
-        const wallHeight = String(layout?.unit || "ft").toLowerCase() === "m" ? WALL_HEIGHT_M : WALL_HEIGHT_FT;
-        const bounds = layout3dBounds(layout);
-
-        const ground = new THREE.Mesh(
-          new THREE.PlaneGeometry(bounds.w * 2.4, bounds.h * 2.4),
-          new THREE.MeshStandardMaterial({ color: 0xd6dee8 })
-        );
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.set(bounds.cx, -0.02, bounds.cz);
-        group.add(ground);
-
-        const wallMat = new THREE.MeshStandardMaterial({
-          color: 0xf8fafc,
-          roughness: 0.9,
-          transparent: true,
-          opacity: 0.82
-        });
-
-        for (const room of (layout?.rooms || [])) {
-          if (room.type === "corridor") continue;
-
-          const rx = Number(room.x) || 0;
-          const ry = Number(room.y) || 0;
-          const rw = Math.max(0.5, Number(room.width) || 1);
-          const rh = Math.max(0.5, Number(room.height) || 1);
-          const cx = rx + rw / 2;
-          const cz = ry + rh / 2;
-          const color = ROOM_3D_COLORS[room.type] || 0x94a3b8;
-
-          const floor = new THREE.Mesh(
-            new THREE.BoxGeometry(rw, 0.15, rh),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.85 })
-          );
-          floor.position.set(cx, 0.08, cz);
-          group.add(floor);
-
-          const thickness = Math.max(0.3, wallHeight * 0.05);
-          const walls = [
-            { w: rw + thickness, d: thickness, x: cx, z: ry },
-            { w: rw + thickness, d: thickness, x: cx, z: ry + rh },
-            { w: thickness, d: rh + thickness, x: rx, z: cz },
-            { w: thickness, d: rh + thickness, x: rx + rw, z: cz }
-          ];
-          for (const w of walls) {
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w.w, wallHeight, w.d), wallMat);
-            mesh.position.set(w.x, wallHeight / 2, w.z);
-            group.add(mesh);
-          }
-        }
-
-        builtLayoutRef = layout;
-        resize3d();
-        frameHeroCamera(layout);
-      }
-
-      async function ensure3dSceneCurrent() {
-        const layout = window.currentConstraintLayout;
-        if (!layout) return null;
-        if (builtLayoutRef !== layout) {
-          await rebuild3dScene(layout);
-        }
-        resize3d();
-        return layout;
-      }
-
-      // ---------------------------
-      // SVG -> PNG rasterization (for embedding Engineer/Buyer views in the brochure PDF)
-      // ---------------------------
-      function svgElementToPngDataUrl(svgEl) {
-        return new Promise((resolve, reject) => {
-          if (!svgEl) { reject(new Error("No SVG element to export.")); return; }
-
-          const clone = svgEl.cloneNode(true);
-          clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-
-          const bbox = svgEl.getBBox ? svgEl.getBoundingClientRect() : { width: 1000, height: 700 };
-          const width = Math.max(400, Math.round(bbox.width || 1000));
-          const height = Math.max(300, Math.round(bbox.height || 700));
-
-          const source = new XMLSerializer().serializeToString(clone);
-          const svgBlob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
-          const url = URL.createObjectURL(svgBlob);
-
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = width * 2;
-            canvas.height = height * 2;
-            const ctx = canvas.getContext("2d");
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            URL.revokeObjectURL(url);
-            resolve(canvas.toDataURL("image/png"));
-          };
-          img.onerror = () => {
-            URL.revokeObjectURL(url);
-            reject(new Error("Could not rasterize SVG for export."));
-          };
-          img.src = url;
-        });
-      }
-
-      async function downloadBrochure() {
-        if (!layoutState.confirmed || !layoutState.rendered) return;
-        if (btnBrochure) btnBrochure.disabled = true;
-
-        setStatus("Building brochure (Engineer + Buyer + 3D)...");
-
-        try {
-          const layout = await ensure3dSceneCurrent();
-          if (!layout) throw new Error("Render a layout before exporting a brochure.");
-
-          // Capture at a fixed resolution regardless of whether the 3D tab is
-          // currently visible -- a hidden panel has a zero-size bounding box,
-          // which would otherwise produce a blank screenshot.
-          const captureW = 1200, captureH = 900;
-          three3d.renderer.setSize(captureW, captureH, false);
-          three3d.camera.aspect = captureW / captureH;
-          three3d.camera.updateProjectionMatrix();
-          frameHeroCamera(layout);
-          three3d.renderer.render(three3d.scene, three3d.camera);
-          const brochureViewPng = canvas3d.toDataURL("image/png");
-          resize3d(); // restore on-screen sizing if the panel is visible
-
-          const engineerSvg = preview?.querySelector("svg");
-          const buyerSvg = buyerPreview?.querySelector("svg");
-
-          const [engineerPng, buyerPng] = await Promise.all([
-            svgElementToPngDataUrl(engineerSvg),
-            svgElementToPngDataUrl(buyerSvg)
-          ]);
-
-          const title = `${layoutState.plot.width}×${layoutState.plot.depth} ${layoutState.bedrooms}BHK Concept`;
-          const brochureApi = CHAT_API.replace("/api/realestate/chat", "/api/realestate/brochure");
-
-          const res = await fetch(brochureApi, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              engineer_view_png: engineerPng,
-              buyer_view_png: buyerPng,
-              brochure_view_png: brochureViewPng,
-              title
-            })
-          });
-
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(data.detail || `Brochure failed (HTTP ${res.status})`);
-
-          const byteChars = atob(data.pdf_base64);
-          const byteNumbers = new Array(byteChars.length);
-          for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-          const blob = new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "brochure.pdf";
-          a.click();
-          URL.revokeObjectURL(url);
-
-          setStatus("Brochure downloaded ✅");
-        } catch (err) {
-          console.error("Brochure export error:", err);
-          setStatus(`<span style="color:#fca5a5;">Brochure error:</span> ${String(err.message || err)}`);
-        } finally {
-          updateLayoutButtons();
-        }
-      }
-
-      // ---------------------------
       // Preview tabs
       // ---------------------------
       function showBlueprintTab() {
@@ -4568,21 +4016,10 @@ You can still request a design change in chat. Any understood requirement change
         tabBlueprint?.classList.remove("active");
         if (blueprintPanel) blueprintPanel.style.display = "none";
         if (preview3dPanel) preview3dPanel.style.display = "block";
-
-        if (window.currentConstraintLayout) {
-          if (preview3dPlaceholder) preview3dPlaceholder.style.display = "none";
-          ensure3dSceneCurrent();
-        } else if (preview3dPlaceholder) {
-          preview3dPlaceholder.style.display = "flex";
-        }
       }
 
       tabBlueprint?.addEventListener("click", showBlueprintTab);
       tab3d?.addEventListener("click", show3dTab);
-      reset3dViewBtn?.addEventListener("click", () => {
-        if (window.currentConstraintLayout) frameHeroCamera(window.currentConstraintLayout);
-      });
-      btnBrochure?.addEventListener("click", downloadBrochure);
 
       // ---------------------------
       // Boot
@@ -4594,7 +4031,7 @@ You can still request a design change in chat. Any understood requirement change
       layoutState.confirmed = false;
       applyTransform();
       showBlueprintTab();
-      showBuyerSubtab();
+      showEngineerSubtab();
       updateLayoutButtons();
 
       addMessage("assistant",
@@ -4867,3 +4304,7 @@ After you accept it, the app generates separate Engineer Drawing and Buyer Plan 
     requestAnimationFrame(tick);
 
     document.addEventListener('visibilitychange', () => { lastFrame = performance.now(); });
+  })();
+  </script>
+</body>
+</html>
