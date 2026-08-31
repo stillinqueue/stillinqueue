@@ -46,23 +46,274 @@ import {
   multi-strategy planner.
 */
 
+
+
+function compileArchitecturalProgram(requirements) {
+  const operations = Array.isArray(requirements?.preferences?.layoutOperations)
+    ? requirements.preferences.layoutOperations.filter(Boolean)
+    : [];
+
+  const siteOperations = operations.filter(operation =>
+    operation.operation === "site_feature" &&
+    ["parking", "carport", "garden", "lawn", "sitout", "driveway", "terrace"].includes(operation.feature_type)
+  );
+  const balconyOperations = operations.filter(operation => operation.operation === "balcony_access");
+  const courtyardOperations = operations.filter(operation =>
+    operation.operation === "site_feature" && operation.feature_type === "courtyard"
+  );
+
+  return { operations, siteOperations, balconyOperations, courtyardOperations };
+}
+
+function prepareSiteFirstRequirements(requirements, program) {
+  const clone = {
+    ...requirements,
+    currentLayout: null,
+    __siteFirstPrepared: true,
+    setbacks: { ...(requirements?.setbacks || {}) },
+    preferences: {
+      ...(requirements?.preferences || {}),
+      architecturalProgram: {
+        siteFirst: true,
+        siteOperations: program.siteOperations.map(operation => ({ ...operation }))
+      }
+    }
+  };
+
+  const unit = String(requirements?.plot?.unit || "ft").toLowerCase();
+  const roadSide = normalizeRoadSide(requirements?.plot?.roadSide);
+  const reservations = { front: 0, rear: 0, left: 0, right: 0 };
+
+  for (const operation of program.siteOperations) {
+    const feature = operation.feature_type;
+    if (feature === "driveway") continue; // driveway is access overlay into parking/frontage
+
+    const count = Math.max(1, Number(operation.count || 1));
+    const defaults = defaultSiteFeatureSize(feature, count, unit);
+    let neededDepth = Number(operation.depth || 0);
+    let neededWidth = Number(operation.width || 0);
+
+    if (!(neededDepth > 0)) {
+      if (["parking", "carport"].includes(feature)) neededDepth = unit === "m" ? 5.0 : 16.5;
+      else if (["garden", "lawn"].includes(feature)) neededDepth = unit === "m" ? 2.0 : 6.5;
+      else if (["sitout", "terrace"].includes(feature)) neededDepth = unit === "m" ? 1.8 : 6.0;
+      else neededDepth = Number(defaults.depth || 0);
+    }
+    if (!(neededWidth > 0)) neededWidth = Number(defaults.width || 0);
+
+    const relative = normalizeSitePlacement(operation.placement || "auto", roadSide, feature);
+    const key = relativePlacementToSetbackKey(relative, roadSide);
+    if (!key) continue;
+
+    const thickness = ["left", "right"].includes(key) ? neededWidth : neededDepth;
+    reservations[key] = Math.max(reservations[key], thickness);
+  }
+
+  // Reserve projection depth for requested balconies before room placement. The mapping
+  // follows the current large connected template's architectural zones; if the generated
+  // concept later chooses another valid perimeter edge, the feature planner still validates
+  // the real geometry before applying it.
+  const balconyDepth = unit === "m" ? 1.5 : 5;
+  for (const operation of program.balconyOperations) {
+    const targets = Array.isArray(operation.target_rooms) && operation.target_rooms.length
+      ? operation.target_rooms
+      : [operation.target_room || operation.source_room].filter(Boolean);
+    const depth = Math.max(unit === "m" ? 1.2 : 4, Number(operation.depth || balconyDepth));
+    for (const target of targets) {
+      const key = preferredBalconySetbackKey(target);
+      if (key) reservations[key] = Math.max(reservations[key], depth);
+    }
+  }
+
+  // Never reduce user-supplied/code-derived setbacks. Site design enlarges the relevant
+  // open band only as much as the requested feature needs. Multiple features on the same
+  // side share that band and are later subdivided side-by-side.
+  for (const key of Object.keys(reservations)) {
+    const existing = Number(clone.setbacks[key] || 0);
+    clone.setbacks[key] = Math.max(existing, reservations[key]);
+  }
+
+  clone.preferences.sitePlanReservations = reservations;
+  return clone;
+}
+
+function canCurrentLayoutAbsorbArchitecturalProgram(layout, program, requirements) {
+  if (!layout?.buildableArea) return false;
+  const plotWidth = Number(requirements?.plot?.width || 0);
+  const plotHeight = Number(requirements?.plot?.height || 0);
+  if (!(plotWidth > 0 && plotHeight > 0)) return false;
+
+  let temporary = (layout.siteFeatures || []).map(feature => ({ ...feature }));
+  const roadSide = normalizeRoadSide(requirements?.plot?.roadSide);
+  const unit = String(requirements?.plot?.unit || "ft").toLowerCase();
+
+  for (const operation of program.siteOperations) {
+    if (operation.feature_type === "driveway") continue;
+    const count = Math.max(1, Number(operation.count || 1));
+    const min = minimumSiteFeatureSize(operation.feature_type, count, unit);
+    const desiredSide = normalizeSitePlacement(operation.placement || "auto", roadSide, operation.feature_type);
+    const zones = availableSiteZones(plotWidth, plotHeight, layout.buildableArea, temporary)
+      .filter(zone => !desiredSide || desiredSide === "auto" || zone.side === desiredSide);
+    const zone = zones.find(candidate => candidate.width + 0.02 >= min.width && candidate.height + 0.02 >= min.depth);
+    if (!zone) return false;
+    temporary.push({ x: zone.x, y: zone.y, width: min.width, height: min.depth, type: operation.feature_type });
+  }
+
+  for (const operation of program.balconyOperations) {
+    const targets = Array.isArray(operation.target_rooms) && operation.target_rooms.length
+      ? operation.target_rooms
+      : [operation.target_room || operation.source_room].filter(Boolean);
+    const depth = Math.max(unit === "m" ? 1.2 : 4, Number(operation.depth || (unit === "m" ? 1.5 : 5)));
+    for (const target of targets) {
+      const room = resolveCanonicalRoom(layout.rooms || [], layout.circulation || [], target);
+      if (!room) return false;
+      const edges = exteriorEdges(room, layout.buildableArea);
+      const hasProjectionSpace = edges.some(edge => {
+        let rect;
+        if (edge.side === "left") rect = { x: room.x - depth, y: room.y, width: depth, height: room.height };
+        if (edge.side === "right") rect = { x: room.x + room.width, y: room.y, width: depth, height: room.height };
+        if (edge.side === "top") rect = { x: room.x, y: room.y - depth, width: room.width, height: depth };
+        if (edge.side === "bottom") rect = { x: room.x, y: room.y + room.height, width: room.width, height: depth };
+        return rect && rect.x >= -0.02 && rect.y >= -0.02 && rect.x + rect.width <= plotWidth + 0.02 && rect.y + rect.height <= plotHeight + 0.02;
+      });
+      if (!hasProjectionSpace) return false;
+    }
+  }
+  return true;
+}
+
+function preferredBalconySetbackKey(targetRoom) {
+  const room = String(targetRoom || "").toLowerCase();
+  if (["living", "familylounge"].includes(room)) return "front";
+  if (["kitchen", "masterbedroom", "bedroom3"].includes(room)) return "left";
+  if (["bedroom2", "bedroom4"].includes(room)) return "right";
+  return null;
+}
+
+function normalizeSitePlacement(value, roadSide, featureType) {
+  const raw = String(value || "auto").toLowerCase();
+  if (["north", "south", "east", "west"].includes(raw)) return cardinalToSiteSide(raw);
+  if (["top", "bottom", "left", "right"].includes(raw)) return raw;
+  if (raw === "front") return cardinalToSiteSide(roadSide);
+  if (raw === "rear") return oppositeSiteSide(cardinalToSiteSide(roadSide));
+  if (["parking", "carport", "driveway", "sitout"].includes(featureType)) return cardinalToSiteSide(roadSide);
+  return "auto";
+}
+
+function relativePlacementToSetbackKey(siteSide, roadSide) {
+  if (!siteSide || siteSide === "auto") return null;
+  const front = cardinalToSiteSide(roadSide);
+  const rear = oppositeSiteSide(front);
+  if (siteSide === front) return "front";
+  if (siteSide === rear) return "rear";
+
+  // For north/south road frontage, physical left/right line up with setback left/right.
+  // For east/west frontage rotate the relative side keys accordingly.
+  if (["north", "south"].includes(roadSide)) return siteSide === "left" ? "left" : siteSide === "right" ? "right" : null;
+  if (roadSide === "east") return siteSide === "top" ? "left" : siteSide === "bottom" ? "right" : null;
+  if (roadSide === "west") return siteSide === "bottom" ? "left" : siteSide === "top" ? "right" : null;
+  return null;
+}
+
+function attachArchitecturalProgramOutcome(layout, program, requirements) {
+  if (!layout) return layout;
+  const hasFeatures = Boolean(program?.siteOperations?.length || program?.balconyOperations?.length || program?.courtyardOperations?.length);
+  if (!hasFeatures) return layout;
+
+  const decision = {
+    status: layout.success ? "feasible" : "requires-tradeoff",
+    site_first: Boolean(requirements?.__siteFirstPrepared || requirements?.preferences?.architecturalProgram?.siteFirst),
+    requested_features: [
+      ...(program.siteOperations || []).map(operation => operation.feature_type),
+      ...(program.balconyOperations || []).map(() => "balcony"),
+      ...(program.courtyardOperations || []).map(() => "courtyard")
+    ],
+    alternatives: []
+  };
+
+  if (!layout.success) {
+    if ((program.siteOperations || []).some(operation => ["parking", "carport"].includes(operation.feature_type))) {
+      decision.alternatives.push("Use a more compact indoor program or merge a flexible social space to preserve ground-floor parking.");
+      decision.alternatives.push("Use tandem/covered/stilt parking where structurally and legally appropriate rather than forcing undersized rooms.");
+    }
+    if ((program.siteOperations || []).some(operation => ["garden", "lawn"].includes(operation.feature_type))) {
+      decision.alternatives.push("Reduce the requested lawn/garden depth or rebalance the building footprint toward the opposite side.");
+    }
+    if ((program.balconyOperations || []).length) {
+      decision.alternatives.push("Use a shared balcony or move selected rooms to the perimeter in a broader architectural replan.");
+    }
+
+    // A site feature fitting geometrically is not enough if the resulting house violates
+    // room/access constraints. Do not report an invalid whole concept as successfully applied.
+    layout.featureReport = (layout.featureReport || []).map(report =>
+      ["applied", "approximated"].includes(report.status)
+        ? {
+            ...report,
+            status: "rejected",
+            reason: `${report.reason || "The feature fits its local zone."} However, the complete house program failed minimum geometry/access validation after reserving that space, so the concept was not accepted.`
+          }
+        : report
+    );
+  }
+
+  return {
+    ...layout,
+    architecturalDecision: decision,
+    adaptations: [
+      ...(layout.adaptations || []),
+      {
+        type: layout.success ? "architectural-program-resolved" : "architectural-program-tradeoff",
+        room: "Whole plan",
+        reason: layout.success
+          ? "Site, building and architectural-feature requirements were validated as one coordinated program."
+          : "The requested program needs an architectural trade-off; invalid room geometry was not accepted merely to fit an outdoor feature."
+      }
+    ]
+  };
+}
+
 export function generateLayout(requirements) {
-  if (requirements.currentLayout?.success) {
-    return postProcessLayout({
-      ...requirements.currentLayout,
-      rooms: requirements.currentLayout.rooms.map(room => ({ ...room })),
-      circulation: (requirements.currentLayout.circulation || []).map(item => ({ ...item })),
-      entrances: (requirements.currentLayout.entrances || []).map(item => ({ ...item })),
+  /*
+    ARCHITECTURAL PROGRAM PIPELINE
+    ------------------------------
+    Site requirements are resolved BEFORE indoor room packing when they need
+    real plot area. This prevents the old anti-pattern of filling the maximum
+    buildable rectangle first and then trying to squeeze parking/gardens into
+    leftover setbacks. The same preflight also decides whether an accepted
+    current concept can absorb a site request locally or needs a constrained
+    site-and-building replan.
+  */
+  const program = compileArchitecturalProgram(requirements);
+  let effectiveRequirements = requirements;
+
+  if (!requirements.__siteFirstPrepared && (program.siteOperations.length || program.balconyOperations.length)) {
+    const currentCanAbsorb = requirements.currentLayout?.success
+      ? canCurrentLayoutAbsorbArchitecturalProgram(requirements.currentLayout, program, requirements)
+      : false;
+
+    const mustPlanSiteFirst = !requirements.currentLayout?.success || !currentCanAbsorb;
+    if (mustPlanSiteFirst) {
+      effectiveRequirements = prepareSiteFirstRequirements(requirements, program);
+    }
+  }
+
+  if (effectiveRequirements.currentLayout?.success) {
+    return attachArchitecturalProgramOutcome(postProcessLayout({
+      ...effectiveRequirements.currentLayout,
+      rooms: effectiveRequirements.currentLayout.rooms.map(room => ({ ...room })),
+      circulation: (effectiveRequirements.currentLayout.circulation || []).map(item => ({ ...item })),
+      entrances: (effectiveRequirements.currentLayout.entrances || []).map(item => ({ ...item })),
+      siteFeatures: (effectiveRequirements.currentLayout.siteFeatures || []).map(item => ({ ...item })),
       operationReport: [],
       adjacencyReport: [],
       constraintReport: [],
       success: true
-    }, requirements);
+    }, effectiveRequirements), program, effectiveRequirements);
   }
 
   const bhk =
     Number(
-      requirements.house?.bhk ||
+      effectiveRequirements.house?.bhk ||
       1
     );
 
@@ -80,40 +331,40 @@ export function generateLayout(requirements) {
   ) {
     const large =
       generateLargeConnectedLayout(
-        requirements
+        effectiveRequirements
       );
 
     if (
       large?.success
     ) {
-      const processedLarge = postProcessLayout(large, requirements);
-      if (processedLarge.success) return processedLarge;
+      const processedLarge = postProcessLayout(large, effectiveRequirements);
+      if (processedLarge.success) return attachArchitecturalProgramOutcome(processedLarge, program, effectiveRequirements);
       rememberInaccessible(processedLarge);
     }
   }
 
   const compact =
     generateCompact3BHK(
-      requirements
+      effectiveRequirements
     );
 
   if (
     compact?.success
   ) {
-    const processedCompact = postProcessLayout(compact, requirements);
-    if (processedCompact.success) return processedCompact;
+    const processedCompact = postProcessLayout(compact, effectiveRequirements);
+    if (processedCompact.success) return attachArchitecturalProgramOutcome(processedCompact, program, effectiveRequirements);
     rememberInaccessible(processedCompact);
   }
 
   const processedLegacy = postProcessLayout(
     legacyGenerateLayout(
-      requirements
+      effectiveRequirements
     ),
-    requirements
+    effectiveRequirements
   );
-  if (processedLegacy.success) return processedLegacy;
+  if (processedLegacy.success) return attachArchitecturalProgramOutcome(processedLegacy, program, effectiveRequirements);
   rememberInaccessible(processedLegacy);
-  return bestInaccessibleLayout || processedLegacy;
+  return attachArchitecturalProgramOutcome(bestInaccessibleLayout || processedLegacy, program, effectiveRequirements);
 }
 
 
@@ -404,7 +655,7 @@ function postProcessLayout(layout, requirements) {
   );
 
   const originalRooms = rooms.map(room => ({ ...room }));
-  const growable = rooms.filter(room => room.type !== "corridor");
+  const growable = rooms.filter(room => room.type !== "corridor" && !room.outsideBuildable && !room.isSiteFeature);
 
   const maxGrowthRatio = room =>
     room.wetArea ||
@@ -3105,7 +3356,12 @@ function repairCommonToiletAccess(rooms, layout) {
 }
 
 function hasValidCandidateRooms(layout, rooms) {
-  const candidate = { ...layout, rooms, areaSummary: null };
+  // Exterior balconies/site projections may legitimately sit outside the indoor
+  // buildable rectangle while remaining inside the plot. Exclude those projections
+  // from indoor containment/access validation; their plot containment and collision
+  // checks are performed by the feature planner itself.
+  const validationRooms = rooms.filter(room => !room.outsideBuildable && !room.isSiteFeature);
+  const candidate = { ...layout, rooms: validationRooms, areaSummary: null };
   return buildAccessibilityReport(candidate).valid && validateGeneratedLayout(candidate).valid;
 }
 
@@ -3166,7 +3422,13 @@ function applyArchitecturalFeatureOperations(rooms, layout, operations, requirem
     }
 
     if (operation.operation === "site_feature") {
-      reports.push(applySiteFeatureOperation(layout, operation, requirements));
+      if (operation.feature_type === "courtyard") {
+        reports.push(applyCourtyardOperation(rooms, layout, operation, requirements));
+      } else {
+        const siteReport = applySiteFeatureOperation(layout, operation, requirements);
+        reports.push(siteReport);
+        mirrorSiteFeatureGeometryIntoRooms(rooms, siteReport);
+      }
     }
   }
 
@@ -3194,137 +3456,166 @@ function applyBalconyAccessOperation(rooms, layout, operation, requirements) {
     return report;
   }
 
-  const snapshot = rooms.map(room => ({ ...room }));
-  const existingBalconies = rooms.filter(room => room.type === "balcony");
   const buildable = layout.buildableArea;
+  const plotWidth = Number(requirements?.plot?.width || 0);
+  const plotHeight = Number(requirements?.plot?.height || 0);
   const unit = String(requirements?.plot?.unit || "ft").toLowerCase();
   const preferredDepth = Number(operation.depth || (unit === "m" ? 1.5 : 5));
   const minDepth = unit === "m" ? 1.2 : 4;
+  if (!Array.isArray(layout.siteFeatures)) layout.siteFeatures = [];
 
-  for (const targetId of targets) {
-    const room = resolveCanonicalRoom(rooms, layout.circulation || [], targetId);
+  const targetRooms = targets.map(targetId => ({
+    targetId,
+    room: resolveCanonicalRoom(rooms, layout.circulation || [], targetId)
+  }));
+
+  // Shared balcony: if requested rooms already line up on one exterior edge, use one
+  // continuous external projection. This is much closer to an architectural balcony
+  // than cutting a strip out of every room.
+  if (operation.shared === true && targetRooms.every(item => item.room)) {
+    const shared = tryCreateSharedExteriorBalcony(targetRooms, rooms, layout, requirements, preferredDepth, minDepth);
+    if (shared) {
+      report.applied_rooms = targets.slice();
+      report.created_features.push(shared.summary);
+      report.status = "applied";
+      report.reason = `A shared exterior balcony was created for ${targets.join(", ")} without reducing the internal room areas.`;
+      return report;
+    }
+  }
+
+  for (const { targetId, room } of targetRooms) {
     if (!room || room.type === "corridor") {
       report.unresolved_rooms.push({ room: targetId, reason: "Room was not found in the current plan." });
       continue;
     }
 
-    // Existing balcony already attached to this room counts as satisfied.
-    const existing = existingBalconies.find(item =>
+    const existing = rooms.find(item => item.type === "balcony" && (
       item.attachedTo === room.id ||
-      item.attachedTo === targetId ||
       (Array.isArray(item.attachedToRooms) && item.attachedToRooms.includes(room.id))
-    );
+    ));
     if (existing) {
       report.applied_rooms.push(targetId);
       continue;
     }
 
-    const edges = exteriorEdges(room, buildable);
+    const edges = exteriorEdges(room, buildable).sort((a, b) => b.length - a.length);
     if (!edges.length) {
       report.unresolved_rooms.push({
         room: targetId,
-        reason: "This room is internal in the current concept. It needs a perimeter replan before balcony access can be created."
+        reason: "This room is internal in the current concept. An architectural perimeter replan is required before balcony access can be provided."
       });
       continue;
     }
 
-    let applied = false;
-    const orderedEdges = edges.sort((a, b) => b.length - a.length);
-    for (const edge of orderedEdges) {
-      const roomSnapshot = { ...room };
-      const depth = Math.max(minDepth, Math.min(preferredDepth, edge.axisSize * 0.35));
-      const minWidth = Number(room.minWidth || (unit === "m" ? 2.7 : 9));
-      const minHeight = Number(room.minHeight || (unit === "m" ? 2.7 : 9));
-      let balcony = null;
-
-      if (edge.side === "left" || edge.side === "right") {
-        if (room.width - depth < minWidth - 0.02) continue;
-        balcony = {
-          id: uniqueFeatureRoomId(rooms, `balcony-${room.id}`),
-          name: `Balcony · ${room.name}`,
-          type: "balcony",
-          attachedTo: room.id,
-          attachedToRooms: [room.id],
-          requiresExteriorWall: true,
-          requiresCirculationAccess: false,
-          x: edge.side === "left" ? room.x : room.x + room.width - depth,
-          y: room.y,
-          width: depth,
-          height: room.height,
-          minWidth: minDepth,
-          minHeight: unit === "m" ? 2.0 : 6,
-          area: round(depth * room.height)
-        };
-        if (edge.side === "left") room.x += depth;
-        room.width -= depth;
-      } else {
-        if (room.height - depth < minHeight - 0.02) continue;
-        balcony = {
-          id: uniqueFeatureRoomId(rooms, `balcony-${room.id}`),
-          name: `Balcony · ${room.name}`,
-          type: "balcony",
-          attachedTo: room.id,
-          attachedToRooms: [room.id],
-          requiresExteriorWall: true,
-          requiresCirculationAccess: false,
-          x: room.x,
-          y: edge.side === "top" ? room.y : room.y + room.height - depth,
-          width: room.width,
-          height: depth,
-          minWidth: unit === "m" ? 2.0 : 6,
-          minHeight: minDepth,
-          area: round(room.width * depth)
-        };
-        if (edge.side === "top") room.y += depth;
-        room.height -= depth;
-      }
-
-      room.area = round(room.width * room.height);
-      rooms.push(balcony);
-
-      if (hasValidCandidateRooms(layout, rooms)) {
-        report.applied_rooms.push(targetId);
-        report.created_features.push({
-          id: balcony.id,
-          room: targetId,
-          width: balcony.width,
-          depth: balcony.height,
-          area: balcony.area,
-          side: edge.side
-        });
-        applied = true;
-        break;
-      }
-
-      rooms.pop();
-      Object.assign(room, roomSnapshot);
+    let created = null;
+    for (const edge of edges) {
+      created = createExteriorBalconyProjection(room, edge.side, preferredDepth, minDepth, rooms, layout, plotWidth, plotHeight, unit);
+      if (created) break;
     }
 
-    if (!applied) {
+    if (created) {
+      rooms.push(created.room);
+      layout.siteFeatures.push(created.siteFeature);
+      report.applied_rooms.push(targetId);
+      report.created_features.push(created.summary);
+    } else {
       report.unresolved_rooms.push({
         room: targetId,
-        reason: "The room reaches the exterior, but carving a usable balcony would make the room or full plan invalid."
+        reason: "The room has an exterior edge, but there is not enough collision-free plot space for a practical balcony projection on that edge."
       });
     }
   }
 
   if (report.applied_rooms.length === targets.length) {
     report.status = "applied";
-    report.reason = `Balcony access was created for ${report.applied_rooms.join(", ")}.`;
-    return report;
-  }
-
-  if (report.applied_rooms.length) {
+    report.reason = `Exterior balcony access was created for ${report.applied_rooms.join(", ")} without shrinking those rooms.`;
+  } else if (report.applied_rooms.length) {
     report.status = "approximated";
-    report.reason = "Balcony access was created where the current perimeter geometry allowed it. Remaining requested rooms need an architectural perimeter replan.";
-    return report;
+    report.reason = "Balconies were projected externally where the current perimeter allowed them. Remaining rooms require a perimeter replan rather than sacrificing their internal area.";
+  } else {
+    report.status = "rejected";
+    report.reason = "None of the requested rooms can receive a practical exterior balcony in the current perimeter arrangement; a constrained perimeter replan is required.";
   }
-
-  restoreRoomSnapshots(rooms, snapshot);
-  report.status = "rejected";
-  report.created_features = [];
-  report.reason = "None of the requested rooms could receive a valid balcony in the current perimeter arrangement. Replan those rooms onto an exterior edge or use a shared balcony/terrace concept.";
   return report;
+}
+
+function createExteriorBalconyProjection(room, side, preferredDepth, minDepth, rooms, layout, plotWidth, plotHeight, unit) {
+  const depth = Math.max(minDepth, preferredDepth);
+  let rect;
+  if (side === "left") rect = { x: room.x - depth, y: room.y, width: depth, height: room.height };
+  if (side === "right") rect = { x: room.x + room.width, y: room.y, width: depth, height: room.height };
+  if (side === "top") rect = { x: room.x, y: room.y - depth, width: room.width, height: depth };
+  if (side === "bottom") rect = { x: room.x, y: room.y + room.height, width: room.width, height: depth };
+  if (!rect) return null;
+
+  if (rect.x < -0.02 || rect.y < -0.02 || rect.x + rect.width > plotWidth + 0.02 || rect.y + rect.height > plotHeight + 0.02) return null;
+  if ((layout.siteFeatures || []).some(feature => !["garden", "lawn"].includes(feature.type) && siteRectanglesOverlap(rect, feature))) return null;
+  if (rooms.some(other => other !== room && !other.outsideBuildable && siteRectanglesOverlap(rect, other))) return null;
+
+  const id = uniqueFeatureRoomId(rooms, `balcony-${room.id}`);
+  const balcony = {
+    id,
+    name: `Balcony · ${room.name}`,
+    type: "balcony",
+    attachedTo: room.id,
+    attachedToRooms: [room.id],
+    requiresExteriorWall: true,
+    requiresCirculationAccess: false,
+    x: round(rect.x), y: round(rect.y), width: round(rect.width), height: round(rect.height),
+    minWidth: minDepth,
+    minHeight: unit === "m" ? 1.8 : 6,
+    area: round(rect.width * rect.height),
+    outsideBuildable: true
+  };
+  const siteFeature = { ...balcony, isSiteFeature: true, overlay: false };
+  return {
+    room: balcony,
+    siteFeature,
+    summary: { id, room: room.id, width: balcony.width, depth: balcony.height, area: balcony.area, side }
+  };
+}
+
+function tryCreateSharedExteriorBalcony(targetRooms, rooms, layout, requirements, preferredDepth, minDepth) {
+  const buildable = layout.buildableArea;
+  const plotWidth = Number(requirements?.plot?.width || 0);
+  const plotHeight = Number(requirements?.plot?.height || 0);
+  const unit = String(requirements?.plot?.unit || "ft").toLowerCase();
+  const commonSides = ["left", "right", "top", "bottom"].filter(side =>
+    targetRooms.every(item => exteriorEdges(item.room, buildable).some(edge => edge.side === side))
+  );
+  if (!commonSides.length) return null;
+
+  for (const side of commonSides) {
+    const depth = Math.max(minDepth, preferredDepth);
+    let rect;
+    if (["top", "bottom"].includes(side)) {
+      const x1 = Math.min(...targetRooms.map(item => item.room.x));
+      const x2 = Math.max(...targetRooms.map(item => item.room.x + item.room.width));
+      const y = side === "top" ? buildable.y - depth : buildable.y + buildable.height;
+      rect = { x: x1, y, width: x2 - x1, height: depth };
+    } else {
+      const y1 = Math.min(...targetRooms.map(item => item.room.y));
+      const y2 = Math.max(...targetRooms.map(item => item.room.y + item.room.height));
+      const x = side === "left" ? buildable.x - depth : buildable.x + buildable.width;
+      rect = { x, y: y1, width: depth, height: y2 - y1 };
+    }
+    if (rect.x < -0.02 || rect.y < -0.02 || rect.x + rect.width > plotWidth + 0.02 || rect.y + rect.height > plotHeight + 0.02) continue;
+    if ((layout.siteFeatures || []).some(feature => !["garden", "lawn"].includes(feature.type) && siteRectanglesOverlap(rect, feature))) continue;
+
+    const id = uniqueFeatureRoomId(rooms, "balcony-shared");
+    const balcony = {
+      id, name: "Shared Balcony", type: "balcony",
+      attachedToRooms: targetRooms.map(item => item.room.id),
+      requiresExteriorWall: true, requiresCirculationAccess: false,
+      x: round(rect.x), y: round(rect.y), width: round(rect.width), height: round(rect.height),
+      minWidth: minDepth, minHeight: minDepth, area: round(rect.width * rect.height),
+      outsideBuildable: true
+    };
+    rooms.push(balcony);
+    layout.siteFeatures.push({ ...balcony, isSiteFeature: true });
+    return { room: balcony, summary: { id, rooms: targetRooms.map(item => item.targetId), width: balcony.width, depth: balcony.height, area: balcony.area, side } };
+  }
+  return null;
 }
 
 function exteriorEdges(room, buildable) {
@@ -3354,6 +3645,79 @@ function uniqueFeatureRoomId(rooms, base) {
   return id;
 }
 
+
+function mirrorSiteFeatureGeometryIntoRooms(rooms, report) {
+  if (!Array.isArray(report?.created_features)) return;
+  for (const feature of report.created_features) {
+    if (!feature?.id || rooms.some(room => room.id === feature.id)) continue;
+    rooms.push({
+      ...feature,
+      name: feature.name || siteFeatureName(feature.type || report.feature_type, feature.count || 1),
+      type: feature.type || report.feature_type,
+      requiresExteriorWall: false,
+      requiresCirculationAccess: false,
+      outsideBuildable: true,
+      isSiteFeature: true
+    });
+  }
+}
+
+function applyCourtyardOperation(rooms, layout, operation, requirements) {
+  const unit = String(requirements?.plot?.unit || "ft").toLowerCase();
+  const requestedWidth = Number(operation.width || (unit === "m" ? 2.4 : 8));
+  const requestedDepth = Number(operation.depth || (unit === "m" ? 2.4 : 8));
+  const min = minimumSiteFeatureSize("courtyard", 1, unit);
+  const width = Math.max(min.width, requestedWidth);
+  const depth = Math.max(min.depth, requestedDepth);
+
+  const flexible = rooms
+    .filter(room => ["living", "familyLounge", "dining"].includes(room.type))
+    .sort((a, b) => (b.width * b.height) - (a.width * a.height));
+
+  for (const donor of flexible) {
+    const minWidth = Number(donor.minWidth || (unit === "m" ? 2.7 : 9));
+    const minHeight = Number(donor.minHeight || (unit === "m" ? 2.7 : 9));
+    const snapshot = { ...donor };
+    let courtyard = null;
+
+    if (donor.width - width >= minWidth - 0.02 && donor.height >= depth - 0.02) {
+      courtyard = {
+        id: uniqueFeatureRoomId(rooms, "courtyard"), name: "Courtyard", type: "courtyard",
+        x: donor.x + donor.width - width, y: donor.y,
+        width, height: Math.min(depth, donor.height), area: round(width * Math.min(depth, donor.height)),
+        requiresExteriorWall: false, requiresCirculationAccess: false, openToSky: true
+      };
+      donor.width = round(donor.width - width);
+    } else if (donor.height - depth >= minHeight - 0.02 && donor.width >= width - 0.02) {
+      courtyard = {
+        id: uniqueFeatureRoomId(rooms, "courtyard"), name: "Courtyard", type: "courtyard",
+        x: donor.x, y: donor.y + donor.height - depth,
+        width: Math.min(width, donor.width), height: depth, area: round(Math.min(width, donor.width) * depth),
+        requiresExteriorWall: false, requiresCirculationAccess: false, openToSky: true
+      };
+      donor.height = round(donor.height - depth);
+    }
+
+    if (!courtyard) continue;
+    donor.area = round(donor.width * donor.height);
+    rooms.push(courtyard);
+    if (hasValidCandidateRooms(layout, rooms)) {
+      return {
+        operation: "site_feature", feature_type: "courtyard", status: "applied",
+        created_features: [{ id: courtyard.id, width: courtyard.width, depth: courtyard.height, area: courtyard.area }],
+        reason: `An internal open-to-sky courtyard was created by locally replanning ${donor.name}; it is treated as part of the building plan rather than as leftover setback space.`
+      };
+    }
+    rooms.pop();
+    Object.assign(donor, snapshot);
+  }
+
+  return {
+    operation: "site_feature", feature_type: "courtyard", status: "rejected", created_features: [],
+    reason: "A practical internal courtyard cannot be carved from the current social zone without breaking minimum room sizes. A full architectural replan is required."
+  };
+}
+
 function applySiteFeatureOperation(layout, operation, requirements) {
   const featureType = operation.feature_type;
   const report = {
@@ -3377,25 +3741,30 @@ function applySiteFeatureOperation(layout, operation, requirements) {
     return report;
   }
 
-  const zones = availableSiteZones(plotWidth, plotHeight, buildable, layout.siteFeatures || []);
+  const roadSide = normalizeRoadSide(requirements?.plot?.roadSide);
+  const requestedPlacement = String(operation.placement || "auto").toLowerCase();
+  const desiredSide = normalizeSitePlacement(requestedPlacement, roadSide, featureType);
+  const unit = String(requirements?.plot?.unit || "ft").toLowerCase();
+
+  if (featureType === "driveway") {
+    return applyDrivewayOperation(layout, operation, requirements, desiredSide);
+  }
+
+  let zones = availableSiteZones(plotWidth, plotHeight, buildable, layout.siteFeatures || []);
+  if (desiredSide && desiredSide !== "auto") {
+    // Explicit placement is a hard semantic constraint. Never silently place a
+    // requested front lawn at the rear and call it applied.
+    zones = zones.filter(zone => zone.side === desiredSide);
+  }
   if (!zones.length) {
-    report.reason = "No usable yard/setback zone remains around the current building footprint.";
+    report.reason = desiredSide && desiredSide !== "auto"
+      ? `No usable ${desiredSide} site zone remains for the requested ${featureType}.`
+      : "No usable yard/setback zone remains around the current building footprint.";
     return report;
   }
 
-  const requestedPlacement = String(operation.placement || "auto").toLowerCase();
-  const roadSide = String(requirements?.plot?.roadSide || "north").toLowerCase();
-  const preferredSide = requestedPlacement === "front"
-    ? cardinalToSiteSide(roadSide)
-    : requestedPlacement === "rear"
-      ? oppositeSiteSide(cardinalToSiteSide(roadSide))
-      : cardinalToSiteSide(requestedPlacement);
-
   const ranked = zones.slice().sort((a, b) => {
-    const aPref = preferredSide && a.side === preferredSide ? 1 : 0;
-    const bPref = preferredSide && b.side === preferredSide ? 1 : 0;
-    if (aPref !== bPref) return bPref - aPref;
-    if (["parking", "driveway", "carport"].includes(featureType)) {
+    if (["parking", "carport", "sitout"].includes(featureType)) {
       const road = cardinalToSiteSide(roadSide);
       const ar = a.side === road ? 1 : 0;
       const br = b.side === road ? 1 : 0;
@@ -3404,28 +3773,30 @@ function applySiteFeatureOperation(layout, operation, requirements) {
     return b.area - a.area;
   });
 
-  const unit = String(requirements?.plot?.unit || "ft").toLowerCase();
   const count = Math.max(1, Number(operation.count || (featureType === "parking" ? requirements?.preferences?.parkingSpaces : 1) || 1));
   const defaults = defaultSiteFeatureSize(featureType, count, unit);
-  const wantedWidth = Number(operation.width || defaults.width);
-  const wantedDepth = Number(operation.depth || defaults.depth);
+  const minimum = minimumSiteFeatureSize(featureType, count, unit);
+  const wantedWidth = Number(operation.width || defaults.width || minimum.width);
+  const wantedDepth = Number(operation.depth || defaults.depth || minimum.depth);
   const wantedArea = Number(operation.area || 0);
 
   for (const zone of ranked) {
     let width = Math.min(zone.width, wantedWidth || zone.width);
     let depth = Math.min(zone.height, wantedDepth || zone.height);
 
-    if (["garden", "lawn"].includes(featureType) && !operation.width && !operation.depth) {
-      width = zone.width;
-      depth = zone.height;
+    if (["garden", "lawn"].includes(featureType) && !operation.width && !operation.depth && !wantedArea) {
+      // Use a useful portion of the band, not necessarily every remaining square foot.
+      // This leaves room for parking/sit-out on the same frontage.
+      width = Math.min(zone.width, Math.max(minimum.width, zone.width * 0.55));
+      depth = Math.min(zone.height, Math.max(minimum.depth, zone.height));
     }
 
     if (wantedArea > 0 && width * depth < wantedArea) {
-      const possibleDepth = Math.min(zone.height, wantedArea / Math.max(width, 0.01));
-      depth = Math.max(depth, possibleDepth);
+      const expandedWidth = Math.min(zone.width, Math.max(width, wantedArea / Math.max(depth, 0.01)));
+      width = expandedWidth;
+      if (width * depth < wantedArea) depth = Math.min(zone.height, wantedArea / Math.max(width, 0.01));
     }
 
-    const minimum = minimumSiteFeatureSize(featureType, count, unit);
     if (width < minimum.width - 0.02 || depth < minimum.depth - 0.02) continue;
 
     const rect = anchorSiteFeature(zone, width, depth, featureType, roadSide);
@@ -3448,13 +3819,80 @@ function applySiteFeatureOperation(layout, operation, requirements) {
     report.created_features.push(feature);
     report.status = (wantedArea > 0 && feature.area + 0.5 < wantedArea) ? "approximated" : "applied";
     report.reason = report.status === "applied"
-      ? `${feature.name} was allocated in the ${zone.side} site zone without disturbing the current building footprint.`
-      : `${feature.name} was fitted into the available ${zone.side} yard at ${feature.area} area; the full requested area does not fit without reducing/replanning the building footprint.`;
+      ? `${feature.name} was allocated in the ${zone.side} site zone as part of the site-first architectural plan.`
+      : `${feature.name} was fitted into the requested ${zone.side} zone at ${feature.area} area; the full requested area could not be achieved.`;
     return report;
   }
 
-  report.reason = `The current yard/setback bands cannot fit a practical ${featureType}. A constrained site-and-building replan is required.`;
+  report.reason = desiredSide && desiredSide !== "auto"
+    ? `A practical ${featureType} does not fit in the explicitly requested ${desiredSide} zone.`
+    : `The planned yard/setback bands cannot fit a practical ${featureType}. A broader site-and-building replan is required.`;
   return report;
+}
+
+function applyDrivewayOperation(layout, operation, requirements, desiredSide) {
+  const unit = String(requirements?.plot?.unit || "ft").toLowerCase();
+  const roadSide = normalizeRoadSide(requirements?.plot?.roadSide);
+  const roadEdge = desiredSide && desiredSide !== "auto" ? desiredSide : cardinalToSiteSide(roadSide);
+  const parking = (layout.siteFeatures || []).find(feature => ["parking", "carport"].includes(feature.type));
+  const minimum = minimumSiteFeatureSize("driveway", 1, unit);
+  const width = Math.max(minimum.width, Number(operation.width || (unit === "m" ? 3 : 10)));
+  let rect = null;
+
+  if (parking) {
+    if (roadEdge === "top") {
+      rect = { x: parking.x + Math.max(0, (parking.width - width) / 2), y: 0, width: Math.min(width, parking.width), height: parking.y + parking.height };
+    } else if (roadEdge === "bottom") {
+      rect = { x: parking.x + Math.max(0, (parking.width - width) / 2), y: parking.y, width: Math.min(width, parking.width), height: Math.max(minimum.depth, Number(requirements?.plot?.height || 0) - parking.y) };
+    } else if (roadEdge === "left") {
+      rect = { x: 0, y: parking.y + Math.max(0, (parking.height - width) / 2), width: parking.x + parking.width, height: Math.min(width, parking.height) };
+    } else if (roadEdge === "right") {
+      rect = { x: parking.x, y: parking.y + Math.max(0, (parking.height - width) / 2), width: Math.max(minimum.depth, Number(requirements?.plot?.width || 0) - parking.x), height: Math.min(width, parking.height) };
+    }
+  }
+
+  if (!rect) {
+    const zones = availableSiteZones(
+      Number(requirements?.plot?.width || 0),
+      Number(requirements?.plot?.height || 0),
+      layout.buildableArea,
+      layout.siteFeatures || []
+    ).filter(zone => zone.side === roadEdge);
+    const zone = zones.find(candidate => candidate.width >= minimum.width && candidate.height >= minimum.depth);
+    if (!zone) {
+      return {
+        operation: "site_feature",
+        feature_type: "driveway",
+        status: "rejected",
+        created_features: [],
+        reason: "A vehicle-access strip could not be connected from the road within the current site plan."
+      };
+    }
+    const anchored = anchorSiteFeature(zone, Math.min(zone.width, width), Math.min(zone.height, Math.max(minimum.depth, Number(operation.depth || minimum.depth))), "driveway", roadSide);
+    rect = { x: anchored.x, y: anchored.y, width: anchored.width, height: anchored.height };
+  }
+
+  const feature = {
+    id: uniqueSiteFeatureId(layout.siteFeatures, "driveway"),
+    name: "Driveway",
+    type: "driveway",
+    x: round(rect.x), y: round(rect.y), width: round(rect.width), height: round(rect.height),
+    area: round(rect.width * rect.height),
+    placement: roadEdge,
+    overlay: true,
+    connectsTo: parking?.id || null,
+    isSiteFeature: true
+  };
+  layout.siteFeatures.push(feature);
+  return {
+    operation: "site_feature",
+    feature_type: "driveway",
+    status: "applied",
+    created_features: [feature],
+    reason: parking
+      ? "Driveway access was connected from the road to the parking area; overlap with the parking bay is intentional circulation."
+      : "A road-connected driveway strip was allocated in the frontage."
+  };
 }
 
 function availableSiteZones(plotWidth, plotHeight, buildable, existingFeatures) {
@@ -3463,15 +3901,52 @@ function availableSiteZones(plotWidth, plotHeight, buildable, existingFeatures) 
     { side: "bottom", x: 0, y: buildable.y + buildable.height, width: plotWidth, height: Math.max(0, plotHeight - buildable.y - buildable.height) },
     { side: "left", x: 0, y: buildable.y, width: Math.max(0, buildable.x), height: buildable.height },
     { side: "right", x: buildable.x + buildable.width, y: buildable.y, width: Math.max(0, plotWidth - buildable.x - buildable.width), height: buildable.height }
-  ];
+  ].filter(zone => zone.width > 0.5 && zone.height > 0.5);
 
-  return raw
+  // Subdivide each setback/yard band around existing features instead of marking
+  // an entire side unavailable when one feature occupies only part of it.
+  let free = raw.map(zone => ({ ...zone }));
+  for (const feature of existingFeatures || []) {
+    if (feature?.overlay === true) continue;
+    const next = [];
+    for (const zone of free) {
+      if (!siteRectanglesOverlap(zone, feature)) {
+        next.push(zone);
+        continue;
+      }
+      next.push(...subtractSiteRectangle(zone, feature));
+    }
+    free = next;
+  }
+
+  return free
     .filter(zone => zone.width > 0.5 && zone.height > 0.5)
-    .map(zone => ({ ...zone, area: round(zone.width * zone.height) }))
-    .filter(zone => !(existingFeatures || []).some(feature => rectanglesOverlap(zone, feature)));
+    .map(zone => ({ ...zone, area: round(zone.width * zone.height) }));
 }
 
-function rectanglesOverlap(a, b) {
+function subtractSiteRectangle(zone, occupied) {
+  const ix1 = Math.max(zone.x, occupied.x);
+  const iy1 = Math.max(zone.y, occupied.y);
+  const ix2 = Math.min(zone.x + zone.width, occupied.x + occupied.width);
+  const iy2 = Math.min(zone.y + zone.height, occupied.y + occupied.height);
+  if (ix2 <= ix1 + 0.02 || iy2 <= iy1 + 0.02) return [zone];
+
+  const result = [];
+  const push = (x, y, width, height) => {
+    if (width > 0.5 && height > 0.5) result.push({ side: zone.side, x, y, width, height });
+  };
+
+  // Above and below retain the full band width; left/right slices occupy only
+  // the vertical extent of the intersection. This produces non-overlapping free
+  // rectangles and allows lawn + parking to share one frontage.
+  push(zone.x, zone.y, zone.width, iy1 - zone.y);
+  push(zone.x, iy2, zone.width, zone.y + zone.height - iy2);
+  push(zone.x, iy1, ix1 - zone.x, iy2 - iy1);
+  push(ix2, iy1, zone.x + zone.width - ix2, iy2 - iy1);
+  return result;
+}
+
+function siteRectanglesOverlap(a, b) {
   return a.x < b.x + b.width - 0.02 &&
     a.x + a.width > b.x + 0.02 &&
     a.y < b.y + b.height - 0.02 &&
