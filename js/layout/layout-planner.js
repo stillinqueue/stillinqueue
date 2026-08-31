@@ -278,8 +278,31 @@ function postProcessLayout(layout, requirements) {
     })()
   );
 
-  if (areaOperations.length) {
-    operationReport.push(...applyAreaOperations(rooms, layout, areaOperations));
+  /*
+    First give coupled exact-resize + explicit-transfer requests to the
+    bounded local-zone solver. It is allowed to reshape/repack only the
+    rooms inside a small source-to-target zone while preserving every
+    intermediate room's area. If it cannot produce a valid plan, it
+    rejects cleanly and leaves the original geometry untouched.
+  */
+  const localZoneResult = applyBoundedLocalZoneTransfers(
+    rooms,
+    layout,
+    coupledTransferOperations
+  );
+
+  if (localZoneResult.reports.length) {
+    operationReport.push(...localZoneResult.reports);
+  }
+
+  const remainingAreaOperations = areaOperations.filter(operation =>
+    !localZoneResult.handledKeys.has(
+      `${operation.operation}:${operation.source_room || ""}->${operation.target_room || ""}`
+    )
+  );
+
+  if (remainingAreaOperations.length) {
+    operationReport.push(...applyAreaOperations(rooms, layout, remainingAreaOperations));
   }
 
   const beforeConstraints = rooms.map(room => ({ ...room }));
@@ -746,6 +769,672 @@ function applyAreaOperations(rooms, layout, operations) {
   }
 
   return reports;
+}
+
+/*
+  =========================================================
+  BOUNDED LOCAL-ZONE RESIZE + TRANSFER SOLVER
+  =========================================================
+
+  Purpose:
+    Handle one conversational decision atomically, for example:
+
+      Bedroom 3 -> exactly 10 x 11
+      released area -> Family Lounge
+
+  The simple shared-wall transfer engine is intentionally conservative and
+  can fail when source and target are separated by differently sliced bands.
+  This solver is a second-stage repair. It creates a SMALL rectangular zone
+  around the source-to-target corridor, keeps rooms outside that zone fixed,
+  and repacks only rooms intersecting the zone.
+
+  Rules:
+    - source dimensions are exact;
+    - target receives the source's released area;
+    - all other local rooms keep approximately the same area;
+    - rooms outside the local zone do not move;
+    - no substitute donor is introduced;
+    - final accessibility + geometry validation must pass;
+    - otherwise everything is rolled back.
+*/
+function applyBoundedLocalZoneTransfers(rooms, layout, operations) {
+  const reports = [];
+  const handledKeys = new Set();
+
+  for (const operation of operations || []) {
+    if (
+      operation?.operation !== "transfer_area" ||
+      !operation.source_room ||
+      !operation.target_room
+    ) {
+      continue;
+    }
+
+    const key = `transfer_area:${operation.source_room}->${operation.target_room}`;
+    handledKeys.add(key);
+
+    const report = solveBoundedLocalZoneTransfer(
+      rooms,
+      layout,
+      operation
+    );
+
+    reports.push(report);
+  }
+
+  return {
+    reports,
+    handledKeys
+  };
+}
+
+function solveBoundedLocalZoneTransfer(rooms, layout, operation) {
+  const snapshot = rooms.map(room => ({ ...room }));
+  const circulationSnapshot = (layout.circulation || []).map(item => ({ ...item }));
+  const source = resolveCanonicalRoom(
+    rooms,
+    layout.circulation || [],
+    operation.source_room
+  );
+  const target = resolveCanonicalRoom(
+    rooms,
+    layout.circulation || [],
+    operation.target_room
+  );
+
+  const baseReport = {
+    operation: "transfer_area",
+    source_room: operation.source_room,
+    target_room: operation.target_room,
+    requested_area: 0,
+    actual_area: 0,
+    status: "rejected",
+    changes: [],
+    circulation_changes: [],
+    total_donor_loss: 0,
+    total_recipient_gain: 0,
+    circulation_area_change: 0,
+    residual_difference: 0,
+    conservation_tolerance: 0.5,
+    footprint_before: footprintSummary(layout.buildableArea),
+    footprint_after: footprintSummary(layout.buildableArea),
+    footprint_changed: false,
+    explicit_source_preserved: false,
+    intermediate_rooms: [],
+    local_zone_rooms: [],
+    substitute_donors: [],
+    interpretation: operation.reason || "Exact resize with explicit released-area allocation"
+  };
+
+  if (!source || !target || source === target) {
+    return {
+      ...baseReport,
+      reason: "The explicit source or target room is not available in the current layout."
+    };
+  }
+
+  const constraint = source.requestedConstraint || {};
+  const requestedWidth = Number(constraint.width);
+  const requestedDepth = Number(constraint.depth);
+
+  if (!(requestedWidth > 0) || !(requestedDepth > 0)) {
+    return {
+      ...baseReport,
+      reason: "The bounded local-zone solver requires explicit final width and depth for the source room."
+    };
+  }
+
+  const minimumWidth = Number(source.minWidth || 0);
+  const minimumHeight = Number(source.minHeight || 0);
+  if (
+    requestedWidth + 0.05 < minimumWidth ||
+    requestedDepth + 0.05 < minimumHeight
+  ) {
+    return {
+      ...baseReport,
+      reason: "The requested source dimensions fall below the configured practical minimum."
+    };
+  }
+
+  const sourceBeforeArea = source.width * source.height;
+  const requestedSourceArea = requestedWidth * requestedDepth;
+  const releasedArea = sourceBeforeArea - requestedSourceArea;
+  baseReport.requested_area = round(releasedArea);
+
+  if (!(releasedArea > 0.5)) {
+    return {
+      ...baseReport,
+      reason: "The exact source dimensions do not release a meaningful amount of floor area."
+    };
+  }
+
+  const zoneInfo = buildBoundedLocalZone(
+    rooms,
+    layout,
+    source,
+    target
+  );
+
+  if (!zoneInfo) {
+    return {
+      ...baseReport,
+      reason: "A safe bounded source-to-target rearrangement zone could not be identified.",
+      suggestion: "Allow a wider local rearrangement or choose a nearer recipient."
+    };
+  }
+
+  const { zone, localRooms, obstacles } = zoneInfo;
+  baseReport.local_zone_rooms = localRooms.map(room => room.id);
+  baseReport.intermediate_rooms = localRooms
+    .filter(room => room !== source && room !== target)
+    .map(room => room.id);
+
+  const targetBeforeArea = target.width * target.height;
+  const desiredAreas = new Map();
+  for (const room of localRooms) {
+    if (room === source) {
+      desiredAreas.set(room.id, requestedSourceArea);
+    } else if (room === target) {
+      desiredAreas.set(room.id, targetBeforeArea + releasedArea);
+    } else {
+      desiredAreas.set(room.id, room.width * room.height);
+    }
+  }
+
+  const packed = packBoundedLocalZone({
+    zone,
+    localRooms,
+    obstacles,
+    source,
+    target,
+    requestedWidth,
+    requestedDepth,
+    desiredAreas,
+    buildable: layout.buildableArea
+  });
+
+  if (!packed) {
+    restoreRoomSnapshots(rooms, snapshot);
+    layout.circulation.splice(0, layout.circulation.length, ...circulationSnapshot);
+    return {
+      ...baseReport,
+      reason: "The local zone could not be repartitioned while keeping the exact source size, target allocation, room usability, and fixed surrounding geometry.",
+      suggestion: "Allow a slightly larger local rearrangement, choose a nearer recipient, or permit an approximated target allocation."
+    };
+  }
+
+  for (const placement of packed.placements) {
+    const room = rooms.find(item => item.id === placement.id);
+    if (!room) continue;
+    room.x = round(placement.x);
+    room.y = round(placement.y);
+    room.width = round(placement.width);
+    room.height = round(placement.height);
+    room.area = round(room.width * room.height);
+    room.operationLocked = true;
+  }
+
+  const localBedroomOps = localRooms
+    .filter(room => ["bedroom", "masterBedroom"].includes(room.type))
+    .map(room => ({
+      status: "applied",
+      source_room: room.id === "bedroom-1"
+        ? "masterBedroom"
+        : room.id.startsWith("bedroom-")
+          ? `bedroom${room.id.split("-")[1]}`
+          : null,
+      target_room: null
+    }))
+    .filter(item => item.source_room);
+
+  repairAttachedBathroomsAfterOperations(
+    rooms,
+    layout,
+    localBedroomOps
+  );
+  repairBedroomAccessAfterTransfer(
+    rooms,
+    layout,
+    localRooms
+  );
+
+  const finalSource = rooms.find(room => room.id === source.id);
+  const finalTarget = rooms.find(room => room.id === target.id);
+  const sourceExact = Boolean(
+    finalSource &&
+    Math.abs(finalSource.width - requestedWidth) < 0.1 &&
+    Math.abs(finalSource.height - requestedDepth) < 0.1
+  );
+
+  const actualTargetGain = finalTarget
+    ? finalTarget.width * finalTarget.height - targetBeforeArea
+    : 0;
+
+  const intermediateAreaDrift = localRooms
+    .filter(room => room !== source && room !== target)
+    .map(room => {
+      const before = snapshot.find(item => item.id === room.id);
+      const after = rooms.find(item => item.id === room.id);
+      return {
+        id: room.id,
+        drift: before && after
+          ? after.width * after.height - before.width * before.height
+          : Infinity
+      };
+    });
+
+  const intermediatesPreserved = intermediateAreaDrift.every(item =>
+    Math.abs(item.drift) <= Math.max(1, desiredAreas.get(item.id) * 0.015)
+  );
+
+  const targetClose = Math.abs(actualTargetGain - releasedArea) <= Math.max(1.5, releasedArea * 0.03);
+  const valid = hasValidCandidateRooms(layout, rooms);
+
+  if (!sourceExact || !intermediatesPreserved || !targetClose || !valid) {
+    restoreRoomSnapshots(rooms, snapshot);
+    layout.circulation.splice(0, layout.circulation.length, ...circulationSnapshot);
+    return {
+      ...baseReport,
+      reason: !sourceExact
+        ? "The local solver could not preserve the exact requested source dimensions."
+        : !intermediatesPreserved
+          ? "The local solver would require unrelated rooms to become net donors or recipients."
+          : !targetClose
+            ? "The released source area could not be delivered closely enough to the requested target."
+            : "The local rearrangement would create an invalid or inaccessible layout.",
+      suggestion: "Try a nearer target room or allow the engine to choose the least disruptive practical recipient."
+    };
+  }
+
+  rooms.forEach(room => {
+    room.x = round(room.x);
+    room.y = round(room.y);
+    room.width = round(room.width);
+    room.height = round(room.height);
+    room.area = round(room.width * room.height);
+  });
+
+  const changes = rooms.flatMap((room, index) => {
+    const before = snapshot[index];
+    if (!before || before.id !== room.id) return [];
+    const beforeArea = round(before.width * before.height);
+    const afterArea = round(room.width * room.height);
+    if (Math.abs(afterArea - beforeArea) <= 0.1 &&
+        Math.abs(room.x - before.x) <= 0.05 &&
+        Math.abs(room.y - before.y) <= 0.05) {
+      return [];
+    }
+    return [{
+      room: room.name,
+      room_id: room.id,
+      before_area: beforeArea,
+      after_area: afterArea,
+      delta: round(afterArea - beforeArea),
+      before_position: { x: round(before.x), y: round(before.y) },
+      after_position: { x: room.x, y: room.y }
+    }];
+  });
+
+  const sourceAfterArea = finalSource.width * finalSource.height;
+  const sourceLoss = sourceBeforeArea - sourceAfterArea;
+  const targetGain = finalTarget.width * finalTarget.height - targetBeforeArea;
+  const otherDonorLoss = -changes
+    .filter(change => change.room_id !== source.id && change.delta < -0.1)
+    .reduce((sum, change) => sum + change.delta, 0);
+  const otherRecipientGain = changes
+    .filter(change => change.room_id !== target.id && change.delta > 0.1)
+    .reduce((sum, change) => sum + change.delta, 0);
+
+  return {
+    ...baseReport,
+    actual_area: round(targetGain),
+    status: "applied",
+    changes,
+    total_donor_loss: round(sourceLoss + otherDonorLoss),
+    total_recipient_gain: round(targetGain + otherRecipientGain),
+    residual_difference: round(sourceLoss - targetGain),
+    explicit_source_preserved: Math.abs(sourceLoss - releasedArea) <= 1,
+    requested_source_loss: round(releasedArea),
+    actual_source_loss: round(sourceLoss),
+    requested_target_gain: round(releasedArea),
+    actual_target_gain: round(targetGain),
+    substitute_donors: changes
+      .filter(change => change.room_id !== source.id && change.delta < -1)
+      .map(change => change.room_id),
+    reason: `${source.name} reached ${round(requestedWidth)} x ${round(requestedDepth)} and ${target.name} received approximately ${round(targetGain)} ${areaUnitForLayout(layout)} through a bounded local-zone rearrangement. Intermediate rooms kept approximately the same net area.`
+  };
+}
+
+function buildBoundedLocalZone(rooms, layout, source, target) {
+  const buildable = layout.buildableArea;
+  const padding = String(layout.unit || "ft").toLowerCase() === "m" ? 0.45 : 1.5;
+  const center = room => ({
+    x: room.x + room.width / 2,
+    y: room.y + room.height / 2
+  });
+  const a = center(source);
+  const b = center(target);
+
+  /*
+    A corridor-shaped bounding rectangle is deliberately narrower than the
+    entire house. It covers both rooms and the direct route between them,
+    then absorbs any room whose rectangle materially intersects that zone.
+  */
+  let zone = {
+    x: Math.max(buildable.x, Math.min(source.x, target.x) - padding),
+    y: Math.max(buildable.y, Math.min(source.y, target.y) - padding),
+    width: 0,
+    height: 0
+  };
+  const zoneRight = Math.min(
+    buildable.x + buildable.width,
+    Math.max(source.x + source.width, target.x + target.width) + padding
+  );
+  const zoneBottom = Math.min(
+    buildable.y + buildable.height,
+    Math.max(source.y + source.height, target.y + target.height) + padding
+  );
+  zone.width = zoneRight - zone.x;
+  zone.height = zoneBottom - zone.y;
+
+  const segmentDistance = room => {
+    const c = center(room);
+    const vx = b.x - a.x;
+    const vy = b.y - a.y;
+    const len2 = vx * vx + vy * vy || 1;
+    const t = Math.max(0, Math.min(1, ((c.x - a.x) * vx + (c.y - a.y) * vy) / len2));
+    const px = a.x + t * vx;
+    const py = a.y + t * vy;
+    return Math.hypot(c.x - px, c.y - py);
+  };
+
+  const intersects = (first, second) => !(
+    first.x + first.width <= second.x + 0.05 ||
+    second.x + second.width <= first.x + 0.05 ||
+    first.y + first.height <= second.y + 0.05 ||
+    second.y + second.height <= first.y + 0.05
+  );
+
+  let localRooms = rooms.filter(room =>
+    room === source ||
+    room === target ||
+    (
+      intersects(room, zone) &&
+      segmentDistance(room) <= Math.max(room.width, room.height) * 1.25 + padding
+    )
+  );
+
+  /*
+    Keep the search bounded. Prefer rooms closest to the source-target route
+    if the first corridor catches too many spaces.
+  */
+  const maxLocalRooms = 9;
+  if (localRooms.length > maxLocalRooms) {
+    localRooms = localRooms
+      .sort((first, second) => {
+        if (first === source || first === target) return -1;
+        if (second === source || second === target) return 1;
+        return segmentDistance(first) - segmentDistance(second);
+      })
+      .slice(0, maxLocalRooms);
+  }
+
+  const selected = new Set(localRooms.map(room => room.id));
+  const xs = localRooms.flatMap(room => [room.x, room.x + room.width]);
+  const ys = localRooms.flatMap(room => [room.y, room.y + room.height]);
+  zone = {
+    x: Math.max(buildable.x, Math.min(...xs)),
+    y: Math.max(buildable.y, Math.min(...ys)),
+    width: Math.min(buildable.x + buildable.width, Math.max(...xs)) - Math.max(buildable.x, Math.min(...xs)),
+    height: Math.min(buildable.y + buildable.height, Math.max(...ys)) - Math.max(buildable.y, Math.min(...ys))
+  };
+
+  const obstacles = rooms
+    .filter(room => !selected.has(room.id) && intersects(room, zone))
+    .map(room => ({ ...room }));
+
+  if (
+    !(zone.width > 0) ||
+    !(zone.height > 0) ||
+    localRooms.length < 2
+  ) {
+    return null;
+  }
+
+  return {
+    zone,
+    localRooms,
+    obstacles
+  };
+}
+
+function packBoundedLocalZone({
+  zone,
+  localRooms,
+  obstacles,
+  source,
+  target,
+  requestedWidth,
+  requestedDepth,
+  desiredAreas,
+  buildable
+}) {
+  const originalById = new Map(localRooms.map(room => [room.id, { ...room }]));
+  const orders = [
+    [source, target, ...localRooms.filter(room => room !== source && room !== target)
+      .sort((a, b) => desiredAreas.get(b.id) - desiredAreas.get(a.id))],
+    [source, ...localRooms.filter(room => room !== source && room !== target)
+      .sort((a, b) => desiredAreas.get(b.id) - desiredAreas.get(a.id)), target],
+    [target, source, ...localRooms.filter(room => room !== source && room !== target)
+      .sort((a, b) => desiredAreas.get(b.id) - desiredAreas.get(a.id))]
+  ];
+
+  let best = null;
+
+  for (const orderedRooms of orders) {
+    let freeRects = [{ ...zone }];
+    for (const obstacle of obstacles) {
+      freeRects = subtractPlacedRectangle(freeRects, obstacle);
+    }
+
+    const placements = [];
+    let failed = false;
+
+    for (const room of orderedRooms) {
+      const fixed = room === source
+        ? { width: requestedWidth, height: requestedDepth }
+        : null;
+      const sizes = getLocalZoneSizes(
+        room,
+        desiredAreas.get(room.id),
+        fixed,
+        zone
+      );
+      const original = originalById.get(room.id);
+      const candidate = findLocalZonePlacement({
+        room,
+        original,
+        sizes,
+        freeRects,
+        buildable
+      });
+
+      if (!candidate) {
+        failed = true;
+        break;
+      }
+
+      const placed = {
+        ...room,
+        x: round(candidate.x),
+        y: round(candidate.y),
+        width: round(candidate.width),
+        height: round(candidate.height),
+        area: round(candidate.width * candidate.height)
+      };
+      placements.push(placed);
+      freeRects = subtractPlacedRectangle(freeRects, placed);
+    }
+
+    if (failed || placements.length !== localRooms.length) continue;
+
+    const score = placements.reduce((sum, placed) => {
+      const original = originalById.get(placed.id);
+      const centerShift = Math.hypot(
+        (placed.x + placed.width / 2) - (original.x + original.width / 2),
+        (placed.y + placed.height / 2) - (original.y + original.height / 2)
+      );
+      const shapeShift = Math.abs(placed.width - original.width) + Math.abs(placed.height - original.height);
+      return sum + centerShift + shapeShift * 0.4;
+    }, 0);
+
+    if (!best || score < best.score) {
+      best = {
+        placements,
+        score
+      };
+    }
+  }
+
+  return best;
+}
+
+function getLocalZoneSizes(room, desiredArea, fixed, zone) {
+  if (fixed) {
+    return [{
+      width: fixed.width,
+      height: fixed.height
+    }];
+  }
+
+  const area = Number(desiredArea);
+  if (!(area > 0)) return [];
+  const minWidth = Number(room.minWidth || 3);
+  const minHeight = Number(room.minHeight || 3);
+  const maxAspect = Number(PLANNING_ROOM_POLICIES.maximumAspectRatio || 2.4);
+  const originalAspect = Math.max(0.35, Math.min(2.85, room.width / Math.max(0.1, room.height)));
+  const aspectCandidates = [
+    originalAspect,
+    1,
+    originalAspect * 0.9,
+    originalAspect * 1.1,
+    room.preferredWidth && room.preferredHeight
+      ? Number(room.preferredWidth) / Math.max(0.1, Number(room.preferredHeight))
+      : originalAspect
+  ];
+  const raw = [];
+
+  const pushSize = (width, height) => {
+    if (!(width > 0) || !(height > 0)) return;
+    if (width + 0.05 < minWidth || height + 0.05 < minHeight) return;
+    if (width > zone.width + 0.05 || height > zone.height + 0.05) return;
+    const aspect = Math.max(width / height, height / width);
+    if (aspect > maxAspect + 0.15) return;
+    raw.push({ width, height });
+  };
+
+  pushSize(room.width, area / room.width);
+  pushSize(area / room.height, room.height);
+
+  for (const aspect of aspectCandidates) {
+    if (!(aspect > 0)) continue;
+    const width = Math.sqrt(area * aspect);
+    const height = area / width;
+    pushSize(width, height);
+    pushSize(height, width);
+  }
+
+  const seen = new Set();
+  return raw
+    .map(size => ({
+      width: round(size.width),
+      height: round(size.height)
+    }))
+    .filter(size => {
+      const key = `${size.width}:${size.height}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return Math.abs(size.width * size.height - area) <= Math.max(1.5, area * 0.015);
+    })
+    .sort((first, second) =>
+      Math.abs(first.width - room.width) + Math.abs(first.height - room.height) -
+      (Math.abs(second.width - room.width) + Math.abs(second.height - room.height))
+    );
+}
+
+function findLocalZonePlacement({
+  room,
+  original,
+  sizes,
+  freeRects,
+  buildable
+}) {
+  const candidates = [];
+  const exteriorTolerance = 0.1;
+
+  for (const freeRect of freeRects) {
+    for (const size of sizes) {
+      if (
+        size.width > freeRect.width + 0.05 ||
+        size.height > freeRect.height + 0.05
+      ) {
+        continue;
+      }
+
+      const maxX = freeRect.x + freeRect.width - size.width;
+      const maxY = freeRect.y + freeRect.height - size.height;
+      const positions = [
+        { x: freeRect.x, y: freeRect.y },
+        { x: maxX, y: freeRect.y },
+        { x: freeRect.x, y: maxY },
+        { x: maxX, y: maxY },
+        {
+          x: Math.max(freeRect.x, Math.min(maxX, original.x)),
+          y: Math.max(freeRect.y, Math.min(maxY, original.y))
+        }
+      ];
+
+      for (const position of positions) {
+        const x = round(position.x);
+        const y = round(position.y);
+        const centerShift = Math.hypot(
+          (x + size.width / 2) - (original.x + original.width / 2),
+          (y + size.height / 2) - (original.y + original.height / 2)
+        );
+        const sizeShift = Math.abs(size.width - original.width) + Math.abs(size.height - original.height);
+        let score = centerShift + sizeShift * 0.35;
+
+        if (room.requiresExteriorWall) {
+          const touchesExterior =
+            Math.abs(x - buildable.x) < exteriorTolerance ||
+            Math.abs(y - buildable.y) < exteriorTolerance ||
+            Math.abs(x + size.width - buildable.x - buildable.width) < exteriorTolerance ||
+            Math.abs(y + size.height - buildable.y - buildable.height) < exteriorTolerance;
+          if (!touchesExterior) score += 500;
+        }
+
+        if (room.wetArea || ["attachedToilet", "commonToilet", "utility"].includes(room.type)) {
+          score += centerShift * 2.5;
+        }
+
+        candidates.push({
+          x,
+          y,
+          width: size.width,
+          height: size.height,
+          score
+        });
+      }
+    }
+  }
+
+  return candidates.sort((a, b) => a.score - b.score)[0] || null;
+}
+
+function areaUnitForLayout(layout) {
+  return String(layout.unit || "ft").toLowerCase() === "m"
+    ? "sq m"
+    : "sq ft";
 }
 
 function footprintSummary(buildable) {
