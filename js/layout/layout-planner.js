@@ -444,7 +444,7 @@ function postProcessLayout(layout, requirements) {
 
   const positionalOperations = Array.isArray(layoutOperations)
     ? layoutOperations.filter(operation =>
-        ["swap", "adjacent", "near", "position", "improve_relationship"].includes(operation.operation)
+        ["swap", "adjacent", "near", "position", "improve_relationship", "improve_privacy"].includes(operation.operation)
       )
     : [];
 
@@ -485,12 +485,18 @@ function postProcessLayout(layout, requirements) {
   const beforeAdjacency = rooms.map(room => ({ ...room }));
   if (positionalOperations.length) {
     const relationshipOperations = positionalOperations.filter(operation => operation.operation === "improve_relationship");
-    const ordinaryPositionalOperations = positionalOperations.filter(operation => operation.operation !== "improve_relationship");
+    const privacyOperations = positionalOperations.filter(operation => operation.operation === "improve_privacy");
+    const ordinaryPositionalOperations = positionalOperations.filter(operation =>
+      !["improve_relationship", "improve_privacy"].includes(operation.operation)
+    );
     operationReport = ordinaryPositionalOperations.length
       ? applyLayoutOperations(rooms, layout.circulation, ordinaryPositionalOperations, buildable)
       : [];
     if (relationshipOperations.length) {
       operationReport.push(...applyRelationshipOperations(rooms, layout, relationshipOperations));
+    }
+    if (privacyOperations.length) {
+      operationReport.push(...applyPrivacyOperations(rooms, layout, privacyOperations));
     }
     repairAttachedBathroomsAfterOperations(rooms, layout, operationReport);
     const operationChangedGeometry = rooms.some((room, index) =>
@@ -806,9 +812,10 @@ function postProcessLayout(layout, requirements) {
 
   const hardConstraintFailures = constraintReport.filter(result => result.status === "not-feasible");
   const hardFeatureFailures = featureReport.filter(result => result.status === "rejected");
+  const hardOperationFailures = operationReport.filter(result => result.status === "rejected");
   const finalCandidateValid = hasValidCandidateRooms(layout, rooms);
 
-  if (!finalCandidateValid || hardConstraintFailures.length || hardFeatureFailures.length) {
+  if (!finalCandidateValid || hardConstraintFailures.length || hardFeatureFailures.length || hardOperationFailures.length) {
     const failedRooms = hardConstraintFailures.map(result => ({
       id: result.roomId || null,
       name: result.room || result.roomId || "Constraint",
@@ -818,6 +825,11 @@ function postProcessLayout(layout, requirements) {
       id: result.feature_type || result.operation || null,
       name: siteFeatureName(result.feature_type || result.operation || "feature", 1),
       reason: result.reason || "Requested architectural feature was not satisfied."
+    }));
+    const operationFailures = hardOperationFailures.map(result => ({
+      id: result.source_room || result.operation || null,
+      name: result.operation || "Design operation",
+      reason: result.reason || "Requested design operation was not satisfied."
     }));
     return withAccessibilityCheck({
       ...layout,
@@ -830,7 +842,7 @@ function postProcessLayout(layout, requirements) {
       balconyReport,
       featureReport,
       circulationRepairReport,
-      failedRooms: [...failedRooms, ...featureFailures],
+      failedRooms: [...failedRooms, ...featureFailures, ...operationFailures],
       feasibility: {
         ...(layout.feasibility || {}),
         status: "infeasible",
@@ -924,6 +936,158 @@ function applyRelationshipOperations(rooms, layout, operations) {
     }
   }
   return reports;
+}
+
+
+function applyPrivacyOperations(rooms, layout, operations) {
+  const reports = [];
+  const entrance = Array.isArray(layout.entrances) && layout.entrances.length
+    ? layout.entrances[0]
+    : null;
+
+  const pointFor = item => ({
+    x: Number(item?.x || 0) + Number(item?.width || 0) / 2,
+    y: Number(item?.y || 0) + Number(item?.height || 0) / 2
+  });
+  const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  for (const operation of operations || []) {
+    const subjectId = operation.source_room || "masterBedroom";
+    const subject = resolveCanonicalRoom(rooms, layout.circulation || [], subjectId);
+    const fromIds = Array.isArray(operation.target_rooms) && operation.target_rooms.length
+      ? operation.target_rooms
+      : [operation.target_room || "foyer"].filter(Boolean);
+
+    const report = {
+      operation: "improve_privacy",
+      source_room: subjectId,
+      target_rooms: fromIds,
+      status: "rejected",
+      strategy: null,
+      before_privacy_score: null,
+      after_privacy_score: null,
+      reason: null
+    };
+
+    if (!subject) {
+      report.reason = "The room whose privacy should be improved was not found.";
+      reports.push(report);
+      continue;
+    }
+
+    const referenceRooms = fromIds
+      .map(id => resolveCanonicalRoom(rooms, layout.circulation || [], id))
+      .filter(Boolean);
+    const publicRooms = referenceRooms.length
+      ? referenceRooms
+      : rooms.filter(room => ["living", "foyer"].includes(room.id) || ["living", "foyer"].includes(room.type));
+
+    const entrancePoint = entrance ? pointFor(entrance) : null;
+    const subjectPoint = pointFor(subject);
+    const publicDistance = publicRooms.length
+      ? Math.min(...publicRooms.map(room => distance(subjectPoint, pointFor(room))))
+      : Infinity;
+    const entranceDistance = entrancePoint ? distance(subjectPoint, entrancePoint) : Infinity;
+    const touchesPublic = publicRooms.some(room => rectanglesTouch(subject, room));
+    const unit = String(layout.unit || "ft").toLowerCase();
+    const distanceTarget = unit === "m" ? 4.0 : 13.0;
+
+    // 0..100 score: separation from entrance/public zone plus no direct shared edge.
+    const scorePrivacy = (room, roomList) => {
+      const rp = pointFor(room);
+      const pd = roomList.length
+        ? Math.min(...roomList.map(other => distance(rp, pointFor(other))))
+        : distanceTarget;
+      const ed = entrancePoint ? distance(rp, entrancePoint) : distanceTarget;
+      const touching = roomList.some(other => rectanglesTouch(room, other));
+      return Math.max(0, Math.min(100,
+        35 * Math.min(1, pd / distanceTarget) +
+        45 * Math.min(1, ed / distanceTarget) +
+        (touching ? 0 : 20)
+      ));
+    };
+
+    const beforeScore = scorePrivacy(subject, publicRooms);
+    report.before_privacy_score = round(beforeScore, 1);
+
+    // If there is already good separation, this is a valid no-change architectural outcome.
+    if (!touchesPublic && publicDistance >= distanceTarget * 0.8 && entranceDistance >= distanceTarget * 0.8) {
+      subject.privacyIntent = {
+        protectedFrom: fromIds,
+        evaluated: true,
+        score: round(beforeScore, 1)
+      };
+      report.status = "satisfied";
+      report.strategy = "existing_private_zone";
+      report.after_privacy_score = round(beforeScore, 1);
+      report.reason = `${subject.name} is already separated from the requested public/entrance zone; no disruptive geometry change is needed.`;
+      reports.push(report);
+      continue;
+    }
+
+    // Architectural repair: try exchanging the subject with the most private compatible bedroom position.
+    const candidates = rooms
+      .filter(room => room !== subject && ["bedroom", "masterBedroom"].includes(room.type) && !room.isSiteFeature)
+      .map(room => ({ room, score: scorePrivacy(room, publicRooms) }))
+      .filter(item => item.score > beforeScore + 5)
+      .sort((a, b) => b.score - a.score);
+
+    let applied = false;
+    for (const candidate of candidates) {
+      const snapshot = rooms.map(room => ({ ...room }));
+      const swapReport = applyLayoutOperations(rooms, layout.circulation || [], [{
+        ...operation,
+        operation: "swap",
+        source_room: subjectId,
+        target_room: canonicalRoomIdForPrivacyCandidate(candidate.room)
+      }], layout.buildableArea)[0];
+
+      if (swapReport && ["applied", "approximated"].includes(swapReport.status)) {
+        repairAttachedBathroomsAfterOperations(rooms, layout, [swapReport]);
+        const movedSubject = resolveCanonicalRoom(rooms, layout.circulation || [], subjectId);
+        const afterScore = movedSubject ? scorePrivacy(movedSubject, publicRooms) : 0;
+        if (movedSubject && afterScore > beforeScore + 3 && hasValidCandidateRooms(layout, rooms)) {
+          movedSubject.privacyIntent = {
+            protectedFrom: fromIds,
+            evaluated: true,
+            score: round(afterScore, 1)
+          };
+          report.status = swapReport.status === "applied" ? "applied" : "approximated";
+          report.strategy = "private_zone_reposition";
+          report.after_privacy_score = round(afterScore, 1);
+          report.reason = `${movedSubject.name} was repositioned deeper into the private zone, improving separation from the entrance/public area while preserving a valid plan.`;
+          applied = true;
+          break;
+        }
+      }
+      restoreRoomSnapshots(rooms, snapshot);
+    }
+
+    if (!applied) {
+      // Do not fake a geometry change. Record the architectural intent and report the need for a larger replan.
+      subject.privacyIntent = {
+        protectedFrom: fromIds,
+        evaluated: true,
+        score: round(beforeScore, 1),
+        needsBroaderReplan: true
+      };
+      report.status = "approximated";
+      report.strategy = "privacy_intent_preserved";
+      report.after_privacy_score = round(beforeScore, 1);
+      report.reason = `${subject.name} privacy intent was preserved, but a stronger physical separation would require a broader entrance/private-zone replan rather than an unsafe local move.`;
+    }
+
+    reports.push(report);
+  }
+
+  return reports;
+}
+
+function canonicalRoomIdForPrivacyCandidate(room) {
+  if (!room) return null;
+  if (room.id === "bedroom-1" || room.type === "masterBedroom") return "masterBedroom";
+  const match = String(room.id || "").match(/bedroom-(\d+)/i);
+  return match ? `bedroom${match[1]}` : room.id;
 }
 
 function applyAreaOperations(rooms, layout, operations, requirements = null) {
@@ -3003,12 +3167,29 @@ function introducesNewLayoutDefect(layout, beforeRooms, afterRooms) {
 }
 
 function restoreRoomSnapshots(rooms, snapshot) {
-  rooms.forEach((room, index) => {
-    for (const key of Object.keys(room)) {
-      if (!(key in snapshot[index])) delete room[key];
+  const safeSnapshot = Array.isArray(snapshot) ? snapshot : [];
+
+  // A feature transaction may temporarily append balcony/site-feature rooms.
+  // Rollback must remove those extras before restoring the original objects.
+  if (rooms.length > safeSnapshot.length) {
+    rooms.splice(safeSnapshot.length);
+  }
+
+  for (let index = 0; index < safeSnapshot.length; index += 1) {
+    const source = safeSnapshot[index];
+    if (!source || typeof source !== "object") continue;
+
+    if (!rooms[index] || typeof rooms[index] !== "object") {
+      rooms[index] = { ...source };
+      continue;
     }
-    Object.assign(room, snapshot[index]);
-  });
+
+    const room = rooms[index];
+    for (const key of Object.keys(room)) {
+      if (!Object.prototype.hasOwnProperty.call(source, key)) delete room[key];
+    }
+    Object.assign(room, source);
+  }
 }
 
 function determineRequestedTransferArea(operation, source, target, unit) {
