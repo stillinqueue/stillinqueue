@@ -1547,12 +1547,15 @@ def _stabilize_initial_proposal(
         if "utility" in n: return "utility"
         if "foyer" in n or n == "entry": return "foyer"
         if "passage" in n or "circulation" in n: return "passage"
-        if "master" in n and ("bed" in n or "room" in n): return "masterbedroom"
+        # Bathrooms must be classified before the broad master-bedroom rule.
+        # "masterbathroom" contains the substring "room", so checking master
+        # bedroom first incorrectly gave the bathroom the bedroom dimensions.
+        if "master" in n and ("bath" in n or "toilet" in n): return "masterbathroom"
+        if "common" in n and ("bath" in n or "toilet" in n): return "commonbathroom"
+        if "master" in n and ("bed" in n or "bedroom" in n): return "masterbedroom"
         if "bedroom2" in n or "bed2" in n: return "bedroom2"
         if "bedroom3" in n or "bed3" in n: return "bedroom3"
         if "bedroom4" in n or "bed4" in n: return "bedroom4"
-        if "master" in n and ("bath" in n or "toilet" in n): return "masterbathroom"
-        if "common" in n and ("bath" in n or "toilet" in n): return "commonbathroom"
         return None
 
     factor = 0.3048 if unit == "m" else 1.0
