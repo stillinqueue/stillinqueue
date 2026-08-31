@@ -485,7 +485,7 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                                 "type": "string",
                                 "enum": [
                                     "swap", "adjacent", "near", "position", "resize",
-                                    "transfer_area", "redistribute_area", "architectural_rebalance", "optimize_layout",
+                                    "transfer_area", "redistribute_area", "architectural_rebalance", "balcony_access", "site_feature", "optimize_layout",
                                 ],
                             },
                             "source_room": {
@@ -554,6 +554,35 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                                 ],
                             },
                             "allow_auto_fallback": {"type": "boolean"},
+                            "feature_type": {
+                                "type": ["string", "null"],
+                                "enum": [
+                                    "balcony", "parking", "garden", "lawn", "sitout",
+                                    "terrace", "courtyard", "driveway", "carport", None,
+                                ],
+                            },
+                            "target_rooms": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "enum": [
+                                        "living", "familyLounge", "dining", "kitchen", "utility",
+                                        "masterBedroom", "bedroom2", "bedroom3", "bedroom4",
+                                        "commonBathroom", "masterBathroom", "bathroom2", "bathroom3",
+                                        "bathroom4", "foyer", "passage", "study", "storage", "sitout",
+                                    ],
+                                },
+                            },
+                            "count": {"type": ["integer", "null"]},
+                            "placement": {
+                                "type": ["string", "null"],
+                                "enum": [
+                                    "front", "rear", "left", "right", "north", "south",
+                                    "east", "west", "auto", None,
+                                ],
+                            },
+                            "covered": {"type": ["boolean", "null"]},
+                            "shared": {"type": ["boolean", "null"]},
                             "priority": {
                                 "type": "string",
                                 "enum": ["low", "normal", "high"],
@@ -567,7 +596,8 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                             "width", "depth", "area", "amount_sqft", "amount_percent",
                             "requested_width", "requested_depth", "strategy",
                             "preferred_local_receiver", "preferred_target_donor",
-                            "allow_auto_fallback", "priority",
+                            "allow_auto_fallback", "feature_type", "target_rooms", "count",
+                            "placement", "covered", "shared", "priority",
                             "preserve_total_area", "preserve_room_usability", "reason",
                         ],
                         "additionalProperties": False,
@@ -962,8 +992,8 @@ IMPORTANT BEHAVIOUR
     - "remove/no utility" -> utility=false; "add a utility room" -> true
     - "remove/no puja room" -> puja=false; "add a puja room" -> true
     - "remove/no store room" -> store=false; "add a store room" -> true
-        - "large balcony connected to living" -> balcony=true and preserve the
-            connection request in room_preferences
+    - "large balcony connected to living" -> balcony=true AND emit a structured
+      balcony_access operation. Do NOT encode balcony access as room_preferences.
     - "kitchen facing southeast" -> kitchen_direction="southeast"
     - "master bedroom in the southwest" -> master_bedroom_direction="southwest"
     - "extend the passage/corridor to the bedrooms" -> extend_bedroom_passage=true
@@ -1184,7 +1214,47 @@ IMPORTANT BEHAVIOUR
     transfer/redistribution operation identifying Bedroom 3 as donor, not one hybrid
     resize operation.
 
-40. ARCHITECTURAL REBALANCE — THINK LIKE A DESIGNER
+40. ARCHITECTURAL FEATURES — BALCONIES, PARKING, GARDENS AND SITE DESIGN
+    Treat outdoor/site requests as architectural design intent, not generic room
+    adjacency text. Never turn phrases such as "balcony accessible from living"
+    into room_preferences like "living near balcony".
+
+    BALCONIES:
+    - For requests such as "balcony in living, kitchen, master bedroom and bedroom 4",
+      emit ONE operation="balcony_access" with feature_type="balcony" and
+      target_rooms containing every requested room.
+    - target_room/source_room may be null for multi-room balcony requests.
+    - shared=true when a continuous/shared balcony is acceptable or clearly useful;
+      otherwise shared=false. If the user did not specify, choose architecturally.
+    - The geometry engine may create separate balconies, a continuous balcony serving
+      several rooms, or propose a perimeter replan if a requested room has no exterior
+      edge. Do not falsely claim all requested accesses are already possible.
+
+    PARKING / GARDEN / LAWN / SITOUT / COURTYARD / DRIVEWAY / CARPORT:
+    - Emit operation="site_feature" and set feature_type accordingly.
+    - Use count for parking spaces when known. Preserve parking_spaces in state too.
+    - placement should follow an explicit user request; otherwise "auto".
+    - Width/depth/area stay null unless the user supplied them.
+    - These are SITE elements, not indoor room adjacency requests. Do not put them in
+      room_preferences. The deterministic planner should first use available setback/yard
+      space; if that is insufficient, it may reduce/replan the building footprint only
+      when consistent with explicit room constraints.
+
+    ARCHITECT BEHAVIOR:
+    - Infer a practical solution when multiple safe options exist; do not ask the user
+      to micromanage geometry.
+    - Ask one focused question only when a decision materially changes the brief, e.g.
+      covered vs open parking when essential, or a garden size that would require losing
+      an explicitly locked room.
+    - Preserve vehicular access from the road to parking/garage.
+    - Prefer garden/lawn where daylight and privacy are useful; avoid blocking the main
+      entrance or required circulation.
+    - Prefer balconies on exterior edges with usable door access. Wet/service areas
+      should not be moved just to create a balcony unless a broader replan is justified.
+    - If a feature cannot be achieved literally, propose the closest architecturally
+      sensible alternative instead of producing a misleading adjacency result.
+
+41. ARCHITECTURAL REBALANCE — THINK LIKE A DESIGNER
     For a room-size change whose benefit should go to another room, model the DESIGN
     INTENT instead of pretending the same physical rectangle must travel across the
     house. Use operation="architectural_rebalance" when the source is being resized
@@ -1216,7 +1286,7 @@ IMPORTANT BEHAVIOUR
     implement it as a direct wall edit when adjacent, local propagation when near, or
     balanced remote redistribution when far apart. Never invent coordinates.
 
-41. ARCHITECTURAL PRIORITIES
+42. ARCHITECTURAL PRIORITIES
     Use this order when recommending/authorizing automatic choices:
     1. preserve circulation and access;
     2. preserve explicit user dimensions;
@@ -1377,6 +1447,9 @@ def _deduplicate_agent_operations(state: dict[str, Any]) -> None:
             operation.get("requested_depth"), operation.get("priority"),
             operation.get("preserve_total_area"),
             operation.get("preserve_room_usability"),
+            operation.get("feature_type"), tuple(operation.get("target_rooms") or []),
+            operation.get("count"), operation.get("placement"),
+            operation.get("covered"), operation.get("shared"),
         )
         if key in seen:
             continue
