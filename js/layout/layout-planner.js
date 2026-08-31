@@ -444,7 +444,7 @@ function postProcessLayout(layout, requirements) {
 
   const positionalOperations = Array.isArray(layoutOperations)
     ? layoutOperations.filter(operation =>
-        ["swap", "adjacent", "near", "position"].includes(operation.operation)
+        ["swap", "adjacent", "near", "position", "improve_relationship"].includes(operation.operation)
       )
     : [];
 
@@ -484,7 +484,14 @@ function postProcessLayout(layout, requirements) {
   let operationReport = [];
   const beforeAdjacency = rooms.map(room => ({ ...room }));
   if (positionalOperations.length) {
-    operationReport = applyLayoutOperations(rooms, layout.circulation, positionalOperations, buildable);
+    const relationshipOperations = positionalOperations.filter(operation => operation.operation === "improve_relationship");
+    const ordinaryPositionalOperations = positionalOperations.filter(operation => operation.operation !== "improve_relationship");
+    operationReport = ordinaryPositionalOperations.length
+      ? applyLayoutOperations(rooms, layout.circulation, ordinaryPositionalOperations, buildable)
+      : [];
+    if (relationshipOperations.length) {
+      operationReport.push(...applyRelationshipOperations(rooms, layout, relationshipOperations));
+    }
     repairAttachedBathroomsAfterOperations(rooms, layout, operationReport);
     const operationChangedGeometry = rooms.some((room, index) =>
       room.x !== beforeAdjacency[index]?.x ||
@@ -647,12 +654,39 @@ function postProcessLayout(layout, requirements) {
     });
   }
 
-  const featureReport = applyArchitecturalFeatureOperations(
+  const beforeFeatures = rooms.map(room => ({ ...room }));
+  const beforeFeatureCirculation = (layout.circulation || []).map(item => ({ ...item }));
+  const beforeSiteFeatures = Array.isArray(layout.siteFeatures)
+    ? layout.siteFeatures.map(item => ({ ...item }))
+    : [];
+
+  let featureReport = applyArchitecturalFeatureOperations(
     rooms,
     layout,
     featureOperations,
     requirements
   );
+
+  // Architectural features are a transaction. A balcony/courtyard/site change is
+  // only retained when the complete indoor plan still has valid circulation and
+  // geometry after a repair attempt. Never announce a feature as applied while it
+  // strands a toilet/bedroom or violates another hard room constraint.
+  if (featureOperations.length) {
+    repairCommonToiletAccess(rooms, layout);
+    const featureCandidateValid = hasValidCandidateRooms(layout, rooms);
+    if (!featureCandidateValid) {
+      restoreRoomSnapshots(rooms, beforeFeatures);
+      layout.circulation.splice(0, layout.circulation.length, ...beforeFeatureCirculation);
+      layout.siteFeatures = beforeSiteFeatures.map(item => ({ ...item }));
+      featureReport = featureReport.map(result => ({
+        ...result,
+        status: "rejected",
+        created_features: [],
+        applied_rooms: [],
+        reason: "The feature was rolled back because the complete plan could not preserve valid room access and geometry. The previous valid concept remains unchanged."
+      }));
+    }
+  }
 
   const originalRooms = rooms.map(room => ({ ...room }));
   const growable = rooms.filter(room => room.type !== "corridor" && !room.outsideBuildable && !room.isSiteFeature);
@@ -770,8 +804,45 @@ function postProcessLayout(layout, requirements) {
     }
   });
 
+  const hardConstraintFailures = constraintReport.filter(result => result.status === "not-feasible");
+  const hardFeatureFailures = featureReport.filter(result => result.status === "rejected");
+  const finalCandidateValid = hasValidCandidateRooms(layout, rooms);
+
+  if (!finalCandidateValid || hardConstraintFailures.length || hardFeatureFailures.length) {
+    const failedRooms = hardConstraintFailures.map(result => ({
+      id: result.roomId || null,
+      name: result.room || result.roomId || "Constraint",
+      reason: "Explicit room constraint was not satisfied."
+    }));
+    const featureFailures = hardFeatureFailures.map(result => ({
+      id: result.feature_type || result.operation || null,
+      name: siteFeatureName(result.feature_type || result.operation || "feature", 1),
+      reason: result.reason || "Requested architectural feature was not satisfied."
+    }));
+    return withAccessibilityCheck({
+      ...layout,
+      success: false,
+      rooms: beforeFeatures,
+      siteFeatures: beforeSiteFeatures,
+      adjacencyReport,
+      operationReport,
+      constraintReport,
+      balconyReport,
+      featureReport,
+      circulationRepairReport,
+      failedRooms: [...failedRooms, ...featureFailures],
+      feasibility: {
+        ...(layout.feasibility || {}),
+        status: "infeasible",
+        reason: "The candidate violated one or more explicit design constraints. The previous valid concept should be kept."
+      },
+      transaction: { committed: false, rollback_required: true }
+    });
+  }
+
   return withAccessibilityCheck({
     ...layout,
+    transaction: { committed: true, rollback_required: false },
     rooms,
     adjacencyReport,
     operationReport,
@@ -791,6 +862,68 @@ function postProcessLayout(layout, requirements) {
       buildableUtilizationPercent: utilizationPercent
     }
   });
+}
+
+
+function applyRelationshipOperations(rooms, layout, operations) {
+  const reports = [];
+  for (const operation of operations || []) {
+    const source = resolveCanonicalRoom(rooms, layout.circulation || [], operation.source_room);
+    const target = resolveCanonicalRoom(rooms, layout.circulation || [], operation.target_room);
+    const report = {
+      operation: "improve_relationship",
+      source_room: operation.source_room || null,
+      target_room: operation.target_room || null,
+      status: "rejected",
+      reason: null
+    };
+    if (!source || !target) {
+      report.reason = "Both rooms are required for a relationship improvement.";
+      reports.push(report);
+      continue;
+    }
+
+    const sharedVertical = Math.min(source.y + source.height, target.y + target.height) - Math.max(source.y, target.y);
+    const sharedHorizontal = Math.min(source.x + source.width, target.x + target.width) - Math.max(source.x, target.x);
+    const touchX = Math.abs(source.x + source.width - target.x) < 0.08 || Math.abs(target.x + target.width - source.x) < 0.08;
+    const touchY = Math.abs(source.y + source.height - target.y) < 0.08 || Math.abs(target.y + target.height - source.y) < 0.08;
+    const sharedEdge = Math.max(touchX ? sharedVertical : 0, touchY ? sharedHorizontal : 0, 0);
+    const unit = String(layout.unit || "ft").toLowerCase();
+    const usefulOpening = unit === "m" ? 1.2 : 4;
+
+    if (sharedEdge >= usefulOpening) {
+      source.relationships = { ...(source.relationships || {}), [target.id]: { direct: true, sharedEdge: round(sharedEdge), improved: true } };
+      target.relationships = { ...(target.relationships || {}), [source.id]: { direct: true, sharedEdge: round(sharedEdge), improved: true } };
+      reports.push({
+        ...report,
+        status: "applied",
+        shared_edge: round(sharedEdge),
+        reason: `${source.name} and ${target.name} already share a useful direct boundary (${round(sharedEdge)} ${layout.unit || "ft"}); the planner marks this as a direct service/circulation relationship without disturbing protected bedrooms.`
+      });
+      continue;
+    }
+
+    const snapshot = rooms.map(room => ({ ...room }));
+    const proximityReport = applyLayoutOperations(rooms, layout.circulation || [], [{
+      ...operation,
+      operation: "near"
+    }], layout.buildableArea)[0];
+    if (proximityReport && ["applied", "approximated"].includes(proximityReport.status) && hasValidCandidateRooms(layout, rooms)) {
+      reports.push({
+        ...report,
+        status: "approximated",
+        reason: `${source.name} and ${target.name} were brought into a closer practical relationship while preserving overall validity.`
+      });
+    } else {
+      restoreRoomSnapshots(rooms, snapshot);
+      reports.push({
+        ...report,
+        status: "rejected",
+        reason: `A stronger direct relationship between ${source.name} and ${target.name} requires a larger local replan; protected room geometry was left unchanged.`
+      });
+    }
+  }
+  return reports;
 }
 
 function applyAreaOperations(rooms, layout, operations, requirements = null) {
@@ -4922,26 +5055,20 @@ function applyRoomSizeConstraints(rooms, layout) {
       "applied" means the actual generated geometry really
       satisfies the user's dimensional/area request.
     */
+    const orientationLocked = Boolean(constraint?.orientationLocked || constraint?.orientation_locked);
+    const orderedDimensionsMatch =
+      (!requestedWidth || Math.abs(room.width - requestedWidth) < 0.1) &&
+      (!requestedHeight || Math.abs(room.height - requestedHeight) < 0.1);
+    const rotatedDimensionsMatch =
+      !orientationLocked &&
+      requestedWidth &&
+      requestedHeight &&
+      Math.abs(room.width - requestedHeight) < 0.1 &&
+      Math.abs(room.height - requestedWidth) < 0.1;
+
     const exact =
       applied &&
-
-      (
-        !requestedWidth ||
-        Math.abs(
-          room.width -
-          requestedWidth
-        ) <
-          0.1
-      ) &&
-
-      (
-        !requestedHeight ||
-        Math.abs(
-          room.height -
-          requestedHeight
-        ) <
-          0.1
-      ) &&
+      (orderedDimensionsMatch || rotatedDimensionsMatch) &&
 
       (
         !requestedArea ||
@@ -5000,7 +5127,8 @@ function applyRoomSizeConstraints(rooms, layout) {
         areaDelta:
           hasAreaDelta
             ? numericAreaDelta
-            : null
+            : null,
+        orientationLocked
       },
 
       before:
