@@ -5102,6 +5102,35 @@ function applyRoomSizeConstraints(rooms, layout) {
           )
         : null;
 
+    /*
+      A previous structured operation (especially architectural_rebalance) may
+      already have produced the requested exact dimensions. Treat A x B and
+      B x A as equivalent unless orientation was explicitly locked.
+
+      This check MUST happen before shiftWidth()/shiftHeight(). Otherwise a
+      valid 11 x 10 result for a 10 x 11 request is unnecessarily edited again
+      and can fail even though the architectural request is already satisfied.
+    */
+    const orientationLocked = Boolean(
+      constraint?.orientationLocked ||
+      constraint?.orientation_locked
+    );
+
+    const orderedDimensionsAlreadyMatch =
+      (!requestedWidth || Math.abs(room.width - requestedWidth) < 0.1) &&
+      (!requestedHeight || Math.abs(room.height - requestedHeight) < 0.1);
+
+    const rotatedDimensionsAlreadyMatch =
+      !orientationLocked &&
+      requestedWidth &&
+      requestedHeight &&
+      Math.abs(room.width - requestedHeight) < 0.1 &&
+      Math.abs(room.height - requestedWidth) < 0.1;
+
+    const exactDimensionsAlreadySatisfied =
+      Boolean(requestedWidth || requestedHeight) &&
+      (orderedDimensionsAlreadyMatch || rotatedDimensionsAlreadyMatch);
+
     let applied = true;
 
 
@@ -5111,7 +5140,8 @@ function applyRoomSizeConstraints(rooms, layout) {
       -------------------------------------------------------
     */
     if (
-      requestedWidth
+      requestedWidth &&
+      !exactDimensionsAlreadySatisfied
     ) {
       applied =
         shiftWidth(
@@ -5128,7 +5158,8 @@ function applyRoomSizeConstraints(rooms, layout) {
 
     if (
       applied &&
-      requestedHeight
+      requestedHeight &&
+      !exactDimensionsAlreadySatisfied
     ) {
       applied =
         shiftHeight(
@@ -5236,7 +5267,6 @@ function applyRoomSizeConstraints(rooms, layout) {
       "applied" means the actual generated geometry really
       satisfies the user's dimensional/area request.
     */
-    const orientationLocked = Boolean(constraint?.orientationLocked || constraint?.orientation_locked);
     const orderedDimensionsMatch =
       (!requestedWidth || Math.abs(room.width - requestedWidth) < 0.1) &&
       (!requestedHeight || Math.abs(room.height - requestedHeight) < 0.1);
