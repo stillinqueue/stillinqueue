@@ -190,12 +190,39 @@ function postProcessLayout(layout, requirements) {
   // into the "original" snapshot the growth pass falls back to on failure.
   const roomPreferences = requirements?.preferences?.roomAdjacency;
   const layoutOperations = requirements?.preferences?.layoutOperations;
+
   const positionalOperations = Array.isArray(layoutOperations)
-    ? layoutOperations.filter(operation => ["swap", "adjacent", "near", "position"].includes(operation.operation))
+    ? layoutOperations.filter(operation =>
+        ["swap", "adjacent", "near", "position"].includes(operation.operation)
+      )
     : [];
+
+  /*
+    IMPORTANT:
+    resize is intentionally NOT an area operation.
+
+    Pure room resizing is handled later by applyRoomSizeConstraints(),
+    which understands exact width/depth and signed areaDelta values.
+
+    transfer_area / redistribute_area remain responsible for moving
+    usable area between different rooms.
+  */
   const areaOperations = Array.isArray(layoutOperations)
-    ? layoutOperations.filter(operation => ["resize", "transfer_area", "redistribute_area", "optimize_layout"].includes(operation.operation))
+    ? layoutOperations.filter(operation =>
+        ["transfer_area", "redistribute_area", "optimize_layout"].includes(operation.operation)
+      )
     : [];
+
+  /*
+    If OpenAI supplied a structured operation, that structured intent is
+    authoritative. In particular, a resize operation should not fall back
+    into the old free-form adjacency parser merely because it is no longer
+    present in areaOperations.
+  */
+  const hasStructuredOperations =
+    Array.isArray(layoutOperations) &&
+    layoutOperations.length > 0;
+
   let adjacencyReport = [];
   let operationReport = [];
   const beforeAdjacency = rooms.map(room => ({ ...room }));
@@ -216,7 +243,7 @@ function postProcessLayout(layout, requirements) {
           : result
       );
     }
-  } else if (!areaOperations.length && Array.isArray(roomPreferences) && roomPreferences.length) {
+    } else if (!hasStructuredOperations && Array.isArray(roomPreferences) && roomPreferences.length) {
     adjacencyReport = applyAdjacencyPairs(rooms, layout.circulation, roomPreferences);
     if (!hasValidCandidateRooms(layout, rooms)) {
       rooms.splice(0, rooms.length, ...beforeAdjacency);
@@ -1109,145 +1136,1015 @@ function ensureExteriorBalcony(rooms, buildable, requirements) {
 function applyRoomSizeConstraints(rooms, layout) {
   const reports = [];
   const EPSILON = 0.05;
-  const initialAccess = buildAccessibilityReport({ ...layout, rooms });
-  const accessByRoom = new Map(initialAccess.connections.map(item => [item.roomId, item.boundary]));
-  const minimum = (room, dimension) => Number(
-    dimension === "width" ? room.minWidth || 3 : room.minHeight || 3
-  );
 
-  const coversRange = (items, start, end, axis) => {
-    const intervals = items
-      .map(item => axis === "y" ? [item.y, item.y + item.height] : [item.x, item.x + item.width])
-      .sort((a, b) => a[0] - b[0]);
-    let cursor = start;
-    for (const [from, to] of intervals) {
-      if (from > cursor + EPSILON) return false;
-      cursor = Math.max(cursor, to);
-      if (cursor >= end - EPSILON) return true;
-    }
-    return cursor >= end - EPSILON;
-  };
-
-  const shiftWidth = (room, targetWidth) => {
-    const delta = targetWidth - room.width;
-    if (Math.abs(delta) < EPSILON) return true;
-    if (delta < 0) {
-      const accessWall = accessByRoom.get(room.id)?.wall;
-      const touchesExteriorLeft = room.requiresExteriorWall &&
-        Math.abs(room.x - layout.buildableArea.x) < EPSILON;
-      const touchesExteriorRight = room.requiresExteriorWall &&
-        Math.abs(room.x + room.width - layout.buildableArea.x - layout.buildableArea.width) < EPSILON;
-      if (touchesExteriorRight || accessWall === "east" && !touchesExteriorLeft) {
-        room.x += room.width - targetWidth;
-      }
-      room.width = targetWidth;
-      return true;
-    }
-    const right = rooms.filter(other => other !== room &&
-      Math.abs(other.x - (room.x + room.width)) < EPSILON &&
-      rangesOverlap(room.y, room.y + room.height, other.y, other.y + other.height));
-    if (right.length && coversRange(right, room.y, room.y + room.height, "y") &&
-      right.every(other => other.width - delta >= minimum(other, "width"))) {
-      room.width = targetWidth;
-      right.forEach(other => { other.x += delta; other.width -= delta; });
-      return true;
-    }
-    const left = rooms.filter(other => other !== room &&
-      Math.abs(other.x + other.width - room.x) < EPSILON &&
-      rangesOverlap(room.y, room.y + room.height, other.y, other.y + other.height));
-    if (left.length && coversRange(left, room.y, room.y + room.height, "y") &&
-      left.every(other => other.width - delta >= minimum(other, "width"))) {
-      room.x -= delta;
-      room.width = targetWidth;
-      left.forEach(other => { other.width -= delta; });
-      return true;
-    }
-    return false;
-  };
-
-  const shiftHeight = (room, targetHeight) => {
-    const delta = targetHeight - room.height;
-    if (Math.abs(delta) < EPSILON) return true;
-    if (delta < 0) {
-      const accessWall = accessByRoom.get(room.id)?.wall;
-      const touchesExteriorTop = room.requiresExteriorWall &&
-        Math.abs(room.y - layout.buildableArea.y) < EPSILON;
-      const touchesExteriorBottom = room.requiresExteriorWall &&
-        Math.abs(room.y + room.height - layout.buildableArea.y - layout.buildableArea.height) < EPSILON;
-      if (touchesExteriorBottom || accessWall === "south" && !touchesExteriorTop) {
-        room.y += room.height - targetHeight;
-      }
-      room.height = targetHeight;
-      return true;
-    }
-    const below = rooms.filter(other => other !== room &&
-      Math.abs(other.y - (room.y + room.height)) < EPSILON &&
-      rangesOverlap(room.x, room.x + room.width, other.x, other.x + other.width));
-    if (below.length && coversRange(below, room.x, room.x + room.width, "x") &&
-      below.every(other => other.height - delta >= minimum(other, "height"))) {
-      room.height = targetHeight;
-      below.forEach(other => { other.y += delta; other.height -= delta; });
-      return true;
-    }
-    const above = rooms.filter(other => other !== room &&
-      Math.abs(other.y + other.height - room.y) < EPSILON &&
-      rangesOverlap(room.x, room.x + room.width, other.x, other.x + other.width));
-    if (above.length && coversRange(above, room.x, room.x + room.width, "x") &&
-      above.every(other => other.height - delta >= minimum(other, "height"))) {
-      room.y -= delta;
-      room.height = targetHeight;
-      above.forEach(other => { other.height -= delta; });
-      return true;
-    }
-    return false;
-  };
-
-  for (const room of rooms.filter(item => item.requestedConstraint || item.requestedSizeScale)) {
-    const snapshot = rooms.map(item => ({ ...item }));
-    const constraint = room.requestedConstraint || {};
-    const requestedArea = Number(constraint.area) > 0
-      ? Number(constraint.area)
-      : Number(constraint.areaDelta)
-        ? room.width * room.height + Number(constraint.areaDelta)
-      : room.requestedSizeScale
-        ? room.width * room.height * Number(room.requestedSizeScale)
-        : null;
-    const requestedWidth = Number(constraint.width) > 0 ? Number(constraint.width) : null;
-    const requestedHeight = Number(constraint.depth) > 0 ? Number(constraint.depth) : null;
-    let applied = true;
-
-    if (requestedWidth) applied = shiftWidth(room, Math.max(minimum(room, "width"), requestedWidth));
-    if (applied && requestedHeight) applied = shiftHeight(room, Math.max(minimum(room, "height"), requestedHeight));
-    if (applied && requestedArea && !requestedWidth && !requestedHeight) {
-      const widthTarget = requestedArea / room.height;
-      applied = shiftWidth(room, Math.max(minimum(room, "width"), widthTarget));
-      if (!applied) {
-        rooms.forEach((item, index) => Object.assign(item, snapshot[index]));
-        const heightTarget = requestedArea / room.width;
-        applied = shiftHeight(room, Math.max(minimum(room, "height"), heightTarget));
-      }
-    }
-
-    if (!applied) rooms.forEach((item, index) => Object.assign(item, snapshot[index]));
-    rooms.forEach(item => {
-      item.x = round(item.x);
-      item.y = round(item.y);
-      item.width = round(item.width);
-      item.height = round(item.height);
-      item.area = round(item.width * item.height);
+  const initialAccess =
+    buildAccessibilityReport({
+      ...layout,
+      rooms
     });
 
-    const actualArea = round(room.width * room.height);
-    const exact = applied &&
-      (!requestedWidth || Math.abs(room.width - requestedWidth) < 0.1) &&
-      (!requestedHeight || Math.abs(room.height - requestedHeight) < 0.1) &&
-      (!requestedArea || Math.abs(actualArea - requestedArea) <= Math.max(2, requestedArea * 0.02));
+  const accessByRoom =
+    new Map(
+      initialAccess.connections.map(
+        item => [
+          item.roomId,
+          item.boundary
+        ]
+      )
+    );
+
+  const minimum = (
+    room,
+    dimension
+  ) =>
+    Number(
+      dimension === "width"
+        ? room.minWidth || 3
+        : room.minHeight || 3
+    );
+
+  const coversRange = (
+    items,
+    start,
+    end,
+    axis
+  ) => {
+    const intervals =
+      items
+        .map(item =>
+          axis === "y"
+            ? [
+                item.y,
+                item.y + item.height
+              ]
+            : [
+                item.x,
+                item.x + item.width
+              ]
+        )
+        .sort(
+          (a, b) =>
+            a[0] - b[0]
+        );
+
+    let cursor = start;
+
+    for (
+      const [from, to]
+      of intervals
+    ) {
+      if (
+        from >
+        cursor + EPSILON
+      ) {
+        return false;
+      }
+
+      cursor =
+        Math.max(
+          cursor,
+          to
+        );
+
+      if (
+        cursor >=
+        end - EPSILON
+      ) {
+        return true;
+      }
+    }
+
+    return (
+      cursor >=
+      end - EPSILON
+    );
+  };
+
+
+  /*
+    ---------------------------------------------------------
+    WIDTH CHANGE
+    ---------------------------------------------------------
+
+    Shrinking:
+      simply releases room width while keeping the chosen
+      exterior/access edge stable where practical.
+
+    Growing:
+      borrows width from rooms sharing the complete boundary,
+      but never pushes those rooms below their practical minimum.
+  */
+  const shiftWidth = (
+    room,
+    targetWidth
+  ) => {
+    const delta =
+      targetWidth -
+      room.width;
+
+    if (
+      Math.abs(delta) <
+      EPSILON
+    ) {
+      return true;
+    }
+
+
+    /*
+      SHRINK
+    */
+    if (
+      delta < 0
+    ) {
+      const accessWall =
+        accessByRoom.get(
+          room.id
+        )?.wall;
+
+      const touchesExteriorLeft =
+        room.requiresExteriorWall &&
+        Math.abs(
+          room.x -
+          layout.buildableArea.x
+        ) <
+          EPSILON;
+
+      const touchesExteriorRight =
+        room.requiresExteriorWall &&
+        Math.abs(
+          room.x +
+          room.width -
+          layout.buildableArea.x -
+          layout.buildableArea.width
+        ) <
+          EPSILON;
+
+      /*
+        Preserve the exterior/access side where practical.
+      */
+      if (
+        touchesExteriorRight ||
+        (
+          accessWall === "east" &&
+          !touchesExteriorLeft
+        )
+      ) {
+        room.x +=
+          room.width -
+          targetWidth;
+      }
+
+      room.width =
+        targetWidth;
+
+      return true;
+    }
+
+
+    /*
+      GROW RIGHT
+    */
+    const right =
+      rooms.filter(
+        other =>
+          other !== room &&
+          Math.abs(
+            other.x -
+            (
+              room.x +
+              room.width
+            )
+          ) <
+            EPSILON &&
+          rangesOverlap(
+            room.y,
+            room.y +
+              room.height,
+            other.y,
+            other.y +
+              other.height
+          )
+      );
+
+    if (
+      right.length &&
+      coversRange(
+        right,
+        room.y,
+        room.y +
+          room.height,
+        "y"
+      ) &&
+      right.every(
+        other =>
+          other.width -
+            delta >=
+          minimum(
+            other,
+            "width"
+          )
+      )
+    ) {
+      room.width =
+        targetWidth;
+
+      right.forEach(
+        other => {
+          other.x +=
+            delta;
+
+          other.width -=
+            delta;
+        }
+      );
+
+      return true;
+    }
+
+
+    /*
+      GROW LEFT
+    */
+    const left =
+      rooms.filter(
+        other =>
+          other !== room &&
+          Math.abs(
+            other.x +
+            other.width -
+            room.x
+          ) <
+            EPSILON &&
+          rangesOverlap(
+            room.y,
+            room.y +
+              room.height,
+            other.y,
+            other.y +
+              other.height
+          )
+      );
+
+    if (
+      left.length &&
+      coversRange(
+        left,
+        room.y,
+        room.y +
+          room.height,
+        "y"
+      ) &&
+      left.every(
+        other =>
+          other.width -
+            delta >=
+          minimum(
+            other,
+            "width"
+          )
+      )
+    ) {
+      room.x -=
+        delta;
+
+      room.width =
+        targetWidth;
+
+      left.forEach(
+        other => {
+          other.width -=
+            delta;
+        }
+      );
+
+      return true;
+    }
+
+    return false;
+  };
+
+
+  /*
+    ---------------------------------------------------------
+    HEIGHT CHANGE
+    ---------------------------------------------------------
+  */
+  const shiftHeight = (
+    room,
+    targetHeight
+  ) => {
+    const delta =
+      targetHeight -
+      room.height;
+
+    if (
+      Math.abs(delta) <
+      EPSILON
+    ) {
+      return true;
+    }
+
+
+    /*
+      SHRINK
+    */
+    if (
+      delta < 0
+    ) {
+      const accessWall =
+        accessByRoom.get(
+          room.id
+        )?.wall;
+
+      const touchesExteriorTop =
+        room.requiresExteriorWall &&
+        Math.abs(
+          room.y -
+          layout.buildableArea.y
+        ) <
+          EPSILON;
+
+      const touchesExteriorBottom =
+        room.requiresExteriorWall &&
+        Math.abs(
+          room.y +
+          room.height -
+          layout.buildableArea.y -
+          layout.buildableArea.height
+        ) <
+          EPSILON;
+
+      if (
+        touchesExteriorBottom ||
+        (
+          accessWall === "south" &&
+          !touchesExteriorTop
+        )
+      ) {
+        room.y +=
+          room.height -
+          targetHeight;
+      }
+
+      room.height =
+        targetHeight;
+
+      return true;
+    }
+
+
+    /*
+      GROW DOWN
+    */
+    const below =
+      rooms.filter(
+        other =>
+          other !== room &&
+          Math.abs(
+            other.y -
+            (
+              room.y +
+              room.height
+            )
+          ) <
+            EPSILON &&
+          rangesOverlap(
+            room.x,
+            room.x +
+              room.width,
+            other.x,
+            other.x +
+              other.width
+          )
+      );
+
+    if (
+      below.length &&
+      coversRange(
+        below,
+        room.x,
+        room.x +
+          room.width,
+        "x"
+      ) &&
+      below.every(
+        other =>
+          other.height -
+            delta >=
+          minimum(
+            other,
+            "height"
+          )
+      )
+    ) {
+      room.height =
+        targetHeight;
+
+      below.forEach(
+        other => {
+          other.y +=
+            delta;
+
+          other.height -=
+            delta;
+        }
+      );
+
+      return true;
+    }
+
+
+    /*
+      GROW UP
+    */
+    const above =
+      rooms.filter(
+        other =>
+          other !== room &&
+          Math.abs(
+            other.y +
+            other.height -
+            room.y
+          ) <
+            EPSILON &&
+          rangesOverlap(
+            room.x,
+            room.x +
+              room.width,
+            other.x,
+            other.x +
+              other.width
+          )
+      );
+
+    if (
+      above.length &&
+      coversRange(
+        above,
+        room.x,
+        room.x +
+          room.width,
+        "x"
+      ) &&
+      above.every(
+        other =>
+          other.height -
+            delta >=
+          minimum(
+            other,
+            "height"
+          )
+      )
+    ) {
+      room.y -=
+        delta;
+
+      room.height =
+        targetHeight;
+
+      above.forEach(
+        other => {
+          other.height -=
+            delta;
+        }
+      );
+
+      return true;
+    }
+
+    return false;
+  };
+
+
+  /*
+    ---------------------------------------------------------
+    PROPORTIONAL AREA RESIZE
+    ---------------------------------------------------------
+
+    Example:
+
+      current:
+        18 × 10.8
+        = 194.4 sq ft
+
+      user:
+        reduce by 20 sq ft
+
+      target:
+        174.4 sq ft
+
+      scale:
+        sqrt(174.4 / 194.4)
+
+    Both dimensions change instead of changing only width.
+  */
+  const shiftProportionally = (
+    room,
+    targetArea
+  ) => {
+    const currentArea =
+      room.width *
+      room.height;
+
+    if (
+      !(targetArea > 0) ||
+      !(currentArea > 0)
+    ) {
+      return false;
+    }
+
+    const scale =
+      Math.sqrt(
+        targetArea /
+        currentArea
+      );
+
+    const targetWidth =
+      Math.max(
+        minimum(
+          room,
+          "width"
+        ),
+        room.width *
+          scale
+      );
+
+    const targetHeight =
+      Math.max(
+        minimum(
+          room,
+          "height"
+        ),
+        room.height *
+          scale
+      );
+
+
+    /*
+      Practical minimum dimensions may prevent us from
+      achieving the requested target.
+    */
+    if (
+      targetWidth *
+        targetHeight >
+      targetArea +
+        Math.max(
+          2,
+          targetArea *
+            0.02
+        )
+    ) {
+      return false;
+    }
+
+
+    /*
+      Shared-wall geometry can depend on which dimension
+      changes first.
+
+      Try width → height first.
+    */
+    const snapshot =
+      rooms.map(
+        item => ({
+          ...item
+        })
+      );
+
+    let applied =
+      shiftWidth(
+        room,
+        targetWidth
+      );
+
+    if (
+      applied
+    ) {
+      applied =
+        shiftHeight(
+          room,
+          targetHeight
+        );
+    }
+
+    if (
+      applied
+    ) {
+      return true;
+    }
+
+
+    /*
+      Roll back and try:
+      height → width.
+    */
+    rooms.forEach(
+      (
+        item,
+        index
+      ) =>
+        Object.assign(
+          item,
+          snapshot[index]
+        )
+    );
+
+    applied =
+      shiftHeight(
+        room,
+        targetHeight
+      );
+
+    if (
+      applied
+    ) {
+      applied =
+        shiftWidth(
+          room,
+          targetWidth
+        );
+    }
+
+    if (
+      applied
+    ) {
+      return true;
+    }
+
+
+    /*
+      Neither direction worked.
+      Restore original geometry.
+    */
+    rooms.forEach(
+      (
+        item,
+        index
+      ) =>
+        Object.assign(
+          item,
+          snapshot[index]
+        )
+    );
+
+    return false;
+  };
+
+
+  /*
+    ---------------------------------------------------------
+    APPLY EACH REQUESTED ROOM CONSTRAINT
+    ---------------------------------------------------------
+  */
+  for (
+    const room
+    of rooms.filter(
+      item =>
+        item.requestedConstraint ||
+        item.requestedSizeScale
+    )
+  ) {
+    const snapshot =
+      rooms.map(
+        item => ({
+          ...item
+        })
+      );
+
+    const beforeRoom =
+      snapshot.find(
+        item =>
+          item.id ===
+          room.id
+      );
+
+    const constraint =
+      room.requestedConstraint ||
+      {};
+
+    const currentArea =
+      room.width *
+      room.height;
+
+
+    /*
+      Signed area delta is important.
+
+      +20 = grow by 20
+      -20 = shrink by 20
+    */
+    const numericAreaDelta =
+      Number(
+        constraint.areaDelta
+      );
+
+    const hasAreaDelta =
+      Number.isFinite(
+        numericAreaDelta
+      ) &&
+      numericAreaDelta !==
+        0;
+
+
+    /*
+      AREA TARGET PRIORITY
+
+      1. explicit area
+      2. signed areaDelta
+      3. requestedSizeScale
+    */
+    const requestedArea =
+      Number(
+        constraint.area
+      ) > 0
+        ? Number(
+            constraint.area
+          )
+        : hasAreaDelta
+          ? currentArea +
+            numericAreaDelta
+          : room.requestedSizeScale
+            ? currentArea *
+              Number(
+                room.requestedSizeScale
+              )
+            : null;
+
+
+    /*
+      Exact dimensions remain separate.
+
+      14 × 14 is NOT merely 196 sq ft.
+    */
+    const requestedWidth =
+      Number(
+        constraint.width
+      ) > 0
+        ? Number(
+            constraint.width
+          )
+        : null;
+
+    const requestedHeight =
+      Number(
+        constraint.depth
+      ) > 0
+        ? Number(
+            constraint.depth
+          )
+        : null;
+
+    let applied = true;
+
+
+    /*
+      -------------------------------------------------------
+      EXACT DIMENSION MODE
+      -------------------------------------------------------
+    */
+    if (
+      requestedWidth
+    ) {
+      applied =
+        shiftWidth(
+          room,
+          Math.max(
+            minimum(
+              room,
+              "width"
+            ),
+            requestedWidth
+          )
+        );
+    }
+
+    if (
+      applied &&
+      requestedHeight
+    ) {
+      applied =
+        shiftHeight(
+          room,
+          Math.max(
+            minimum(
+              room,
+              "height"
+            ),
+            requestedHeight
+          )
+        );
+    }
+
+
+    /*
+      -------------------------------------------------------
+      AREA-ONLY MODE
+      -------------------------------------------------------
+
+      This includes:
+
+        reduce by 20 sq ft
+        increase by 30 sq ft
+        make it 10% smaller
+        make it slightly larger
+
+      when no explicit width/depth was supplied.
+    */
+    if (
+      applied &&
+      requestedArea &&
+      !requestedWidth &&
+      !requestedHeight
+    ) {
+      applied =
+        shiftProportionally(
+          room,
+          requestedArea
+        );
+    }
+
+
+    /*
+      Any failure rolls the complete local resize back.
+    */
+    if (
+      !applied
+    ) {
+      rooms.forEach(
+        (
+          item,
+          index
+        ) =>
+          Object.assign(
+            item,
+            snapshot[index]
+          )
+      );
+    }
+
+
+    /*
+      Normalize geometry.
+    */
+    rooms.forEach(
+      item => {
+        item.x =
+          round(
+            item.x
+          );
+
+        item.y =
+          round(
+            item.y
+          );
+
+        item.width =
+          round(
+            item.width
+          );
+
+        item.height =
+          round(
+            item.height
+          );
+
+        item.area =
+          round(
+            item.width *
+            item.height
+          );
+      }
+    );
+
+
+    const actualArea =
+      round(
+        room.width *
+        room.height
+      );
+
+
+    /*
+      "applied" means the actual generated geometry really
+      satisfies the user's dimensional/area request.
+    */
+    const exact =
+      applied &&
+
+      (
+        !requestedWidth ||
+        Math.abs(
+          room.width -
+          requestedWidth
+        ) <
+          0.1
+      ) &&
+
+      (
+        !requestedHeight ||
+        Math.abs(
+          room.height -
+          requestedHeight
+        ) <
+          0.1
+      ) &&
+
+      (
+        !requestedArea ||
+        Math.abs(
+          actualArea -
+          requestedArea
+        ) <=
+          Math.max(
+            2,
+            requestedArea *
+              0.02
+          )
+      );
+
+
+    const beforeArea =
+      beforeRoom
+        ? round(
+            beforeRoom.width *
+            beforeRoom.height
+          )
+        : null;
+
+
+    /*
+      Report from the actual final room geometry,
+      not from an intermediate transfer calculation.
+    */
     reports.push({
-      roomId: room.id,
-      room: room.name,
-      status: !applied ? "not-feasible" : exact ? "applied" : "approximated",
-      requested: { width: requestedWidth, depth: requestedHeight, area: requestedArea },
-      actual: { width: room.width, depth: room.height, area: actualArea }
+      roomId:
+        room.id,
+
+      room:
+        room.name,
+
+      operation:
+        "resize",
+
+      status:
+        !applied
+          ? "not-feasible"
+          : exact
+            ? "applied"
+            : "approximated",
+
+      requested: {
+        width:
+          requestedWidth,
+
+        depth:
+          requestedHeight,
+
+        area:
+          requestedArea,
+
+        areaDelta:
+          hasAreaDelta
+            ? numericAreaDelta
+            : null
+      },
+
+      before:
+        beforeRoom
+          ? {
+              width:
+                round(
+                  beforeRoom.width
+                ),
+
+              depth:
+                round(
+                  beforeRoom.height
+                ),
+
+              area:
+                beforeArea
+            }
+          : null,
+
+      actual: {
+        width:
+          room.width,
+
+        depth:
+          room.height,
+
+        area:
+          actualArea
+      },
+
+      actualAreaDelta:
+        beforeArea == null
+          ? null
+          : round(
+              actualArea -
+              beforeArea
+            )
     });
   }
 
