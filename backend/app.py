@@ -1,4 +1,4 @@
-
+import base64
 import io
 import json
 import os
@@ -485,7 +485,7 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                                 "type": "string",
                                 "enum": [
                                     "swap", "adjacent", "near", "position", "resize",
-                                    "transfer_area", "redistribute_area", "optimize_layout",
+                                    "transfer_area", "redistribute_area", "architectural_rebalance", "optimize_layout",
                                 ],
                             },
                             "source_room": {
@@ -529,6 +529,31 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                             "amount_percent": {"type": ["number", "null"]},
                             "requested_width": {"type": ["number", "null"]},
                             "requested_depth": {"type": ["number", "null"]},
+                            "strategy": {
+                                "type": ["string", "null"],
+                                "enum": ["direct_wall_transfer", "local_propagation", "balanced_remote_redistribution", "auto_architectural", None],
+                            },
+                            "preferred_local_receiver": {
+                                "type": ["string", "null"],
+                                "enum": [
+                                    "living", "familyLounge", "dining", "kitchen", "utility",
+                                    "masterBedroom", "bedroom2", "bedroom3", "bedroom4",
+                                    "commonBathroom", "masterBathroom", "bathroom2", "bathroom3",
+                                    "bathroom4", "foyer", "passage", "balcony", "parking",
+                                    "study", "storage", "sitout", None,
+                                ],
+                            },
+                            "preferred_target_donor": {
+                                "type": ["string", "null"],
+                                "enum": [
+                                    "living", "familyLounge", "dining", "kitchen", "utility",
+                                    "masterBedroom", "bedroom2", "bedroom3", "bedroom4",
+                                    "commonBathroom", "masterBathroom", "bathroom2", "bathroom3",
+                                    "bathroom4", "foyer", "passage", "balcony", "parking",
+                                    "study", "storage", "sitout", None,
+                                ],
+                            },
+                            "allow_auto_fallback": {"type": "boolean"},
                             "priority": {
                                 "type": "string",
                                 "enum": ["low", "normal", "high"],
@@ -540,7 +565,9 @@ REAL_ESTATE_CHAT_SCHEMA: dict[str, Any] = {
                         "required": [
                             "operation", "source_room", "target_room", "donor_room", "side",
                             "width", "depth", "area", "amount_sqft", "amount_percent",
-                            "requested_width", "requested_depth", "priority",
+                            "requested_width", "requested_depth", "strategy",
+                            "preferred_local_receiver", "preferred_target_donor",
+                            "allow_auto_fallback", "priority",
                             "preserve_total_area", "preserve_room_usability", "reason",
                         ],
                         "additionalProperties": False,
@@ -1157,7 +1184,51 @@ IMPORTANT BEHAVIOUR
     transfer/redistribution operation identifying Bedroom 3 as donor, not one hybrid
     resize operation.
 
-40. OVERALL COLLABORATIVE FLOW
+40. ARCHITECTURAL REBALANCE — THINK LIKE A DESIGNER
+    For a room-size change whose benefit should go to another room, model the DESIGN
+    INTENT instead of pretending the same physical rectangle must travel across the
+    house. Use operation="architectural_rebalance" when the source is being resized
+    and the user names a beneficiary room, including when resolving a pending
+    released_area_allocation decision.
+
+    Architectural goal:
+    - satisfy the source room's explicit requested dimensions locally;
+    - absorb its released physical strip into the least disruptive nearby room(s);
+    - enlarge the beneficiary locally using equivalent area from a practical room
+      beside the beneficiary;
+    - preserve total floor area, circulation, access, practical minimums and wet-core
+      stability where possible;
+    - disturb as few rooms as practical.
+
+    For architectural_rebalance:
+    - source_room = resized room;
+    - target_room = beneficiary room;
+    - requested_width/requested_depth = explicit final dimensions when known;
+    - strategy="auto_architectural" unless the user explicitly chooses otherwise;
+    - preferred_local_receiver=null unless the user names a nearby source-side room;
+    - preferred_target_donor=null unless the user names a room beside the beneficiary;
+    - allow_auto_fallback=true when the assistant may choose practical rooms;
+    - preserve_total_area=true and preserve_room_usability=true.
+
+    When the user answers a pending released-area question with a beneficiary such as
+    "Family Lounge", complete the pending room_constraint AND emit
+    architectural_rebalance, not a naive transfer_area. The deterministic planner may
+    implement it as a direct wall edit when adjacent, local propagation when near, or
+    balanced remote redistribution when far apart. Never invent coordinates.
+
+41. ARCHITECTURAL PRIORITIES
+    Use this order when recommending/authorizing automatic choices:
+    1. preserve circulation and access;
+    2. preserve explicit user dimensions;
+    3. keep bathrooms/plumbing cores stable when possible;
+    4. prefer flexible social-room boundaries over harming essential bedroom usability;
+    5. minimize the number of disturbed rooms;
+    6. prefer direct shared-wall edits;
+    7. use balanced remote redistribution for distant source/beneficiary rooms;
+    8. if exact geometry fails, preserve the user's main goal and propose the closest
+       viable alternative rather than silently substituting another goal.
+
+42. OVERALL COLLABORATIVE FLOW
     Follow this pattern: understand preference -> identify meaningful consequence -> ask
     one useful question if needed -> reach a shared decision -> emit complete structured
     intent -> let deterministic geometry validate it -> if geometry fails, explain why
@@ -1187,7 +1258,9 @@ def normalize_realestate_state(raw_state: Optional[dict[str, Any]]) -> dict[str,
             operation.get("side"), operation.get("width"), operation.get("depth"),
             operation.get("area"), operation.get("amount_sqft"),
             operation.get("amount_percent"), operation.get("requested_width"),
-            operation.get("requested_depth"), operation.get("priority"),
+            operation.get("requested_depth"), operation.get("strategy"),
+            operation.get("preferred_local_receiver"), operation.get("preferred_target_donor"),
+            operation.get("allow_auto_fallback"), operation.get("priority"),
             operation.get("preserve_total_area"), operation.get("preserve_room_usability"),
         )
         if key in operation_keys:
@@ -2053,3 +2126,29 @@ def _draw_brochure_page(c: pdf_canvas.Canvas, page_size: tuple[float, float], im
 @app.post("/api/realestate/brochure", response_model=BrochureResponse)
 def realestate_brochure(payload: BrochureRequest) -> BrochureResponse:
     engineer_image = _decode_brochure_image(payload.engineer_view_png, "engineer_view_png")
+    buyer_image = _decode_brochure_image(payload.buyer_view_png, "buyer_view_png")
+    brochure_image = _decode_brochure_image(payload.brochure_view_png, "brochure_view_png")
+
+    title = _clean_brochure_title(payload.title or "Still In Queue · Layout Brochure")
+    page_size = landscape(A4)
+
+    try:
+        buf = io.BytesIO()
+        c = pdf_canvas.Canvas(buf, pagesize=page_size)
+
+        _draw_brochure_page(c, page_size, engineer_image, f"{title} — Engineer Drawing")
+        c.showPage()
+
+        _draw_brochure_page(c, page_size, buyer_image, f"{title} — Buyer Plan")
+        c.showPage()
+
+        _draw_brochure_page(c, page_size, brochure_image, f"{title} — 3D View")
+        c.showPage()
+
+        c.save()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to build brochure PDF.") from exc
+
+    return BrochureResponse(pdf_base64=base64.b64encode(buf.getvalue()).decode("ascii"))
