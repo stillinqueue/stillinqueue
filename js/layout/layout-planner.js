@@ -28,22 +28,22 @@ import {
 
 
 /*
-  Still In Queue · Architectural Planner V16
+  Still In Queue · Architectural Planner V17
   -------------------------------------------
   Primary goal:
-  create a compact CONNECTED floor plan for a single-floor 3BHK.
+  design a usable CONNECTED floor plan inside the real site.
 
-  Key change from the previous version:
-  - NO full-height corridor
-  - compact central lobby/hall
-  - rooms share walls
-  - wet areas are grouped
-  - attached toilets sit beside bedrooms
-  - living/dining are connected at the front
-  - bedrooms form a private rear zone
+  V17 principles:
+  - circulation/access is validated before a layout is treated as successful
+  - a "rooms placed" result is NOT enough by itself
+  - compact fallbacks are allowed after accessibility/geometry failure too
+  - direct, unobstructed local access connectors may repair a packed layout
+  - user-explicit room choices remain protected
+  - room geometry is prepared for orthogonal/compound-shape evolution
+  - existing connected 3BHK / large-family strategies remain available
 
-  Other configurations safely fall back to the previous
-  multi-strategy planner.
+  This keeps the current rectangle engine compatible while moving the
+  planner toward architect-style connected planning instead of box packing.
 */
 
 
@@ -338,7 +338,7 @@ export function generateLayout(requirements) {
       large?.success
     ) {
       const processedLarge = postProcessLayout(large, effectiveRequirements);
-      if (processedLarge.success) return attachArchitecturalProgramOutcome(processedLarge, program, effectiveRequirements);
+      if (processedLarge.success) return attachOrthogonalShapeMetadata(attachArchitecturalProgramOutcome(processedLarge, program, effectiveRequirements));
       rememberInaccessible(processedLarge);
     }
   }
@@ -352,7 +352,7 @@ export function generateLayout(requirements) {
     compact?.success
   ) {
     const processedCompact = postProcessLayout(compact, effectiveRequirements);
-    if (processedCompact.success) return attachArchitecturalProgramOutcome(processedCompact, program, effectiveRequirements);
+    if (processedCompact.success) return attachOrthogonalShapeMetadata(attachArchitecturalProgramOutcome(processedCompact, program, effectiveRequirements));
     rememberInaccessible(processedCompact);
   }
 
@@ -362,9 +362,9 @@ export function generateLayout(requirements) {
     ),
     effectiveRequirements
   );
-  if (processedLegacy.success) return attachArchitecturalProgramOutcome(processedLegacy, program, effectiveRequirements);
+  if (processedLegacy.success) return attachOrthogonalShapeMetadata(attachArchitecturalProgramOutcome(processedLegacy, program, effectiveRequirements));
   rememberInaccessible(processedLegacy);
-  return attachArchitecturalProgramOutcome(bestInaccessibleLayout || processedLegacy, program, effectiveRequirements);
+  return attachOrthogonalShapeMetadata(attachArchitecturalProgramOutcome(bestInaccessibleLayout || processedLegacy, program, effectiveRequirements));
 }
 
 
@@ -7302,130 +7302,408 @@ function roundV16(
 }
 
 
-function legacyGenerateLayout(requirements) {
-  /*
-    First try the requested/default room program exactly as-is.
-  */
-  let result = generateLayoutAttempt(requirements);
+/*
+  =========================================================
+  V17 · INITIAL ACCESS / CONNECTIVITY REPAIR
+  =========================================================
 
-  if (result.success) {
-    return result;
+  The legacy packer can successfully place every room rectangle while
+  still producing a plan with one or more inaccessible rooms. Previously
+  legacyGenerateLayout() returned immediately in that situation, which
+  prevented all compact fallbacks from running.
+
+  This pass changes the meaning of "successful initial attempt":
+
+      rooms placed
+          +
+      valid geometry
+          +
+      connected access
+
+  When a room is inaccessible, the planner first tries a SMALL DIRECT
+  circulation connector to the existing circulation spine. The connector
+  is accepted only when its interior does not cut through another room.
+
+  These connectors are circulation overlays; they do not invent extra plot
+  area and they do not resize a protected room. They are intentionally
+  conservative. If a clean connector cannot be found, the candidate stays
+  invalid and the compact/replan fallbacks are allowed to run.
+*/
+
+function validateInitialLayoutCandidate(layout) {
+  if (!layout || !layout.success) return layout;
+
+  const checked = withAccessibilityCheck(layout);
+  if (checked.success) return checked;
+
+  const repaired = repairInitialCirculationAccess(layout);
+  if (repaired?.success) return repaired;
+
+  return repaired || checked;
+}
+
+
+function repairInitialCirculationAccess(layout) {
+  if (
+    !layout?.success ||
+    !Array.isArray(layout.rooms) ||
+    !Array.isArray(layout.circulation) ||
+    !layout.buildableArea
+  ) {
+    return layout;
   }
 
+  const candidate = {
+    ...layout,
+    rooms: layout.rooms.map(room => ({
+      ...room,
+      architecturalShape: room.architecturalShape || {
+        kind: "orthogonal",
+        parts: [{
+          x: room.x,
+          y: room.y,
+          width: room.width,
+          height: room.height
+        }]
+      }
+    })),
+    circulation: layout.circulation.map(item => ({ ...item }))
+  };
+
+  let report = buildAccessibilityReport(candidate);
+  if (report.valid) return withAccessibilityCheck(candidate);
+
+  const unit = String(candidate.unit || "ft").toLowerCase();
+  const passageWidth = unit === "m" ? 0.9 : 3.0;
+  const maxPasses = Math.min(8, candidate.rooms.length + 2);
+  let pass = 0;
+
+  while (!report.valid && pass < maxPasses) {
+    pass += 1;
+    let changed = false;
+
+    const inaccessibleIds = new Set(
+      (report.inaccessibleRooms || []).map(room => room.id)
+    );
+
+    for (const room of candidate.rooms) {
+      if (!inaccessibleIds.has(room.id)) continue;
+
+      const connector = findDirectAccessConnector(
+        room,
+        candidate.circulation,
+        candidate.rooms,
+        candidate.buildableArea,
+        passageWidth
+      );
+
+      if (!connector) continue;
+
+      candidate.circulation.push({
+        ...connector,
+        id: `initial-access-${room.id}-${pass}`,
+        name: "Local Access",
+        type: "corridor",
+        overlay: true,
+        generatedBy: "v17-initial-access-repair",
+        servesRoomId: room.id
+      });
+
+      changed = true;
+    }
+
+    if (!changed) break;
+
+    report = buildAccessibilityReport(candidate);
+  }
+
+  const checked = withAccessibilityCheck(candidate);
+
+  if (checked.success) {
+    return {
+      ...checked,
+      placementStrategy: `${layout.placementStrategy || "legacy"}+connected-access-repair`,
+      adaptations: [
+        ...(layout.adaptations || []),
+        {
+          type: "circulation-repair",
+          room: "Whole plan",
+          reason:
+            "The initial room packing placed all spaces but left one or more rooms disconnected. The planner added only clear, direct local access links to the circulation network and revalidated the complete geometry."
+        }
+      ]
+    };
+  }
+
+  return checked;
+}
+
+
+function findDirectAccessConnector(
+  room,
+  circulation,
+  rooms,
+  buildable,
+  passageWidth
+) {
+  const candidates = [];
+
+  for (const path of circulation || []) {
+    if (!path) continue;
+
+    const overlapY =
+      Math.min(room.y + room.height, path.y + path.height) -
+      Math.max(room.y, path.y);
+
+    const overlapX =
+      Math.min(room.x + room.width, path.x + path.width) -
+      Math.max(room.x, path.x);
+
+    // Room is horizontally separated from a circulation segment.
+    if (overlapY >= passageWidth * 0.75) {
+      const y =
+        Math.max(room.y, path.y) +
+        Math.max(0, (overlapY - passageWidth) / 2);
+
+      if (room.x + room.width <= path.x + 0.05) {
+        candidates.push({
+          x: room.x + room.width,
+          y,
+          width: path.x - (room.x + room.width),
+          height: Math.min(passageWidth, overlapY),
+          axis: "horizontal"
+        });
+      }
+
+      if (path.x + path.width <= room.x + 0.05) {
+        candidates.push({
+          x: path.x + path.width,
+          y,
+          width: room.x - (path.x + path.width),
+          height: Math.min(passageWidth, overlapY),
+          axis: "horizontal"
+        });
+      }
+    }
+
+    // Room is vertically separated from a circulation segment.
+    if (overlapX >= passageWidth * 0.75) {
+      const x =
+        Math.max(room.x, path.x) +
+        Math.max(0, (overlapX - passageWidth) / 2);
+
+      if (room.y + room.height <= path.y + 0.05) {
+        candidates.push({
+          x,
+          y: room.y + room.height,
+          width: Math.min(passageWidth, overlapX),
+          height: path.y - (room.y + room.height),
+          axis: "vertical"
+        });
+      }
+
+      if (path.y + path.height <= room.y + 0.05) {
+        candidates.push({
+          x,
+          y: path.y + path.height,
+          width: Math.min(passageWidth, overlapX),
+          height: room.y - (path.y + path.height),
+          axis: "vertical"
+        });
+      }
+    }
+  }
+
+  return candidates
+    .filter(item =>
+      item.width > 0.05 &&
+      item.height > 0.05 &&
+      rectangleInsideBuildable(item, buildable) &&
+      connectorDoesNotCutRooms(item, room, rooms)
+    )
+    .sort((a, b) =>
+      a.width * a.height - b.width * b.height
+    )[0] || null;
+}
+
+
+function rectangleInsideBuildable(rect, buildable) {
+  const tolerance = 0.03;
+  return (
+    rect.x >= buildable.x - tolerance &&
+    rect.y >= buildable.y - tolerance &&
+    rect.x + rect.width <= buildable.x + buildable.width + tolerance &&
+    rect.y + rect.height <= buildable.y + buildable.height + tolerance
+  );
+}
+
+
+function connectorDoesNotCutRooms(connector, targetRoom, rooms) {
+  const tolerance = 0.04;
+
+  return (rooms || []).every(other => {
+    if (!other || other.id === targetRoom.id || other.isSiteFeature || other.outsideBuildable) {
+      return true;
+    }
+
+    const overlapWidth =
+      Math.min(connector.x + connector.width, other.x + other.width) -
+      Math.max(connector.x, other.x);
+
+    const overlapHeight =
+      Math.min(connector.y + connector.height, other.y + other.height) -
+      Math.max(connector.y, other.y);
+
+    // Touching a wall is allowed; cutting through another room is not.
+    return !(overlapWidth > tolerance && overlapHeight > tolerance);
+  });
+}
+
+
+function attachOrthogonalShapeMetadata(layout) {
+  if (!layout || !Array.isArray(layout.rooms)) return layout;
+
+  return {
+    ...layout,
+    rooms: layout.rooms.map(room => ({
+      ...room,
+      architecturalShape: room.architecturalShape || {
+        kind: "orthogonal",
+        parts: [{
+          x: room.x,
+          y: room.y,
+          width: room.width,
+          height: room.height
+        }]
+      }
+    })),
+    geometryModel: {
+      ...(layout.geometryModel || {}),
+      version: "orthogonal-v1",
+      supportsCompoundRooms: true,
+      note:
+        "Current placements remain backward-compatible rectangles. architecturalShape.parts is the compatibility layer for later L-shaped/stepped room rendering and validation."
+    }
+  };
+}
+
+
+function legacyGenerateLayout(requirements) {
   /*
-    ---------------------------------------------------------
-    ADAPTIVE COMPACT FALLBACK
+    V17:
+    A placement is not considered successful just because failedRooms is empty.
+    It must also pass accessibility + geometry validation.
 
-    If ANY required room cannot be placed, remove the
-    automatically-added family lounge and retry, unless the
-    user explicitly requested that lounge.
-
-    This is practical for compact 3BHK / 4BHK Indian plots:
-    bedrooms, bathrooms, kitchen, dining and circulation take
-    priority over a separate optional family lounge.
-
-    IMPORTANT:
-    If the user explicitly requested a family lounge,
-    we do NOT remove it automatically.
-    ---------------------------------------------------------
+    That distinction is essential on compact plots where the guillotine packer
+    may place every rectangle but leave bedrooms/toilets disconnected.
   */
-
-  const preferences =
-    requirements.preferences || {};
+  const preferences = requirements.preferences || {};
 
   const familyLoungeExplicit =
     typeof preferences.familyLounge === "boolean";
 
-  const hasFailedRooms =
-    Array.isArray(result.failedRooms) &&
-    result.failedRooms.length > 0;
+  const utilityExplicit =
+    typeof preferences.utility === "boolean";
 
-  if (
-    hasFailedRooms &&
-    !familyLoungeExplicit
-  ) {
+  const attempt = candidateRequirements => {
+    const raw = generateLayoutAttempt(candidateRequirements);
+
+    if (!raw?.success) {
+      return raw;
+    }
+
+    return attachOrthogonalShapeMetadata(
+      validateInitialLayoutCandidate(raw)
+    );
+  };
+
+  /*
+    ---------------------------------------------------------
+    1. EXACT REQUEST / DEFAULT PROGRAM
+    ---------------------------------------------------------
+  */
+  let result = attempt(requirements);
+
+  if (result?.success) {
+    return result;
+  }
+
+  const originalResult = result;
+
+  /*
+    ---------------------------------------------------------
+    2. REMOVE AUTO FAMILY LOUNGE
+    ---------------------------------------------------------
+
+    Run this fallback after ANY invalid initial candidate:
+    - room placement failure
+    - inaccessible rooms
+    - invalid geometry
+
+    Explicit user requests remain protected.
+  */
+  if (!familyLoungeExplicit) {
     const compactRequirements = {
       ...requirements,
-
       preferences: {
         ...preferences,
         familyLounge: false
       }
     };
 
-    const compactResult =
-      generateLayoutAttempt(
-        compactRequirements
-      );
+    const compactResult = attempt(compactRequirements);
 
-    if (compactResult.success) {
+    if (compactResult?.success) {
       compactResult.adaptations = [
+        ...(compactResult.adaptations || []),
         {
           type: "removed-optional-room",
           room: "Family Lounge",
           reason:
-            "The buildable area is tight, so the separate family lounge was removed. Living and dining should serve as the shared family space."
+            "The standard arrangement was too tight or disconnected, so the separate family lounge was removed. Living/dining remains the shared social zone."
         }
       ];
 
       compactResult.originalFeasibility =
-        result.feasibility;
+        originalResult?.feasibility || null;
 
       return compactResult;
     }
 
-    result = compactResult;
+    result = compactResult || result;
   }
 
   /*
     ---------------------------------------------------------
-    SECOND COMPACT FALLBACK
-
-    Utility is useful but not more important than bedrooms,
-    bathrooms, living, dining, kitchen and circulation.
-
-    If the retry still cannot place all required rooms and
-    utility was only added by default, remove it and retry.
+    3. REMOVE AUTO UTILITY
     ---------------------------------------------------------
+
+    Utility is useful, but on a compact ground-floor home it is less important
+    than bedrooms, bathrooms, kitchen, living/social space and circulation.
   */
-
-  const utilityExplicit =
-    typeof preferences.utility === "boolean";
-
-  const stillHasFailedRooms =
-    Array.isArray(result.failedRooms) &&
-    result.failedRooms.length > 0;
-
-  if (
-    stillHasFailedRooms &&
-    !utilityExplicit
-  ) {
+  if (!utilityExplicit) {
     const compactRequirements = {
       ...requirements,
-
       preferences: {
         ...preferences,
         familyLounge:
           familyLoungeExplicit
             ? preferences.familyLounge
             : false,
-
         utility: false
       }
     };
 
-    const compactResult =
-      generateLayoutAttempt(
-        compactRequirements
-      );
+    const compactResult = attempt(compactRequirements);
 
-    if (compactResult.success) {
+    if (compactResult?.success) {
       compactResult.adaptations = [
+        ...(compactResult.adaptations || []),
         {
           type: "removed-optional-room",
           room: "Utility",
           reason:
-            "The buildable area is tight, so the separate utility room was removed. Utility functions can be integrated beside or within the kitchen."
+            "The separate utility was removed so utility functions can be integrated with the kitchen while preserving usable rooms and connected circulation."
         }
       ];
 
@@ -7434,22 +7712,107 @@ function legacyGenerateLayout(requirements) {
           type: "removed-optional-room",
           room: "Family Lounge",
           reason:
-            "The buildable area is tight, so the separate family lounge was removed."
+            "The separate family lounge was removed to protect bedrooms and circulation."
         });
       }
 
       compactResult.originalFeasibility =
-        result.feasibility;
+        originalResult?.feasibility || null;
 
       return compactResult;
     }
 
-    result = compactResult;
+    result = compactResult || result;
   }
 
-  return result;
-}
+  /*
+    ---------------------------------------------------------
+    4. PRACTICAL COMPACT ROOM-SCALE RETRY
+    ---------------------------------------------------------
 
+    This is deliberately modest. It does NOT shrink explicit user-sized rooms.
+    buildRoomProgram() remains responsible for enforcing configured minimums and
+    explicit room constraints.
+
+    The purpose is to make a small plot behave like an architect would:
+    protect the number of bedrooms and essential wet/service spaces first,
+    then use slightly more compact default social/bedroom dimensions.
+  */
+  const roomScaleExplicit =
+    preferences.roomScales &&
+    Object.keys(preferences.roomScales).length > 0;
+
+  if (!roomScaleExplicit) {
+    const compactRequirements = {
+      ...requirements,
+      preferences: {
+        ...preferences,
+        familyLounge:
+          familyLoungeExplicit
+            ? preferences.familyLounge
+            : false,
+        utility:
+          utilityExplicit
+            ? preferences.utility
+            : false,
+        roomScales: {
+          ...(preferences.roomScales || {}),
+          living: 0.90,
+          dining: 0.88,
+          kitchen: 0.92,
+          masterBedroom: 0.94,
+          bedroom: 0.90
+        }
+      }
+    };
+
+    const compactResult = attempt(compactRequirements);
+
+    if (compactResult?.success) {
+      compactResult.adaptations = [
+        ...(compactResult.adaptations || []),
+        {
+          type: "compact-room-profile",
+          room: "Whole plan",
+          reason:
+            "The default room proportions were reduced within configured practical minimums so the ground-floor plan could preserve connected access on the compact site."
+        }
+      ];
+
+      if (!familyLoungeExplicit) {
+        compactResult.adaptations.unshift({
+          type: "removed-optional-room",
+          room: "Family Lounge",
+          reason:
+            "A separate family lounge was omitted in the compact profile."
+        });
+      }
+
+      if (!utilityExplicit) {
+        compactResult.adaptations.unshift({
+          type: "removed-optional-room",
+          room: "Utility",
+          reason:
+            "Utility functions are integrated with the kitchen in the compact profile."
+        });
+      }
+
+      compactResult.originalFeasibility =
+        originalResult?.feasibility || null;
+
+      return compactResult;
+    }
+
+    result = compactResult || result;
+  }
+
+  /*
+    Preserve the best failed candidate for explanation. At this point the
+    caller/OpenAI can negotiate a real architectural trade-off instead of
+    receiving a false "rooms placed = success" result.
+  */
+  return attachOrthogonalShapeMetadata(result || originalResult);
+}
 
 function generateLayoutAttempt(requirements) {
   const feasibility =
