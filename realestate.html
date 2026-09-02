@@ -806,7 +806,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "ai-planner-authoritative-v25";
+      const REAL_ESTATE_VERSION = "ai-practical-planner-v26";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -898,6 +898,12 @@
       let validatedConstraintRequirements = null;
 
       let aiProposal = null;
+
+      // V26: prevent conversational retry loops.
+      // A plain "yes" after a deterministic failure must not rerun identical geometry.
+      let lastFailedPlannerFingerprint = null;
+      let lastFailedPlannerDiagnostics = null;
+      let lastPlannerFailureReply = null;
 
       const layoutState = {
         stage: 1,
@@ -1369,6 +1375,13 @@ The render step will use the SAME validated room geometry; it will not generate 
           layoutState.confirmed = false;
           isConfirmed = false;
           lastPdfBase64 = null;
+
+          // Any changed brief invalidates uncommitted deterministic geometry.
+          validatedConstraintLayout = null;
+          validatedConstraintRequirements = null;
+          lastFailedPlannerFingerprint = null;
+          lastFailedPlannerDiagnostics = null;
+          lastPlannerFailureReply = null;
         }
 
         updateLayoutButtons();
@@ -2633,6 +2646,8 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         const basePreferences = requirements?.preferences || {};
         const baseScales = basePreferences.roomScales || {};
         const options = [];
+        let successfulCandidate = null;
+        let successfulRequirements = null;
 
         const testOption = ({
           id,
@@ -2653,17 +2668,26 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           };
 
           const optionLayout = generateLayout(optionRequirements);
+          const success = Boolean(optionLayout?.success);
 
           options.push({
             id,
             label,
             impact,
             recommended,
-            success: Boolean(optionLayout?.success),
+            success,
             feasibility:
               optionLayout?.feasibility?.status ||
-              (optionLayout?.success ? "feasible" : "infeasible"),
+              (success ? "feasible" : "infeasible"),
             reason: optionLayout?.reason || null,
+            validationErrors:
+              Array.isArray(optionLayout?.validationReport?.errors)
+                ? optionLayout.validationReport.errors
+                : [],
+            inaccessibleRooms:
+              Array.isArray(optionLayout?.accessibilityReport?.inaccessibleRooms)
+                ? optionLayout.accessibilityReport.inaccessibleRooms.map(room => room.name || room.id)
+                : [],
             adaptations: Array.isArray(optionLayout?.adaptations)
               ? optionLayout.adaptations
               : [],
@@ -2676,54 +2700,80 @@ Click “Render Concept 1” to generate the technical blueprint.`;
               }
             }
           });
+
+          /*
+            IMPORTANT V26:
+            Previously we threw optionLayout away and retained only success metadata.
+            That meant a successful compact alternative was never promoted to the
+            actual render candidate.
+          */
+          if (success && !successfulCandidate) {
+            successfulCandidate = structuredClone(optionLayout);
+            successfulRequirements = structuredClone(optionRequirements);
+            successfulCandidate.selectedTradeoff = {
+              id,
+              label,
+              impact,
+              recommended
+            };
+          }
         };
 
-        /*
-          These are not guesses shown to the user.
-          Every option is run through the SAME deterministic planner first.
-          Only options with success=true are later presented as validated choices.
-        */
+        // Least disruptive first.
         testOption({
-          id: "remove_family_lounge",
-          label: "Remove the separate family lounge",
-          impact: "Keeps the bedrooms and main living spaces closer to their normal sizes.",
+          id: "remove_auto_optional",
+          label: "Keep the essential home and remove automatic optional spaces",
+          impact: "Protects bedrooms, bathrooms, kitchen, living and circulation before optional amenities.",
           recommended: true,
           preferencePatch: {
-            familyLounge: false
+            familyLounge: false,
+            utility: false
           }
         });
 
         testOption({
-          id: "keep_lounge_compact_bedrooms",
-          label: "Keep the family lounge and use compact bedrooms",
-          impact: "Preserves the extra family space by reducing bedroom proportions.",
-          preferencePatch: {
-            familyLounge: true
-          },
-          roomScalePatch: {
-            masterBedroom: 0.84,
-            bedroom: 0.82
-          }
-        });
-
-        testOption({
-          id: "compact_core_no_utility",
-          label: "Use a compact 3BHK core without a separate utility",
-          impact: "Keeps the essential 3BHK program while integrating utility functions with the kitchen.",
+          id: "compact_social_core",
+          label: "Compact the living/dining/kitchen core",
+          impact: "Uses a tighter social/service zone while protecting bedroom count and bathroom access.",
           preferencePatch: {
             familyLounge: false,
             utility: false
           },
           roomScalePatch: {
-            masterBedroom: 0.88,
-            bedroom: 0.86,
-            living: 0.92,
-            dining: 0.90,
-            kitchen: 0.92
+            living: 0.86,
+            dining: 0.82,
+            kitchen: 0.88,
+            masterBedroom: 0.94,
+            bedroom: 0.90
           }
         });
 
-        return options;
+        testOption({
+          id: "compact_whole_home",
+          label: "Use a compact whole-home profile",
+          impact: "Reduces flexible preferred dimensions but never intentionally changes the requested BHK.",
+          preferencePatch: {
+            familyLounge: false,
+            utility: false
+          },
+          roomScalePatch: {
+            living: 0.82,
+            dining: 0.78,
+            kitchen: 0.84,
+            masterBedroom: 0.88,
+            bedroom: 0.84
+          }
+        });
+
+        /*
+          User-explicit optional spaces are protected by room-program/planner logic.
+          These frontend alternatives are only practical automatic attempts.
+        */
+        return {
+          options,
+          successfulCandidate,
+          successfulRequirements
+        };
       }
 
       function plannerContextFromLayout(layout, requirements) {
@@ -2739,7 +2789,11 @@ Click “Render Concept 1” to generate the technical blueprint.`;
                 area: Number(
                   room.area ||
                   (Number(room.width || 0) * Number(room.height || 0))
-                )
+                ),
+                compoundParts:
+                  Array.isArray(room?.architecturalShape?.parts)
+                    ? room.architecturalShape.parts.length
+                    : 1
               }))
           : [];
 
@@ -2750,6 +2804,11 @@ Click “Render Concept 1” to generate the technical blueprint.`;
             }))
           : [];
 
+        const requestedBedrooms = Number(requirements?.house?.bhk || 0);
+        const generatedBedrooms = roomRows.filter(room =>
+          ["bedroom", "masterBedroom"].includes(room.type)
+        ).length;
+
         return {
           source: "deterministic_constraint_planner",
           success: Boolean(layout?.success),
@@ -2759,6 +2818,9 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           unit: layout?.unit || requirements?.plot?.unit || null,
           plot: requirements?.plot || null,
           setbacks: requirements?.setbacks || null,
+          requested_bhk: requestedBedrooms,
+          generated_bedrooms: generatedBedrooms,
+          bhk_matches: requestedBedrooms <= 0 || requestedBedrooms === generatedBedrooms,
           buildable_area: layout?.buildableArea
             ? {
                 x: Number(layout.buildableArea.x || 0),
@@ -2770,10 +2832,21 @@ Click “Render Concept 1” to generate the technical blueprint.`;
             : null,
           statistics: layout?.statistics || null,
           placement_strategy: layout?.placementStrategy || null,
+          selected_tradeoff: layout?.selectedTradeoff || null,
           adaptations: Array.isArray(layout?.adaptations) ? layout.adaptations : [],
           tradeoffs: Array.isArray(layout?.tradeoffs) ? layout.tradeoffs : [],
-          rooms: roomRows,
-          failed_rooms: failedRooms
+          validation_report: layout?.validationReport || null,
+          validation_errors:
+            Array.isArray(layout?.validationReport?.errors)
+              ? layout.validationReport.errors
+              : [],
+          accessibility_report: layout?.accessibilityReport || null,
+          inaccessible_rooms:
+            Array.isArray(layout?.accessibilityReport?.inaccessibleRooms)
+              ? layout.accessibilityReport.inaccessibleRooms
+              : [],
+          failed_rooms: failedRooms,
+          rooms: roomRows
         };
       }
 
@@ -2823,6 +2896,132 @@ ${roomLines.join("\n")}`;
         return output;
       }
 
+      function plannerRequirementsFingerprint(requirements) {
+        const stable = {
+          country: requirements?.country || null,
+          plot: {
+            width: Number(requirements?.plot?.width || 0),
+            height: Number(requirements?.plot?.height || 0),
+            unit: requirements?.plot?.unit || null,
+            roadSide: requirements?.plot?.roadSide || null
+          },
+          setbacks: requirements?.setbacks || null,
+          house: {
+            bhk: Number(requirements?.house?.bhk || 0),
+            floors: Number(requirements?.house?.floors || 0)
+          },
+          preferences: requirements?.preferences || {}
+        };
+        return JSON.stringify(stable);
+      }
+
+
+      function validateCandidateAgainstBrief(candidate, requirements) {
+        if (!candidate?.success) {
+          return {
+            valid: false,
+            reason: candidate?.reason || "planner-failed",
+            requestedBedrooms: Number(requirements?.house?.bhk || 0),
+            generatedBedrooms: 0
+          };
+        }
+
+        const requestedBedrooms = Number(requirements?.house?.bhk || 0);
+        const generatedBedrooms = (candidate.rooms || []).filter(room =>
+          !room?.isSiteFeature &&
+          ["bedroom", "masterBedroom"].includes(room.type)
+        ).length;
+
+        if (requestedBedrooms > 0 && generatedBedrooms !== requestedBedrooms) {
+          return {
+            valid: false,
+            reason: "bhk-mismatch",
+            requestedBedrooms,
+            generatedBedrooms
+          };
+        }
+
+        return {
+          valid: true,
+          reason: null,
+          requestedBedrooms,
+          generatedBedrooms
+        };
+      }
+
+
+      function plannerFailureDiagnostics(candidate, requirements) {
+        const validationErrors =
+          Array.isArray(candidate?.validationReport?.errors)
+            ? candidate.validationReport.errors
+            : [];
+
+        const inaccessible =
+          Array.isArray(candidate?.accessibilityReport?.inaccessibleRooms)
+            ? candidate.accessibilityReport.inaccessibleRooms
+                .map(room => room.name || room.id)
+                .filter(Boolean)
+            : [];
+
+        const failedRooms =
+          Array.isArray(candidate?.failedRooms)
+            ? candidate.failedRooms
+                .map(room => room.name || room.id)
+                .filter(Boolean)
+            : [];
+
+        const mismatch = validateCandidateAgainstBrief(candidate, requirements);
+
+        return {
+          reason: candidate?.reason || "unknown",
+          validationErrors,
+          inaccessible,
+          failedRooms,
+          requestedBedrooms: mismatch.requestedBedrooms,
+          generatedBedrooms: mismatch.generatedBedrooms
+        };
+      }
+
+
+      function isPlainRetryConfirmation(text) {
+        return /^\s*(?:yes|yeah|yep|ok|okay|sure|go ahead|try it|do it|please do)\s*[.!]*\s*$/i
+          .test(String(text || ""));
+      }
+
+
+      function deterministicFailureReply(candidate, requirements) {
+        const d = plannerFailureDiagnostics(candidate, requirements);
+        const details = [];
+
+        if (d.validationErrors.length) {
+          details.push(`Geometry checks: ${d.validationErrors.join(", ")}`);
+        }
+        if (d.inaccessible.length) {
+          details.push(`Access issue: ${d.inaccessible.join(", ")}`);
+        }
+        if (d.failedRooms.length) {
+          details.push(`Unplaced spaces: ${d.failedRooms.join(", ")}`);
+        }
+        if (
+          d.requestedBedrooms > 0 &&
+          d.generatedBedrooms > 0 &&
+          d.requestedBedrooms !== d.generatedBedrooms
+        ) {
+          details.push(
+            `Bedroom mismatch: requested ${d.requestedBedrooms}, generated ${d.generatedBedrooms}`
+          );
+        }
+
+        const detailText = details.length
+          ? `\n\nTechnical check:\n• ${details.join("\n• ")}`
+          : "";
+
+        return `I tested the base brief and the automatic compact variants already. I still do not have a planner-validated connected layout, so I will not keep asking you to approve the same compact retry.${detailText}
+
+Please change a specific design preference if you want another attempt (for example: bathroom count, a room that may be omitted, or a room that must be preserved).`;
+      }
+
+
       async function requestPlannerExplanation({
         userText,
         historyForApi,
@@ -2844,8 +3043,15 @@ ${roomLines.join("\n")}`;
 
 The deterministic geometry engine has already checked the user's brief.
 Explain this result clearly to the user. Do not invent new geometry, do not claim
-a failed layout fits, and do not change the requirements. Suggest trade-offs only
-when the result is infeasible.
+a failed layout fits, and do not change the requirements.
+
+IMPORTANT UX RULE:
+- Do NOT ask "would you like me to try compact/replan/tighter circulation?".
+- The application has already run its automatic compact alternatives.
+- If no alternative validated, state that clearly once and describe the exact
+  failing validation/accessibility checks supplied in planner_context.
+- Ask a question only when there is a genuinely different USER preference that
+  must be chosen before another geometry can be tested.
 
 Original user request:
 ${userText}
@@ -2877,30 +3083,66 @@ ${JSON.stringify(plannerContext, null, 2)}`;
         historyForApi,
         interpretedState
       }) {
-        const requirements = buildConstraintPlannerRequirements();
+        let requirements = buildConstraintPlannerRequirements();
         console.log("Preflight planner requirements:", requirements);
 
         let candidate = generateLayout(requirements);
 
         /*
-          If the requested/default program fails, test a small set of meaningful
-          architectural compromises BEFORE OpenAI talks about them. OpenAI only
-          receives options that the deterministic planner has actually checked.
+          V26:
+          Test practical automatic alternatives internally. If one validates,
+          PROMOTE its exact geometry and exact requirements to the proposal.
+          Do not merely tell OpenAI that an alternative existed.
         */
         if (!candidate?.success) {
-          const testedTradeoffs = buildTestedCompactTradeoffs(requirements);
+          const tested = buildTestedCompactTradeoffs(requirements);
+
+          if (tested.successfulCandidate?.success) {
+            candidate = tested.successfulCandidate;
+            requirements = tested.successfulRequirements;
+            candidate.tradeoffs = tested.options;
+          } else {
+            candidate = {
+              ...(candidate || {}),
+              tradeoffs: tested.options
+            };
+          }
+        }
+
+        /*
+          Hard state invariant: never accept/render geometry for the wrong BHK.
+        */
+        const briefCheck = validateCandidateAgainstBrief(candidate, requirements);
+
+        if (candidate?.success && !briefCheck.valid) {
           candidate = {
-            ...(candidate || {}),
-            tradeoffs: testedTradeoffs
+            ...candidate,
+            success: false,
+            reason: briefCheck.reason,
+            validationReport: {
+              ...(candidate.validationReport || {}),
+              valid: false,
+              errors: [
+                ...(
+                  Array.isArray(candidate?.validationReport?.errors)
+                    ? candidate.validationReport.errors
+                    : []
+                ),
+                briefCheck.reason
+              ]
+            }
           };
         }
 
         console.log("Preflight planner result:", candidate);
+        console.log(
+          "Preflight diagnostics:",
+          plannerFailureDiagnostics(candidate, requirements)
+        );
 
         validatedConstraintRequirements = structuredClone(requirements);
         validatedConstraintLayout = candidate?.success ? structuredClone(candidate) : null;
 
-        // OpenAI-proposed room dimensions are no longer authoritative.
         aiProposal = null;
         layoutState.proposalAccepted = false;
         layoutState.rendered = false;
@@ -2911,15 +3153,30 @@ ${JSON.stringify(plannerContext, null, 2)}`;
           layoutState.proposal = {
             source: "constraint-planner",
             feasibility: candidate.feasibility?.status || "feasible",
-            placementStrategy: candidate.placementStrategy || null
+            placementStrategy: candidate.placementStrategy || null,
+            selectedTradeoff: candidate.selectedTradeoff || null
           };
+
+          lastFailedPlannerFingerprint = null;
+          lastFailedPlannerDiagnostics = null;
+          lastPlannerFailureReply = null;
         } else {
           layoutState.proposalReady = false;
           layoutState.proposal = null;
+
+          lastFailedPlannerFingerprint =
+            plannerRequirementsFingerprint(requirements);
+          lastFailedPlannerDiagnostics =
+            plannerFailureDiagnostics(candidate, requirements);
         }
 
         updateLayoutButtons();
 
+        /*
+          Failed result:
+          still let OpenAI explain it, but the frontend will enforce a no-loop
+          fallback if the model asks the user to repeat an already-tested retry.
+        */
         const explanation = await requestPlannerExplanation({
           userText,
           historyForApi,
@@ -2977,6 +3234,35 @@ ${JSON.stringify(plannerContext, null, 2)}`;
             .slice(0, -1)
             .slice(-12)
             .map(m => ({ role: m.role, content: m.content }));
+
+          /*
+            V26 no-loop guard:
+            A bare "yes" after an exhausted deterministic failure does not contain
+            a new architectural preference. Re-running the identical planner would
+            only produce the same answer again.
+          */
+          if (
+            isPlainRetryConfirmation(text) &&
+            lastFailedPlannerFingerprint
+          ) {
+            const currentRequirements = buildConstraintPlannerRequirements();
+            const currentFingerprint =
+              plannerRequirementsFingerprint(currentRequirements);
+
+            if (currentFingerprint === lastFailedPlannerFingerprint) {
+              const noLoopReply =
+                lastPlannerFailureReply ||
+                `I already tested the normal and compact variants for this exact brief. Repeating the same retry will not produce new geometry.
+
+Please give me one concrete preference to change, such as “1 bathroom only”, “no utility”, “smaller bedrooms”, or “keep bedroom sizes and combine social space”.`;
+
+              addMessage("assistant", noLoopReply);
+              setStatus(
+                "No new design constraint was provided, so the identical failed geometry was not rerun."
+              );
+              return;
+            }
+          }
 
           const res = await fetch(CHAT_API, {
             method: "POST",
@@ -3081,6 +3367,19 @@ ${JSON.stringify(plannerContext, null, 2)}`;
               layoutState.proposalAccepted = false;
               layoutState.proposal = null;
               validatedConstraintLayout = null;
+
+              const genericRetryQuestion =
+                /would you like (?:me )?to (?:try|replan|use|consider)|try a (?:fresh|different|more|compact)|tighter circulation|more compact replan/i
+                  .test(reply);
+
+              if (genericRetryQuestion) {
+                reply = deterministicFailureReply(
+                  preflight.candidate,
+                  preflight.requirements
+                );
+              }
+
+              lastPlannerFailureReply = reply;
 
               addMessage("assistant", reply);
               setStatus(
@@ -4113,10 +4412,40 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
             For the first concept, render the exact candidate that was already
             validated and accepted. Revisions keep the normal transactional flow.
           */
-          const useValidatedInitialCandidate =
+          let useValidatedInitialCandidate =
             !committedConstraintLayout?.success &&
             Boolean(validatedConstraintLayout?.success) &&
             Boolean(validatedConstraintRequirements);
+
+          if (useValidatedInitialCandidate) {
+            const currentRequirements = buildConstraintPlannerRequirements();
+            const candidateFingerprint =
+              plannerRequirementsFingerprint(validatedConstraintRequirements);
+            const currentFingerprint =
+              plannerRequirementsFingerprint(currentRequirements);
+            const briefCheck =
+              validateCandidateAgainstBrief(
+                validatedConstraintLayout,
+                currentRequirements
+              );
+
+            if (
+              candidateFingerprint !== currentFingerprint ||
+              !briefCheck.valid
+            ) {
+              console.warn(
+                "Rejected stale/mismatched validated candidate:",
+                {
+                  candidateFingerprint,
+                  currentFingerprint,
+                  briefCheck
+                }
+              );
+              validatedConstraintLayout = null;
+              validatedConstraintRequirements = null;
+              useValidatedInitialCandidate = false;
+            }
+          }
 
           const requirements = useValidatedInitialCandidate
             ? structuredClone(validatedConstraintRequirements)
