@@ -7355,18 +7355,13 @@ function repairInitialCirculationAccess(layout) {
 
   const candidate = {
     ...layout,
-    rooms: layout.rooms.map(room => ({
-      ...room,
-      architecturalShape: room.architecturalShape || {
-        kind: "orthogonal",
-        parts: [{
-          x: room.x,
-          y: room.y,
-          width: room.width,
-          height: room.height
-        }]
+    rooms: layout.rooms.map(room => {
+      const clean = { ...room };
+      if (!(Array.isArray(clean?.architecturalShape?.parts) && clean.architecturalShape.parts.length > 1)) {
+        delete clean.architecturalShape;
       }
-    })),
+      return clean;
+    }),
     circulation: layout.circulation.map(item => ({ ...item }))
   };
 
@@ -7565,24 +7560,31 @@ function attachOrthogonalShapeMetadata(layout) {
 
   return {
     ...layout,
-    rooms: layout.rooms.map(room => ({
-      ...room,
-      architecturalShape: room.architecturalShape || {
-        kind: "orthogonal",
-        parts: [{
-          x: room.x,
-          y: room.y,
-          width: room.width,
-          height: room.height
-        }]
+    rooms: layout.rooms.map(room => {
+      const hasRealCompoundShape =
+        Array.isArray(room?.architecturalShape?.parts) &&
+        room.architecturalShape.parts.length > 1;
+
+      if (hasRealCompoundShape) {
+        return {
+          ...room,
+          architecturalShape: {
+            ...room.architecturalShape,
+            kind: room.architecturalShape.kind || "orthogonal"
+          }
+        };
       }
-    })),
+
+      const clean = { ...room };
+      delete clean.architecturalShape;
+      return clean;
+    }),
     geometryModel: {
       ...(layout.geometryModel || {}),
       version: "orthogonal-v1",
       supportsCompoundRooms: true,
       note:
-        "Current placements remain backward-compatible rectangles. architecturalShape.parts is the compatibility layer for later L-shaped/stepped room rendering and validation."
+        "Normal rectangles use live x/y/width/height. architecturalShape.parts is authoritative only for genuine multi-part orthogonal rooms."
     }
   };
 }
