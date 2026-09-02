@@ -3,7 +3,7 @@ import {
 } from "./accessibility.js";
 
 /*
-  Still In Queue · Blueprint Renderer V3
+  Still In Queue · Blueprint Renderer V4
   ---------------------------------------
   Goal:
   make the plan look much closer to a clean architectural floor-plan:
@@ -134,18 +134,13 @@ export function renderBlueprintLayout(layout, container, options = {}) {
 
   const roomMap = Object.fromEntries(rooms.map(room => [room.id, room]));
 
-  // Rooms
+  // Rooms · V4 supports rectangle, L-shaped and stepped orthogonal rooms.
   rooms.forEach(room => {
-    add(svg, "rect", {
-      x: room.x,
-      y: room.y,
-      width: room.width,
-      height: room.height,
+    drawRoomShape(svg, room, {
       fill: "#ffffff",
       stroke: "#000000",
-      "stroke-width": base * 0.95,
-      "stroke-linejoin": "miter",
-      "vector-effect": "non-scaling-stroke"
+      strokeWidth: base * 0.95,
+      vectorEffect: true
     });
   });
 
@@ -314,15 +309,10 @@ export function renderBuyerLayout(layout, container, options = {}) {
   const roomMap = Object.fromEntries(rooms.map(room => [room.id, room]));
 
   rooms.forEach(room => {
-    add(plan, "rect", {
-      x: room.x,
-      y: room.y,
-      width: room.width,
-      height: room.height,
+    drawRoomShape(plan, room, {
       fill: buyerFill(room.type),
       stroke: "#3c3c3c",
-      "stroke-width": base * 1.05,
-      "stroke-linejoin": "miter"
+      strokeWidth: base * 1.05
     });
 
     drawFurniture(plan, room, base, true);
@@ -471,7 +461,7 @@ function drawBuyerLegend(svg, rooms, unit, x, y, width, base) {
       svg,
       x + width - base * 3,
       rowY,
-      `${formatDimension(room.width, unit)} × ${formatDimension(room.height, unit)}`,
+      formatRoomDimension(room, unit),
       base * 1.18,
       400,
       "end"
@@ -522,10 +512,255 @@ export function renderLayoutLegend(layout, container) {
     item.className = "legend-item";
     item.innerHTML = `
       <span>${escapeHtml(room.name)}</span>
-      <span style="opacity:.75;">${escapeHtml(formatDimension(room.width, unit))} × ${escapeHtml(formatDimension(room.height, unit))}</span>
+      <span style="opacity:.75;">${escapeHtml(formatRoomDimension(room, unit))}</span>
     `;
     container.appendChild(item);
   });
+}
+
+
+/*
+  =========================================================
+  V4 · ORTHOGONAL / COMPOUND ROOM DRAWING
+  =========================================================
+
+  A room may be one rectangle or multiple connected orthogonal parts.
+  We deliberately draw the UNION as one SVG path so internal seams between
+  the parts do not appear as fake walls.
+*/
+
+function roomParts(room) {
+  const explicit = room?.architecturalShape?.parts;
+
+  if (Array.isArray(explicit) && explicit.length) {
+    const parts = explicit
+      .map(part => ({
+        x: Number(part.x),
+        y: Number(part.y),
+        width: Number(part.width),
+        height: Number(part.height)
+      }))
+      .filter(part =>
+        Number.isFinite(part.x) &&
+        Number.isFinite(part.y) &&
+        part.width > 0 &&
+        part.height > 0
+      );
+
+    if (parts.length) return parts;
+  }
+
+  return [{
+    x: Number(room?.x || 0),
+    y: Number(room?.y || 0),
+    width: Number(room?.width || 0),
+    height: Number(room?.height || 0)
+  }];
+}
+
+
+function roomBounds(room) {
+  const parts = roomParts(room);
+  const left = Math.min(...parts.map(part => part.x));
+  const top = Math.min(...parts.map(part => part.y));
+  const right = Math.max(...parts.map(part => part.x + part.width));
+  const bottom = Math.max(...parts.map(part => part.y + part.height));
+
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top
+  };
+}
+
+
+function roomArea(room) {
+  const parts = roomParts(room);
+  const xs = [...new Set(parts.flatMap(part => [part.x, part.x + part.width]))].sort((a, b) => a - b);
+  let area = 0;
+
+  for (let i = 0; i < xs.length - 1; i++) {
+    const x1 = xs[i];
+    const x2 = xs[i + 1];
+    const intervals = parts
+      .filter(part => part.x < x2 && part.x + part.width > x1)
+      .map(part => [part.y, part.y + part.height])
+      .sort((a, b) => a[0] - b[0]);
+
+    if (!intervals.length) continue;
+
+    let [start, end] = intervals[0];
+    let covered = 0;
+
+    for (const interval of intervals.slice(1)) {
+      if (interval[0] <= end) {
+        end = Math.max(end, interval[1]);
+      } else {
+        covered += end - start;
+        [start, end] = interval;
+      }
+    }
+
+    covered += end - start;
+    area += (x2 - x1) * covered;
+  }
+
+  return area;
+}
+
+
+function roomLabelAnchor(room) {
+  const parts = roomParts(room);
+  if (parts.length === 1) {
+    return {
+      x: parts[0].x + parts[0].width / 2,
+      y: parts[0].y + parts[0].height / 2
+    };
+  }
+
+  /*
+    Put the label in the largest component rather than in the bounding-box
+    center, which might lie inside an L-shaped room's missing notch.
+  */
+  const largest = parts
+    .slice()
+    .sort((a, b) => b.width * b.height - a.width * a.height)[0];
+
+  return {
+    x: largest.x + largest.width / 2,
+    y: largest.y + largest.height / 2
+  };
+}
+
+
+function formatRoomDimension(room, unit) {
+  const parts = roomParts(room);
+
+  if (parts.length <= 1) {
+    const bounds = roomBounds(room);
+    return `${formatDimension(bounds.width, unit)} × ${formatDimension(bounds.height, unit)}`;
+  }
+
+  const area = roomArea(room);
+
+  if (String(unit).toLowerCase() === "m") {
+    return `${area.toFixed(1)} m² · orthogonal`;
+  }
+
+  return `${area.toFixed(0)} sq ft · orthogonal`;
+}
+
+
+function drawRoomShape(parent, room, options = {}) {
+  const parts = roomParts(room);
+  const attrs = {
+    fill: options.fill || "#ffffff",
+    stroke: options.stroke || "#000000",
+    "stroke-width": options.strokeWidth || 1,
+    "stroke-linejoin": "miter",
+    "fill-rule": "evenodd"
+  };
+
+  if (options.vectorEffect) {
+    attrs["vector-effect"] = "non-scaling-stroke";
+  }
+
+  if (parts.length === 1) {
+    return add(parent, "rect", {
+      x: parts[0].x,
+      y: parts[0].y,
+      width: parts[0].width,
+      height: parts[0].height,
+      ...attrs
+    });
+  }
+
+  /*
+    Draw all parts as one compound path. Internal coincident edges are then
+    covered by a second fill-only pass so they do not visually read as walls.
+  */
+  const group = add(parent, "g");
+
+  parts.forEach(part => {
+    add(group, "rect", {
+      x: part.x,
+      y: part.y,
+      width: part.width,
+      height: part.height,
+      fill: attrs.fill,
+      stroke: attrs.stroke,
+      "stroke-width": attrs["stroke-width"],
+      "stroke-linejoin": "miter",
+      ...(options.vectorEffect ? { "vector-effect": "non-scaling-stroke" } : {})
+    });
+  });
+
+  /*
+    Hide shared internal seams by painting a very thin fill-colored line over
+    each shared part boundary. Exterior perimeter remains untouched.
+  */
+  for (let i = 0; i < parts.length; i++) {
+    for (let j = i + 1; j < parts.length; j++) {
+      coverInternalSharedEdge(group, parts[i], parts[j], attrs.fill, attrs["stroke-width"]);
+    }
+  }
+
+  return group;
+}
+
+
+function coverInternalSharedEdge(parent, first, second, fill, strokeWidth) {
+  const tolerance = 0.04;
+  const yStart = Math.max(first.y, second.y);
+  const yEnd = Math.min(first.y + first.height, second.y + second.height);
+  const xStart = Math.max(first.x, second.x);
+  const xEnd = Math.min(first.x + first.width, second.x + second.width);
+  const cover = Math.max(Number(strokeWidth || 1) * 1.5, 0.04);
+
+  if (Math.abs(first.x + first.width - second.x) < tolerance && yEnd > yStart) {
+    add(parent, "line", {
+      x1: first.x + first.width,
+      y1: yStart,
+      x2: first.x + first.width,
+      y2: yEnd,
+      stroke: fill,
+      "stroke-width": cover
+    });
+  }
+
+  if (Math.abs(second.x + second.width - first.x) < tolerance && yEnd > yStart) {
+    add(parent, "line", {
+      x1: first.x,
+      y1: yStart,
+      x2: first.x,
+      y2: yEnd,
+      stroke: fill,
+      "stroke-width": cover
+    });
+  }
+
+  if (Math.abs(first.y + first.height - second.y) < tolerance && xEnd > xStart) {
+    add(parent, "line", {
+      x1: xStart,
+      y1: first.y + first.height,
+      x2: xEnd,
+      y2: first.y + first.height,
+      stroke: fill,
+      "stroke-width": cover
+    });
+  }
+
+  if (Math.abs(second.y + second.height - first.y) < tolerance && xEnd > xStart) {
+    add(parent, "line", {
+      x1: xStart,
+      y1: first.y,
+      x2: xEnd,
+      y2: first.y,
+      stroke: fill,
+      "stroke-width": cover
+    });
+  }
 }
 
 
@@ -578,18 +813,18 @@ function addPattern(defs, base) {
 
 
 function drawRoomLabel(svg, room, unit, base, buyer = false) {
-  const cx = room.x + room.width / 2;
-  const cy = room.y + room.height / 2;
-  const shortest = Math.min(room.width, room.height);
+  const bounds = roomBounds(room);
+  const anchor = roomLabelAnchor(room);
+  const shortest = Math.min(bounds.width, bounds.height);
   const nameSize = clamp(shortest * 0.10, base * 1.30, base * 2.10);
   const dimSize = Math.max(base * 1.10, nameSize * 0.68);
 
-  text(svg, cx, cy - nameSize * 0.18, room.name, nameSize, 700, "#000000");
+  text(svg, anchor.x, anchor.y - nameSize * 0.18, room.name, nameSize, 700, "#000000");
   text(
     svg,
-    cx,
-    cy + nameSize * 0.72,
-    `${formatDimension(room.width, unit)} × ${formatDimension(room.height, unit)}`,
+    anchor.x,
+    anchor.y + nameSize * 0.72,
+    formatRoomDimension(room, unit),
     dimSize,
     500,
     buyer ? "#111111" : "#111111"
@@ -973,25 +1208,44 @@ function sharedWall(a, b) {
 
 
 function drawExteriorWindows(svg, room, buildable, base) {
-  const walls = exteriorWalls(room, buildable);
-  if (!walls.length) return;
-
-  const wall = walls[0];
+  const tolerance = 0.04;
   const preferred = room.type === "living" ? 0.42 : isBathroom(room.type) ? 0.25 : 0.32;
 
+  const candidates = roomParts(room).flatMap(part => {
+    const items = [];
+    if (Math.abs(part.y - buildable.y) < tolerance) {
+      items.push({ wall: "north", part, length: part.width });
+    }
+    if (Math.abs(part.y + part.height - (buildable.y + buildable.height)) < tolerance) {
+      items.push({ wall: "south", part, length: part.width });
+    }
+    if (Math.abs(part.x - buildable.x) < tolerance) {
+      items.push({ wall: "west", part, length: part.height });
+    }
+    if (Math.abs(part.x + part.width - (buildable.x + buildable.width)) < tolerance) {
+      items.push({ wall: "east", part, length: part.height });
+    }
+    return items;
+  }).sort((a, b) => b.length - a.length);
+
+  const candidate = candidates[0];
+  if (!candidate) return;
+
+  const { wall, part } = candidate;
+
   if (wall === "north" || wall === "south") {
-    const length = Math.min(room.width * preferred, room.width - base * 3.5);
+    const length = Math.min(part.width * preferred, part.width - base * 3.5);
     if (length <= base * 1.8) return;
-    const cx = room.x + room.width / 2;
-    const y = wall === "north" ? room.y : room.y + room.height;
+    const cx = part.x + part.width / 2;
+    const y = wall === "north" ? part.y : part.y + part.height;
     drawWindowHorizontal(svg, cx, y, length, base);
     return;
   }
 
-  const length = Math.min(room.height * preferred, room.height - base * 3.5);
+  const length = Math.min(part.height * preferred, part.height - base * 3.5);
   if (length <= base * 1.8) return;
-  const cy = room.y + room.height / 2;
-  const x = wall === "west" ? room.x : room.x + room.width;
+  const cy = part.y + part.height / 2;
+  const x = wall === "west" ? part.x : part.x + part.width;
   drawWindowVertical(svg, x, cy, length, base);
 }
 
@@ -1064,10 +1318,12 @@ function exteriorWalls(room, buildable) {
   const tolerance = 0.04;
   const walls = [];
 
-  if (Math.abs(room.y - buildable.y) < tolerance) walls.push("north");
-  if (Math.abs(room.x - buildable.x) < tolerance) walls.push("west");
-  if (Math.abs(room.x + room.width - (buildable.x + buildable.width)) < tolerance) walls.push("east");
-  if (Math.abs(room.y + room.height - (buildable.y + buildable.height)) < tolerance) walls.push("south");
+  roomParts(room).forEach(part => {
+    if (Math.abs(part.y - buildable.y) < tolerance && !walls.includes("north")) walls.push("north");
+    if (Math.abs(part.x - buildable.x) < tolerance && !walls.includes("west")) walls.push("west");
+    if (Math.abs(part.x + part.width - (buildable.x + buildable.width)) < tolerance && !walls.includes("east")) walls.push("east");
+    if (Math.abs(part.y + part.height - (buildable.y + buildable.height)) < tolerance && !walls.includes("south")) walls.push("south");
+  });
 
   return walls;
 }
