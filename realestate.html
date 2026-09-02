@@ -2629,6 +2629,103 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         };
       }
 
+      function buildTestedCompactTradeoffs(requirements) {
+        const basePreferences = requirements?.preferences || {};
+        const baseScales = basePreferences.roomScales || {};
+        const options = [];
+
+        const testOption = ({
+          id,
+          label,
+          impact,
+          recommended = false,
+          preferencePatch = {},
+          roomScalePatch = {}
+        }) => {
+          const optionRequirements = structuredClone(requirements);
+          optionRequirements.preferences = {
+            ...basePreferences,
+            ...preferencePatch,
+            roomScales: {
+              ...baseScales,
+              ...roomScalePatch
+            }
+          };
+
+          const optionLayout = generateLayout(optionRequirements);
+
+          options.push({
+            id,
+            label,
+            impact,
+            recommended,
+            success: Boolean(optionLayout?.success),
+            feasibility:
+              optionLayout?.feasibility?.status ||
+              (optionLayout?.success ? "feasible" : "infeasible"),
+            reason: optionLayout?.reason || null,
+            adaptations: Array.isArray(optionLayout?.adaptations)
+              ? optionLayout.adaptations
+              : [],
+            requirements_patch: {
+              preferences: {
+                ...preferencePatch,
+                ...(Object.keys(roomScalePatch).length
+                  ? { roomScales: roomScalePatch }
+                  : {})
+              }
+            }
+          });
+        };
+
+        /*
+          These are not guesses shown to the user.
+          Every option is run through the SAME deterministic planner first.
+          Only options with success=true are later presented as validated choices.
+        */
+        testOption({
+          id: "remove_family_lounge",
+          label: "Remove the separate family lounge",
+          impact: "Keeps the bedrooms and main living spaces closer to their normal sizes.",
+          recommended: true,
+          preferencePatch: {
+            familyLounge: false
+          }
+        });
+
+        testOption({
+          id: "keep_lounge_compact_bedrooms",
+          label: "Keep the family lounge and use compact bedrooms",
+          impact: "Preserves the extra family space by reducing bedroom proportions.",
+          preferencePatch: {
+            familyLounge: true
+          },
+          roomScalePatch: {
+            masterBedroom: 0.84,
+            bedroom: 0.82
+          }
+        });
+
+        testOption({
+          id: "compact_core_no_utility",
+          label: "Use a compact 3BHK core without a separate utility",
+          impact: "Keeps the essential 3BHK program while integrating utility functions with the kitchen.",
+          preferencePatch: {
+            familyLounge: false,
+            utility: false
+          },
+          roomScalePatch: {
+            masterBedroom: 0.88,
+            bedroom: 0.86,
+            living: 0.92,
+            dining: 0.90,
+            kitchen: 0.92
+          }
+        });
+
+        return options;
+      }
+
       function plannerContextFromLayout(layout, requirements) {
         const roomRows = Array.isArray(layout?.rooms)
           ? layout.rooms
@@ -2674,6 +2771,7 @@ Click “Render Concept 1” to generate the technical blueprint.`;
           statistics: layout?.statistics || null,
           placement_strategy: layout?.placementStrategy || null,
           adaptations: Array.isArray(layout?.adaptations) ? layout.adaptations : [],
+          tradeoffs: Array.isArray(layout?.tradeoffs) ? layout.tradeoffs : [],
           rooms: roomRows,
           failed_rooms: failedRooms
         };
@@ -2782,7 +2880,21 @@ ${JSON.stringify(plannerContext, null, 2)}`;
         const requirements = buildConstraintPlannerRequirements();
         console.log("Preflight planner requirements:", requirements);
 
-        const candidate = generateLayout(requirements);
+        let candidate = generateLayout(requirements);
+
+        /*
+          If the requested/default program fails, test a small set of meaningful
+          architectural compromises BEFORE OpenAI talks about them. OpenAI only
+          receives options that the deterministic planner has actually checked.
+        */
+        if (!candidate?.success) {
+          const testedTradeoffs = buildTestedCompactTradeoffs(requirements);
+          candidate = {
+            ...(candidate || {}),
+            tradeoffs: testedTradeoffs
+          };
+        }
+
         console.log("Preflight planner result:", candidate);
 
         validatedConstraintRequirements = structuredClone(requirements);
@@ -3355,6 +3467,34 @@ ${JSON.stringify(plannerContext, null, 2)}`;
           /\bbedrooms?\b/i,
           "bedroom"
         );
+
+        /*
+          If the user accepts a generic "make it more compact" suggestion
+          without naming a particular room, choose the least disruptive
+          compact profile: remove auto-added optional lounge/utility spaces
+          and modestly tighten room targets. Explicit named-room instructions
+          above still win because this branch only runs for a generic request.
+        */
+        const latestUserText =
+          String(userTexts[userTexts.length - 1] || "");
+
+        const genericCompactRequest =
+          /\b(?:more\s+compact|compact\s+(?:plan|layout|one)|make\s+(?:it|the\s+plan)\s+compact|try\s+(?:a\s+)?compact)\b/i
+            .test(latestUserText);
+
+        const namesSpecificSpace =
+          /\b(?:family\s*(?:lounge|room)|utility|bedrooms?|master|living|dining|kitchen|bath|toilet)\b/i
+            .test(latestUserText);
+
+        if (genericCompactRequest && !namesSpecificSpace) {
+          preferences.familyLounge = false;
+          preferences.utility = false;
+          preferences.roomScales.masterBedroom = 0.88;
+          preferences.roomScales.bedroom = 0.86;
+          preferences.roomScales.living = 0.92;
+          preferences.roomScales.dining = 0.90;
+          preferences.roomScales.kitchen = 0.92;
+        }
 
         /*
           High-value layout directives that the deterministic
