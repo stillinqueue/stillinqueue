@@ -404,6 +404,10 @@ class RealEstateChatRequest(BaseModel):
     message: str
     state: Optional[dict[str, Any]] = None
     history: Optional[list[dict[str, Any]]] = None
+    # Authoritative result from the deterministic browser-side layout planner.
+    # None on the first intent-extraction call; populated on the second
+    # feasibility/explanation call.
+    planner_context: Optional[dict[str, Any]] = None
 
 
 class RealEstateChatResponse(BaseModel):
@@ -1376,6 +1380,38 @@ IMPORTANT BEHAVIOUR
     one useful question if needed -> reach a shared decision -> emit complete structured
     intent -> let deterministic geometry validate it -> if geometry fails, explain why
     and negotiate the nearest practical alternative.
+
+43. DETERMINISTIC PLANNER AUTHORITY
+    request_context may contain a "planner_context" object. When it is present, the
+    application's deterministic geometry engine has ALREADY evaluated the requirements.
+    Treat planner_context as authoritative for geometry and feasibility.
+
+    When planner_context is present:
+    - Never contradict planner_context.success, planner_context.feasibility, its room
+      geometry, failed_rooms, buildable_area, adaptations, statistics, or placement result.
+    - Never invent replacement room dimensions or claim that another arrangement fits.
+    - This is the second stage of the SAME user turn. Preserve current_state exactly except
+      for harmless schema normalization. Do not introduce new requirements, bathroom counts,
+      parking counts, room sizes, preferences, constraints, operations, or directives.
+    - Your job in this stage is only to explain deterministic facts clearly to the user.
+
+    If planner_context.success is true:
+    - concept_ready=true and proposal_ready=true.
+    - proposal MUST be null. The frontend displays the exact deterministic room program.
+    - Briefly explain that the planner found a valid candidate.
+    - If feasibility is tight or adaptations were required, explain the meaningful
+      compromises without inventing geometry.
+    - Tell the user they may review and accept the validated proposal.
+
+    If planner_context.success is false:
+    - concept_ready remains true when the minimum brief is complete.
+    - proposal_ready=false and proposal MUST be null.
+    - Clearly explain that the current brief could not be placed by the deterministic
+      planner and mention the most useful reason/failed rooms when available.
+    - Offer practical trade-offs such as a more compact social zone, fewer optional rooms,
+      fewer bathrooms, another floor if floors are not locked, or another user-approved
+      change. Do not claim any alternative will fit until the planner checks it later.
+    - Never tell the user to accept or render a failed candidate.
 """.strip()
 
 
@@ -1683,6 +1719,8 @@ def realestate_chat(payload: RealEstateChatRequest) -> RealEstateChatResponse:
         "current_state": current_state,
         "recent_history": history,
         "latest_user_message": message,
+        # None during intent extraction; authoritative on the second planner-feedback call.
+        "planner_context": payload.planner_context,
     }
 
     client = get_openai_client()
@@ -1738,8 +1776,35 @@ def realestate_chat(payload: RealEstateChatRequest) -> RealEstateChatResponse:
     if not isinstance(missing_fields, list):
         missing_fields = []
 
+    planner_context = payload.planner_context if isinstance(payload.planner_context, dict) else None
+
     proposal = result.get("proposal")
-    if bool(result.get("proposal_ready")) and proposal is not None:
+
+    if planner_context is not None:
+        # Geometry has already run. The model may explain the result, but it must not
+        # replace the deterministic candidate with a second AI-generated space program.
+        proposal = None
+        result["proposal"] = None
+        result["proposal_ready"] = bool(planner_context.get("success"))
+
+        # This is an explanation pass for the same turn. State from the first pass is the
+        # authoritative interpreted brief; do not let the explanation call mutate it.
+        state = current_state
+        result["state"] = state
+
+        minimum_ready = bool(
+            (state.get("plot") or {}).get("width")
+            and (state.get("plot") or {}).get("depth")
+            and (state.get("plot") or {}).get("unit")
+            and state.get("bedrooms")
+            and state.get("facing")
+            and state.get("floors")
+        )
+        result["concept_ready"] = minimum_ready
+        missing_fields = [] if minimum_ready else missing_fields
+    elif bool(result.get("proposal_ready")) and proposal is not None:
+        # First pass only: keep legacy proposal stabilization for compatibility. The
+        # frontend will run the deterministic planner before enabling acceptance.
         proposal = _stabilize_initial_proposal(proposal, state, message, history)
 
     reply = str(result.get("reply") or "").strip()
@@ -1747,11 +1812,15 @@ def realestate_chat(payload: RealEstateChatRequest) -> RealEstateChatResponse:
     if not reply and isinstance(pending_decision, dict):
         reply = str(pending_decision.get("question") or "").strip()
 
-    # In initial proposal mode the frontend appends the structured proposal itself.
-    # Keep the conversational sentence concise so model-generated room schedules do not
-    # fight with the deterministic baseline schedule.
-    if bool(result.get("proposal_ready")) and proposal is not None and not state.get("current_layout_summary"):
-        reply = "Your brief is complete. I’ve prepared a consistent first concept for review; tell me what you’d like changed, or accept it to continue."
+    # Only the first interpretation pass receives this legacy concise proposal message.
+    # During planner feedback, preserve the model's explanation of the actual geometry.
+    if (
+        planner_context is None
+        and bool(result.get("proposal_ready"))
+        and proposal is not None
+        and not state.get("current_layout_summary")
+    ):
+        reply = "Your brief is complete. I’ve interpreted the requirements. I’ll validate them with the deterministic layout planner before you can accept the concept."
 
     return RealEstateChatResponse(
         reply=reply,
