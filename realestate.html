@@ -806,7 +806,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "ai-native-chat-v24";
+      const REAL_ESTATE_VERSION = "ai-planner-authoritative-v25";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -888,6 +888,15 @@
       let committedAiState = null;
       let pendingAiStateBase = null;
       let committedConstraintLayout = null;
+
+      // Candidate geometry produced by the deterministic planner BEFORE
+      // the user is allowed to accept the proposal.
+      //
+      // validatedConstraintLayout = proposed/validated but not committed
+      // committedConstraintLayout = last successfully rendered concept
+      let validatedConstraintLayout = null;
+      let validatedConstraintRequirements = null;
+
       let aiProposal = null;
 
       const layoutState = {
@@ -993,7 +1002,14 @@
         );
 
         if (btnAcceptProposal) {
-          btnAcceptProposal.disabled = hasCommittedConcept || !layoutState.proposalReady || layoutState.proposalAccepted;
+          const hasValidatedCandidate = Boolean(validatedConstraintLayout?.success);
+
+          btnAcceptProposal.disabled =
+            hasCommittedConcept ||
+            !layoutState.proposalReady ||
+            !hasValidatedCandidate ||
+            layoutState.proposalAccepted;
+
           btnAcceptProposal.textContent = hasCommittedConcept
             ? "Concept Accepted"
             : (layoutState.proposalAccepted ? "Proposal Accepted" : "Accept Proposal");
@@ -1155,8 +1171,9 @@
         const s = defaultSetbacksFt(plotW, plotD);
         const sizes = preferredRoomSizes(layoutState.bedrooms);
 
-        const buildW = Math.max(24, plotW - s.left - s.right);
-        const buildD = Math.max(30, plotD - s.front - s.rear);
+        // Plot + setbacks are hard physical constraints. Never invent extra land.
+        const buildW = Math.max(0, plotW - s.left - s.right);
+        const buildD = Math.max(0, plotD - s.front - s.rear);
 
         // A practical 3-zone concept:
         // Front = arrival/living/guest bedroom
@@ -1239,26 +1256,35 @@ Click “Accept Proposal” to generate the architectural layout, or describe ch
       }
 
       function acceptProposal() {
-        if (!layoutState.proposalReady) return;
+        if (!layoutState.proposalReady || !validatedConstraintLayout?.success) {
+          addMessage(
+            "assistant",
+            "This proposal has not passed the deterministic geometry check yet, so it cannot be accepted."
+          );
+          updateLayoutButtons();
+          return;
+        }
 
-        // Always rebuild from the latest AI proposal/state.
         draftPlan = null;
         layoutState.proposalAccepted = true;
         layoutState.rendered = false;
         layoutState.confirmed = false;
         updateLayoutButtons();
 
-        addMessage("assistant",
+        addMessage(
+          "assistant",
 `Proposal accepted.
 
-The OpenAI requirement state and proposal are now locked as the source for this concept.
+The deterministic planner has already validated this exact geometry.
 
 Click “Render Concept 1” to generate:
 • Engineer Drawing
 • Buyer Plan
 
-The 3D Preview will use the same geometry in the next stage.`);
-        setStatus(`Proposal accepted ✅ Render Concept 1 is now enabled. <span style="opacity:.65;">${REAL_ESTATE_VERSION}</span>`);
+The render step will use the SAME validated room geometry; it will not generate a different plan.`
+        );
+
+        setStatus(`Planner-validated proposal accepted ✅ Render Concept 1 is now enabled. <span style="opacity:.65;">${REAL_ESTATE_VERSION}</span>`);
       }
 
       function userAcceptedProposal(text) {
@@ -1482,6 +1508,10 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         }
 
         if (requirementsChanged) {
+          // Any uncommitted validated candidate belongs to the previous brief.
+          validatedConstraintLayout = null;
+          validatedConstraintRequirements = null;
+
           draftPlan = null;
           layoutState.confirmed = false;
           isConfirmed = false;
@@ -1540,8 +1570,9 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         copySize(preferred.attachedBath, findSpace("attached bath", "master bath"));
         copySize(preferred.commonBath, findSpace("common bath", "bathroom"));
 
-        const buildW = Math.max(24, plotW - setbacks.left - setbacks.right);
-        const buildD = Math.max(30, plotD - setbacks.front - setbacks.rear);
+        // Never enlarge the physical site envelope.
+        const buildW = Math.max(0, plotW - setbacks.left - setbacks.right);
+        const buildD = Math.max(0, plotD - setbacks.front - setbacks.rear);
         const frontBand = clamp(buildD * 0.30, 14, 20);
         const middleBand = clamp(buildD * 0.27, 12, 18);
         const rearBand = Math.max(14, buildD - frontBand - middleBand);
@@ -2194,8 +2225,9 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         const s = p.setbacks || defaultSetbacksFt(plotWft, plotDft);
         const bx = Number(s.left || 0);
         const by = Number(s.front || 0);
-        const bw = Math.max(20, plotWft - Number(s.left || 0) - Number(s.right || 0));
-        const bd = Math.max(24, plotDft - Number(s.front || 0) - Number(s.rear || 0));
+        // Plot + setbacks are hard boundaries. Never manufacture extra width/depth.
+        const bw = Math.max(0, plotWft - Number(s.left || 0) - Number(s.right || 0));
+        const bd = Math.max(0, plotDft - Number(s.front || 0) - Number(s.rear || 0));
 
         const gap = 0.35;
         const circulation = clamp(
@@ -2597,6 +2629,196 @@ Click “Render Concept 1” to generate the technical blueprint.`;
         };
       }
 
+      function plannerContextFromLayout(layout, requirements) {
+        const roomRows = Array.isArray(layout?.rooms)
+          ? layout.rooms
+              .filter(room => !room?.isSiteFeature)
+              .map(room => ({
+                id: room.id || null,
+                name: room.name || room.id || "Room",
+                type: room.type || null,
+                width: Number(room.width || 0),
+                depth: Number(room.height || 0),
+                area: Number(
+                  room.area ||
+                  (Number(room.width || 0) * Number(room.height || 0))
+                )
+              }))
+          : [];
+
+        const failedRooms = Array.isArray(layout?.failedRooms)
+          ? layout.failedRooms.map(room => ({
+              id: room.id || null,
+              name: room.name || room.id || "Room"
+            }))
+          : [];
+
+        return {
+          source: "deterministic_constraint_planner",
+          success: Boolean(layout?.success),
+          reason: layout?.reason || null,
+          feasibility: layout?.feasibility?.status || (layout?.success ? "feasible" : "infeasible"),
+          country: layout?.country || requirements?.country || null,
+          unit: layout?.unit || requirements?.plot?.unit || null,
+          plot: requirements?.plot || null,
+          setbacks: requirements?.setbacks || null,
+          buildable_area: layout?.buildableArea
+            ? {
+                x: Number(layout.buildableArea.x || 0),
+                y: Number(layout.buildableArea.y || 0),
+                width: Number(layout.buildableArea.width || 0),
+                depth: Number(layout.buildableArea.height || 0),
+                area: Number(layout.buildableArea.area || 0)
+              }
+            : null,
+          statistics: layout?.statistics || null,
+          placement_strategy: layout?.placementStrategy || null,
+          adaptations: Array.isArray(layout?.adaptations) ? layout.adaptations : [],
+          rooms: roomRows,
+          failed_rooms: failedRooms
+        };
+      }
+
+      function plannerProposalText(layout) {
+        if (!layout?.success) return "";
+
+        const unit = String(layout.unit || layoutState.plot.unit || "ft");
+        const areaUnit = unit.toLowerCase() === "m" ? "sq.m" : "sq.ft";
+
+        const roomLines = (layout.rooms || [])
+          .filter(room => !room?.isSiteFeature)
+          .map(room => {
+            const width = round1(Number(room.width || 0));
+            const depth = round1(Number(room.height || 0));
+            const area = round1(
+              Number(room.area || (Number(room.width || 0) * Number(room.height || 0)))
+            );
+            return `• ${room.name || room.id} — ${width} × ${depth} ${unit} · ${area} ${areaUnit}`;
+          });
+
+        const adaptationLines = (Array.isArray(layout.adaptations) ? layout.adaptations : [])
+          .map(item => {
+            if (typeof item === "string") return `• ${item}`;
+            const room = item?.room ? `${item.room}: ` : "";
+            const reason = item?.reason || item?.message || item?.type || "planner adaptation";
+            return `• ${room}${reason}`;
+          });
+
+        const buildable = layout.buildableArea || {};
+        const feasibility = layout.feasibility?.status || "feasible";
+
+        let output = `VALIDATED SPACE PROGRAM
+
+Feasibility: ${feasibility}
+
+Buildable footprint:
+${round1(Number(buildable.width || 0))} × ${round1(Number(buildable.height || 0))} ${unit}
+
+Actual rooms from the deterministic planner:
+${roomLines.join("\n")}`;
+
+        if (adaptationLines.length) {
+          output += `\n\nPlanner adaptations:\n${adaptationLines.join("\n")}`;
+        }
+
+        output += "\n\nThis is the exact geometry that will be rendered after you accept the proposal.";
+        return output;
+      }
+
+      async function requestPlannerExplanation({
+        userText,
+        historyForApi,
+        interpretedState,
+        candidateLayout,
+        requirements
+      }) {
+        const plannerContext = plannerContextFromLayout(candidateLayout, requirements);
+
+        /*
+          Backward-compatible bridge:
+          - planner_context is sent for backends that support it.
+          - the same authoritative result is also embedded in the second-stage
+            message so the currently deployed backend can already explain it.
+          - we never accept state mutations from this explanation call.
+        */
+        const explanationMessage =
+`PLANNER VALIDATION RESULT — AUTHORITATIVE APPLICATION DATA
+
+The deterministic geometry engine has already checked the user's brief.
+Explain this result clearly to the user. Do not invent new geometry, do not claim
+a failed layout fits, and do not change the requirements. Suggest trade-offs only
+when the result is infeasible.
+
+Original user request:
+${userText}
+
+Planner result JSON:
+${JSON.stringify(plannerContext, null, 2)}`;
+
+        const response = await fetch(CHAT_API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: explanationMessage,
+            state: interpretedState,
+            history: historyForApi,
+            planner_context: plannerContext
+          })
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const detail = data?.detail || data?.error || `Planner explanation failed (HTTP ${response.status})`;
+          throw new Error(detail);
+        }
+        return data;
+      }
+
+      async function preflightPlannerForCurrentState({
+        userText,
+        historyForApi,
+        interpretedState
+      }) {
+        const requirements = buildConstraintPlannerRequirements();
+        console.log("Preflight planner requirements:", requirements);
+
+        const candidate = generateLayout(requirements);
+        console.log("Preflight planner result:", candidate);
+
+        validatedConstraintRequirements = structuredClone(requirements);
+        validatedConstraintLayout = candidate?.success ? structuredClone(candidate) : null;
+
+        // OpenAI-proposed room dimensions are no longer authoritative.
+        aiProposal = null;
+        layoutState.proposalAccepted = false;
+        layoutState.rendered = false;
+        layoutState.confirmed = false;
+
+        if (candidate?.success) {
+          layoutState.proposalReady = true;
+          layoutState.proposal = {
+            source: "constraint-planner",
+            feasibility: candidate.feasibility?.status || "feasible",
+            placementStrategy: candidate.placementStrategy || null
+          };
+        } else {
+          layoutState.proposalReady = false;
+          layoutState.proposal = null;
+        }
+
+        updateLayoutButtons();
+
+        const explanation = await requestPlannerExplanation({
+          userText,
+          historyForApi,
+          interpretedState,
+          candidateLayout: candidate,
+          requirements
+        });
+
+        return { candidate, requirements, explanation };
+      }
+
       async function sendChat() {
         const text = (chatInput.value || "").trim();
         if (!text) return;
@@ -2661,6 +2883,10 @@ Click “Render Concept 1” to generate the technical blueprint.`;
             throw new Error(detail);
           }
 
+          /*
+            STEP 1 — OpenAI understands the user's natural-language brief.
+            Its room dimensions are NOT authoritative.
+          */
           syncLayoutStateFromAI(data.state, data.proposal);
 
           const nextCountry =
@@ -2672,75 +2898,105 @@ Click “Render Concept 1” to generate the technical blueprint.`;
               ).toLowerCase()
             );
 
+          let reply = String(data.reply || "Okay.").trim();
+
           /*
-            IMPORTANT:
-            The assistant message shown to the user must come from
-            OpenAI. Do NOT replace it with a locally hard-coded
-            "Updated concept" template.
-
-            Local deterministic parsing still runs separately and
-            changes planner requirements such as:
-            - room-size changes
-            - dining below family lounge
-            - direct common-toilet access
-            - passage / bedroom-entry changes
-            - country profile selection
-
-            But the conversational response remains the model's own
-            response from data.reply.
+            Existing committed concepts stay transactional: user edits are
+            validated on Render Revision and roll back if they fail.
           */
-          let reply =
-            String(
-              data.reply ||
-              "Okay."
-            ).trim();
+          if (committedConstraintLayout?.success) {
+            addMessage("assistant", reply);
 
-          if (
-            data.proposal_ready &&
-            data.proposal
-          ) {
-            const proposalText =
-              aiProposalText();
+            const pendingCount = Array.isArray(aiState?.layout_operations)
+              ? aiState.layout_operations.length
+              : 0;
 
-            /*
-              Avoid duplicating the proposal when the backend/model
-              already included it in data.reply.
-            */
-            if (
-              proposalText &&
-              !reply.includes(
-                proposalText
-              )
-            ) {
-              reply +=
-                "\n\n" +
-                proposalText;
-            }
-          }
-
-          addMessage(
-            "assistant",
-            reply
-          );
-
-          if (!data.concept_ready) {
-            const missing = Array.isArray(data.missing_fields) ? data.missing_fields : [];
-            setStatus(
-              missing.length
-                ? `OpenAI · still needed: <strong>${missing.join(", ")}</strong>.`
-                : "OpenAI · requirements are still being refined."
-            );
-          } else if (committedConstraintLayout?.success) {
-            const pendingCount = Array.isArray(aiState?.layout_operations) ? aiState.layout_operations.length : 0;
             setStatus(
               pendingCount
                 ? `Design change ready ✅ ${pendingCount} pending architect operation${pendingCount === 1 ? "" : "s"}. Click <strong>Render Revision</strong>.`
                 : "Current concept remains valid ✅ Continue refining or re-render the current design."
             );
-          } else if (data.proposal_ready && !layoutState.proposalAccepted) {
-            setStatus("Updated OpenAI proposal ready ✅ Review the revised requirements, accept the proposal, then render the new layout.");
+          } else if (data.concept_ready) {
+            /*
+              STEP 2 — deterministic planner decides whether the brief fits.
+            */
+            setStatus("Requirements understood. Checking physical feasibility with the deterministic planner...");
+
+            const preflight = await preflightPlannerForCurrentState({
+              userText: text,
+              historyForApi,
+              interpretedState: data.state
+            });
+
+            /*
+              STEP 3 — send the deterministic result back to OpenAI so it can
+              explain feasibility/trade-offs without controlling geometry.
+            */
+            const plannerExplanation = preflight.explanation || {};
+
+            // Explanation call is read-only. The state from the first OpenAI
+            // interpretation call remains authoritative for requirements.
+            reply = String(
+              plannerExplanation.reply ||
+              reply ||
+              "The deterministic planner has checked the request."
+            ).trim();
+
+            if (preflight.candidate?.success) {
+              const exactProposal = plannerProposalText(preflight.candidate);
+              if (exactProposal && !reply.includes(exactProposal)) {
+                reply += "\n\n" + exactProposal;
+              }
+
+              addMessage("assistant", reply);
+              setStatus(
+                `Planner-validated proposal ready ✅ Feasibility: <strong>${
+                  preflight.candidate.feasibility?.status || "feasible"
+                }</strong>. Review it, then click <strong>Accept Proposal</strong>.`
+              );
+            } else {
+              const feasibilityStatus =
+                preflight.candidate?.feasibility?.status || "infeasible";
+
+              const failedNames = Array.isArray(preflight.candidate?.failedRooms)
+                ? preflight.candidate.failedRooms
+                    .map(room => room.name || room.id)
+                    .filter(Boolean)
+                    .join(", ")
+                : "";
+
+              layoutState.proposalReady = false;
+              layoutState.proposalAccepted = false;
+              layoutState.proposal = null;
+              validatedConstraintLayout = null;
+
+              addMessage("assistant", reply);
+              setStatus(
+                `Planner says <strong>${feasibilityStatus}</strong>${
+                  failedNames ? ` · Could not place: ${failedNames}` : ""
+                }. Change the brief in chat to try another option.`
+              );
+            }
           } else {
-            setStatus("Requirements understood ✅ Continue refining or accept the proposal.");
+            // Minimum concept requirements are not complete yet.
+            aiProposal = null;
+            layoutState.proposalReady = false;
+            layoutState.proposalAccepted = false;
+            layoutState.proposal = null;
+            validatedConstraintLayout = null;
+            validatedConstraintRequirements = null;
+
+            addMessage("assistant", reply);
+
+            const missing = Array.isArray(data.missing_fields)
+              ? data.missing_fields
+              : [];
+
+            setStatus(
+              missing.length
+                ? `OpenAI · still needed: <strong>${missing.join(", ")}</strong>.`
+                : "OpenAI · requirements are still being refined."
+            );
           }
 
           renderInProgress =
@@ -3713,13 +3969,31 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
         startPredictableWait("Planning rooms");
 
         try {
-          const requirements = buildConstraintPlannerRequirements();
+          /*
+            For the first concept, render the exact candidate that was already
+            validated and accepted. Revisions keep the normal transactional flow.
+          */
+          const useValidatedInitialCandidate =
+            !committedConstraintLayout?.success &&
+            Boolean(validatedConstraintLayout?.success) &&
+            Boolean(validatedConstraintRequirements);
+
+          const requirements = useValidatedInitialCandidate
+            ? structuredClone(validatedConstraintRequirements)
+            : buildConstraintPlannerRequirements();
 
           console.log("Constraint planner requirements:", requirements);
 
-          const layout = generateLayout(requirements);
+          const layout = useValidatedInitialCandidate
+            ? structuredClone(validatedConstraintLayout)
+            : generateLayout(requirements);
 
-          console.log("Constraint planner result:", layout);
+          console.log(
+            useValidatedInitialCandidate
+              ? "Using already validated planner geometry:"
+              : "Constraint planner result:",
+            layout
+          );
 
           if (!layout.success) {
             // Transaction failed: restore the last valid AI/design state.
@@ -3838,6 +4112,11 @@ The requested change was not committed. The previous valid concept and its requi
             committedAiState = structuredClone(committed);
           }
           committedConstraintLayout = structuredClone(layout);
+
+          // Candidate is now the committed concept.
+          validatedConstraintLayout = null;
+          validatedConstraintRequirements = null;
+
           if (aiState) {
             aiState.current_layout_summary = {
               placement_strategy: layout.placementStrategy || null,
