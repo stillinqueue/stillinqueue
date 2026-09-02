@@ -532,7 +532,7 @@ export function renderLayoutLegend(layout, container) {
 function roomParts(room) {
   const explicit = room?.architecturalShape?.parts;
 
-  if (Array.isArray(explicit) && explicit.length) {
+  if (Array.isArray(explicit) && explicit.length > 1) {
     const parts = explicit
       .map(part => ({
         x: Number(part.x),
