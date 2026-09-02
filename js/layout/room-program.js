@@ -5,7 +5,7 @@ import {
 
 
 /*
-  Still In Queue · Room Program V17
+  Still In Queue · Room Program V18
   ---------------------------------
   A room program is not only a list of rectangular boxes.
 
@@ -111,10 +111,41 @@ function withPlanningIntent(room, {
 export function buildRoomProgram(requirements) {
   const rooms = [];
 
-  const bhk = Math.max(
-    1,
-    Number(requirements.house?.bhk || 1)
-  );
+  const dwellingType =
+    String(
+      requirements?.preferences?.dwellingType ||
+      requirements?.house?.dwellingType ||
+      "bhk"
+    ).toLowerCase();
+
+  const isStudio =
+    ["studio", "one-room", "one_room", "1-room", "1_room"].includes(
+      dwellingType
+    );
+
+  /*
+    IMPORTANT:
+    Studio is NOT 1BHK.
+
+    studio / 1-room apartment:
+      0 separate bedrooms
+      1 combined living/sleeping room
+      kitchen or kitchenette
+      1 common bathroom
+
+    1BHK:
+      1 separate bedroom
+      living
+      kitchen
+      bathroom
+  */
+  const bhk =
+    isStudio
+      ? 0
+      : Math.max(
+          1,
+          Number(requirements.house?.bhk ?? 1)
+        );
 
   const country = String(
     requirements.country || "india"
@@ -268,10 +299,15 @@ export function buildRoomProgram(requirements) {
   */
 
   const defaultBathroomPlan =
-    getDefaultBathroomPlan(
-      bhk,
-      country
-    );
+    isStudio
+      ? {
+          attachedBathrooms: 0,
+          commonBathrooms: 1
+        }
+      : getDefaultBathroomPlan(
+          bhk,
+          country
+        );
 
   let attachedBathroomCount =
     Number.isInteger(
@@ -313,7 +349,12 @@ export function buildRoomProgram(requirements) {
     withPlanningIntent(
       {
         id: "living",
-        name: "Living Room",
+        name:
+          isStudio
+            ? "Studio Living / Sleeping"
+            : preferences.combineLivingDining === true
+              ? "Living / Dining"
+              : "Living Room",
         type: "living",
 
         requiresCirculationAccess: true,
@@ -329,8 +370,12 @@ export function buildRoomProgram(requirements) {
         compactability: "moderate",
         mayMergeWith: ["dining", "foyer"],
         notes: [
-          "Preserve a usable public/social zone.",
-          "On compact sites the living room may become L-shaped or share an open-plan edge with dining."
+          isStudio
+            ? "This is the primary combined living/sleeping room; no separate bedroom is required."
+            : "Preserve a usable public/social zone.",
+          preferences.combineLivingDining === true
+            ? "Dining functionality is intentionally integrated into this room."
+            : "On compact sites the living room may become L-shaped or share an open-plan edge with dining."
         ]
       }
     )
@@ -372,6 +417,7 @@ export function buildRoomProgram(requirements) {
       that explicit request is then protected by the planner.
     */
     includeFamilyLounge =
+      !isStudio &&
       country === "india" &&
       bhk >= 3 &&
       !siteProfile.isCompact;
@@ -418,37 +464,42 @@ export function buildRoomProgram(requirements) {
     ---------------------------------------------------------
   */
 
+  if (
+    !isStudio &&
+    preferences.combineLivingDining !== true
+  ) {
   rooms.push(
-    withPlanningIntent(
-      {
-        id: "dining",
-        name: "Dining",
-        type: "dining",
-
-        preferredNear: [
-          "living",
-          "kitchen"
-        ],
-
-        requiresCirculationAccess: true,
-
-        ...withScale(
-          ROOM_DEFAULTS.dining,
-          "dining"
-        )
-      },
-      {
-        priority: "important",
-        shapePolicy: "mergeable",
-        compactability: "high",
-        mayMergeWith: ["living", "kitchen", "family-lounge"],
-        notes: [
-          "Separate dining is preferred when space permits.",
-          "On a compact site it may become part of an open-plan living/dining zone rather than a standalone rectangle."
-        ]
-      }
-    )
-  );
+      withPlanningIntent(
+        {
+          id: "dining",
+          name: "Dining",
+          type: "dining",
+  
+          preferredNear: [
+            "living",
+            "kitchen"
+          ],
+  
+          requiresCirculationAccess: true,
+  
+          ...withScale(
+            ROOM_DEFAULTS.dining,
+            "dining"
+          )
+        },
+        {
+          priority: "important",
+          shapePolicy: "mergeable",
+          compactability: "high",
+          mayMergeWith: ["living", "kitchen", "family-lounge"],
+          notes: [
+            "Separate dining is preferred when space permits.",
+            "On a compact site it may become part of an open-plan living/dining zone rather than a standalone rectangle."
+          ]
+        }
+      )
+    );
+  }
 
 
   /*
@@ -468,9 +519,11 @@ export function buildRoomProgram(requirements) {
           preferences.kitchenDirection ||
           null,
 
-        preferredNear: [
-          "dining"
-        ],
+        preferredNear:
+          isStudio ||
+          preferences.combineLivingDining === true
+            ? ["living"]
+            : ["dining"],
 
         requiresExteriorWall: true,
         requiresCirculationAccess: true,
@@ -672,10 +725,13 @@ export function buildRoomProgram(requirements) {
           requiresCirculationAccess: true,
           wetArea: true,
 
-          preferredNear: [
-            "bedroom-2",
-            "bedroom-3"
-          ],
+          preferredNear:
+            isStudio
+              ? ["living", "kitchen"]
+              : [
+                  "bedroom-2",
+                  "bedroom-3"
+                ],
 
           ...ROOM_DEFAULTS.commonToilet
         },
@@ -908,7 +964,18 @@ export function buildRoomProgram(requirements) {
     planner, but non-index metadata is attached for newer planning stages.
   */
   constrainedRooms.programIntent = {
-    version: "room-program-v17",
+    version: "room-program-v18",
+    dwellingType:
+      isStudio
+        ? "studio"
+        : "bhk",
+    separateBedroomCount:
+      bhk,
+    integratedLivingDining:
+      Boolean(
+        isStudio ||
+        preferences.combineLivingDining === true
+      ),
     siteProfile: {
       compact: siteProfile.isCompact,
       veryCompact: siteProfile.isVeryCompact,
