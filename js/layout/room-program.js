@@ -4,6 +4,110 @@ import {
 } from "./plan-schema.js";
 
 
+/*
+  Still In Queue · Room Program V17
+  ---------------------------------
+  A room program is not only a list of rectangular boxes.
+
+  Each room now carries architectural intent that the deterministic planner
+  can use when a site is tight:
+
+  - priority:
+      hard       -> preserve unless the user explicitly changes the brief
+      important  -> preserve before optional amenities
+      flexible   -> may be compacted/combined/replanned
+      optional   -> may be omitted when it was not explicitly requested
+
+  - shapePolicy:
+      rectangular -> keep a conventional rectangle when practical
+      orthogonal  -> may become L-shaped / stepped / notched
+      mergeable   -> may participate in a combined social zone
+
+  - compactability:
+      protected -> do not auto-compact below normal preferred dimensions
+      moderate  -> may be modestly compacted, never below configured minima
+      high      -> first candidate for compact-site reduction
+
+  These are planning hints only. Explicit user dimensions and hard room
+  constraints remain authoritative.
+*/
+
+
+function plotArea(requirements) {
+  const width = Number(requirements?.plot?.width || 0);
+  const height = Number(
+    requirements?.plot?.height ??
+    requirements?.plot?.depth ??
+    0
+  );
+
+  if (!(width > 0) || !(height > 0)) return null;
+  return width * height;
+}
+
+
+function compactSiteProfile(requirements, unit) {
+  const area = plotArea(requirements);
+  if (!(area > 0)) {
+    return {
+      isCompact: false,
+      isVeryCompact: false,
+      area: null
+    };
+  }
+
+  /*
+    These thresholds are concept-planning heuristics, NOT code/setback rules.
+    They only influence preference ordering and optional-space defaults.
+  */
+  const areaSqFt =
+    String(unit || "ft").toLowerCase() === "m"
+      ? area * 10.7639
+      : area;
+
+  return {
+    isCompact: areaSqFt <= 1400,
+    isVeryCompact: areaSqFt <= 1150,
+    area: areaSqFt
+  };
+}
+
+
+function withPlanningIntent(room, {
+  priority = "important",
+  shapePolicy = "rectangular",
+  compactability = "moderate",
+  mayMergeWith = [],
+  mayShareCirculation = true,
+  protectWhenExplicit = true,
+  notes = []
+} = {}) {
+  return {
+    ...room,
+    planningIntent: {
+      priority,
+      shapePolicy,
+      compactability,
+      mayMergeWith,
+      mayShareCirculation,
+      protectWhenExplicit,
+      notes
+    },
+
+    /*
+      Backward-compatible orthogonal geometry contract.
+      The current planner may still emit one rectangle, while later planning
+      stages/renderers can replace `parts` with multiple connected rectangles
+      to represent L-shaped or stepped rooms.
+    */
+    shapePolicy,
+    supportsCompoundShape:
+      shapePolicy === "orthogonal" ||
+      shapePolicy === "mergeable"
+  };
+}
+
+
 export function buildRoomProgram(requirements) {
   const rooms = [];
 
@@ -45,6 +149,12 @@ export function buildRoomProgram(requirements) {
           plotUnit === "m"
           ? 0.3048
           : 1;
+
+  const siteProfile =
+    compactSiteProfile(
+      requirements,
+      plotUnit
+    );
 
   const ROOM_DEFAULTS =
     Object.fromEntries(
@@ -199,15 +309,32 @@ export function buildRoomProgram(requirements) {
     ---------------------------------------------------------
   */
 
-  rooms.push({
-    id: "living",
-    name: "Living Room",
-    type: "living",
+  rooms.push(
+    withPlanningIntent(
+      {
+        id: "living",
+        name: "Living Room",
+        type: "living",
 
-    requiresCirculationAccess: true,
+        requiresCirculationAccess: true,
 
-    ...withScale(ROOM_DEFAULTS.living, "living")
-  });
+        ...withScale(
+          ROOM_DEFAULTS.living,
+          "living"
+        )
+      },
+      {
+        priority: "hard",
+        shapePolicy: "mergeable",
+        compactability: "moderate",
+        mayMergeWith: ["dining", "foyer"],
+        notes: [
+          "Preserve a usable public/social zone.",
+          "On compact sites the living room may become L-shaped or share an open-plan edge with dining."
+        ]
+      }
+    )
+  );
 
 
   /*
@@ -236,23 +363,52 @@ export function buildRoomProgram(requirements) {
     includeFamilyLounge =
       preferences.familyLounge;
   } else {
+    /*
+      A separate family lounge is a lifestyle preference, not a mandatory
+      component of every Indian 3BHK.
+
+      On compact/very compact plots, do not automatically consume floor area
+      with it. The user can still explicitly request familyLounge=true, and
+      that explicit request is then protected by the planner.
+    */
     includeFamilyLounge =
       country === "india" &&
-      bhk >= 3;
+      bhk >= 3 &&
+      !siteProfile.isCompact;
   }
 
   if (
     includeFamilyLounge
   ) {
-    rooms.push({
-      id: "family-lounge",
-      name: "Family Lounge",
-      type: "familyLounge",
+    rooms.push(
+      withPlanningIntent(
+        {
+          id: "family-lounge",
+          name: "Family Lounge",
+          type: "familyLounge",
 
-      requiresCirculationAccess: true,
+          requiresCirculationAccess: true,
 
-      ...withScale(ROOM_DEFAULTS.familyLounge, "familyLounge")
-    });
+          ...withScale(
+            ROOM_DEFAULTS.familyLounge,
+            "familyLounge"
+          )
+        },
+        {
+          priority:
+            preferences.familyLounge === true
+              ? "important"
+              : "optional",
+          shapePolicy: "mergeable",
+          compactability: "high",
+          mayMergeWith: ["living", "dining"],
+          notes: [
+            "Optional unless explicitly requested.",
+            "May share an open-plan/orthogonal social zone on compact sites."
+          ]
+        }
+      )
+    );
   }
 
 
@@ -262,20 +418,37 @@ export function buildRoomProgram(requirements) {
     ---------------------------------------------------------
   */
 
-  rooms.push({
-    id: "dining",
-    name: "Dining",
-    type: "dining",
+  rooms.push(
+    withPlanningIntent(
+      {
+        id: "dining",
+        name: "Dining",
+        type: "dining",
 
-    preferredNear: [
-      "living",
-      "kitchen"
-    ],
+        preferredNear: [
+          "living",
+          "kitchen"
+        ],
 
-    requiresCirculationAccess: true,
+        requiresCirculationAccess: true,
 
-    ...withScale(ROOM_DEFAULTS.dining, "dining")
-  });
+        ...withScale(
+          ROOM_DEFAULTS.dining,
+          "dining"
+        )
+      },
+      {
+        priority: "important",
+        shapePolicy: "mergeable",
+        compactability: "high",
+        mayMergeWith: ["living", "kitchen", "family-lounge"],
+        notes: [
+          "Separate dining is preferred when space permits.",
+          "On a compact site it may become part of an open-plan living/dining zone rather than a standalone rectangle."
+        ]
+      }
+    )
+  );
 
 
   /*
@@ -284,25 +457,42 @@ export function buildRoomProgram(requirements) {
     ---------------------------------------------------------
   */
 
-  rooms.push({
-    id: "kitchen",
-    name: "Kitchen",
-    type: "kitchen",
+  rooms.push(
+    withPlanningIntent(
+      {
+        id: "kitchen",
+        name: "Kitchen",
+        type: "kitchen",
 
-    preferredDirection:
-      preferences.kitchenDirection ||
-      null,
+        preferredDirection:
+          preferences.kitchenDirection ||
+          null,
 
-    preferredNear: [
-      "dining"
-    ],
+        preferredNear: [
+          "dining"
+        ],
 
-    requiresExteriorWall: true,
-    requiresCirculationAccess: true,
-    wetArea: true,
+        requiresExteriorWall: true,
+        requiresCirculationAccess: true,
+        wetArea: true,
 
-    ...withScale(ROOM_DEFAULTS.kitchen, "kitchen")
-  });
+        ...withScale(
+          ROOM_DEFAULTS.kitchen,
+          "kitchen"
+        )
+      },
+      {
+        priority: "hard",
+        shapePolicy: "orthogonal",
+        compactability: "moderate",
+        mayMergeWith: ["dining"],
+        notes: [
+          "Preserve practical worktop depth and access.",
+          "May use a stepped/open-kitchen edge where that improves circulation."
+        ]
+      }
+    )
+  );
 
 
   /*
@@ -319,46 +509,65 @@ export function buildRoomProgram(requirements) {
     const isMaster =
       i === 1;
 
-    rooms.push({
-      id:
-        `bedroom-${i}`,
+    rooms.push(
+      withPlanningIntent(
+        {
+          id:
+            `bedroom-${i}`,
 
-      name:
-        isMaster
-          ? "Master Bedroom"
-          : `Bedroom ${i}`,
+          name:
+            isMaster
+              ? "Master Bedroom"
+              : `Bedroom ${i}`,
 
-      type:
-        isMaster
-          ? "masterBedroom"
-          : "bedroom",
+          type:
+            isMaster
+              ? "masterBedroom"
+              : "bedroom",
 
-      preferredDirection:
-        isMaster
-          ? (
-              preferences
-                .masterBedroomDirection ||
-              null
-            )
-          : null,
+          preferredDirection:
+            isMaster
+              ? (
+                  preferences
+                    .masterBedroomDirection ||
+                  null
+                )
+              : null,
 
-      requiresExteriorWall: true,
-      requiresCirculationAccess: true,
+          requiresExteriorWall: true,
+          requiresCirculationAccess: true,
 
-      ...withScale(
-        ROOM_DEFAULTS[
-          isMaster
-            ? "masterBedroom"
-            : "bedroom"
-        ],
-        isMaster
-          ? "masterBedroom"
-          : `bedroom${i}`,
-        isMaster
-          ? null
-          : "bedroom"
+          ...withScale(
+            ROOM_DEFAULTS[
+              isMaster
+                ? "masterBedroom"
+                : "bedroom"
+            ],
+            isMaster
+              ? "masterBedroom"
+              : `bedroom${i}`,
+            isMaster
+              ? null
+              : "bedroom"
+          )
+        },
+        {
+          priority: "hard",
+          shapePolicy: "orthogonal",
+          compactability:
+            isMaster
+              ? "moderate"
+              : "high",
+          notes: [
+            "Bedroom count is a hard BHK requirement.",
+            isMaster
+              ? "Prefer protecting the master bedroom before optional social spaces."
+              : "Secondary bedrooms may be modestly compacted on tight sites but never below configured practical minima.",
+            "A small entrance recess/notch is acceptable when it improves connected circulation and furniture usability."
+          ]
+        }
       )
-    });
+    );
   }
 
 
@@ -381,35 +590,49 @@ export function buildRoomProgram(requirements) {
     i <= attachedBathroomCount;
     i++
   ) {
-    rooms.push({
-      id:
-        `attached-toilet-${i}`,
+    rooms.push(
+      withPlanningIntent(
+        {
+          id:
+            `attached-toilet-${i}`,
 
-      name:
-        i === 1
-          ? "Master Toilet"
-          : `Attached Toilet ${i}`,
+          name:
+            i === 1
+              ? "Master Toilet"
+              : `Attached Toilet ${i}`,
 
-      type:
-        "attachedToilet",
+          type:
+            "attachedToilet",
 
-      attachedTo:
-        `bedroom-${i}`,
+          attachedTo:
+            `bedroom-${i}`,
 
-      preferredNear: [
-        `bedroom-${i}`
-      ],
+          preferredNear: [
+            `bedroom-${i}`
+          ],
 
-      wetArea: true,
+          wetArea: true,
 
-      /*
-        It should be reached through its bedroom,
-        not consume a separate corridor door.
-      */
-      requiresCirculationAccess: false,
+          /*
+            It should be reached through its bedroom,
+            not consume a separate corridor door.
+          */
+          requiresCirculationAccess: false,
 
-      ...ROOM_DEFAULTS.attachedToilet
-    });
+          ...ROOM_DEFAULTS.attachedToilet
+        },
+        {
+          priority: "important",
+          shapePolicy: "rectangular",
+          compactability: "moderate",
+          mayShareCirculation: false,
+          notes: [
+            "Keep attached directly to its bedroom.",
+            "Wet-area dimensions should remain practical even on compact sites."
+          ]
+        }
+      )
+    );
   }
 
 
@@ -429,35 +652,44 @@ export function buildRoomProgram(requirements) {
     const single =
       commonBathroomCount === 1;
 
-    rooms.push({
-      id:
-        single
-          ? "common-toilet"
-          : `common-toilet-${i}`,
+    rooms.push(
+      withPlanningIntent(
+        {
+          id:
+            single
+              ? "common-toilet"
+              : `common-toilet-${i}`,
 
-      name:
-        single
-          ? "Common Toilet"
-          : `Common Toilet ${i}`,
+          name:
+            single
+              ? "Common Toilet"
+              : `Common Toilet ${i}`,
 
-      type:
-        "commonToilet",
+          type:
+            "commonToilet",
 
-      accessibleFromCirculation: true,
-      requiresCirculationAccess: true,
-      wetArea: true,
+          accessibleFromCirculation: true,
+          requiresCirculationAccess: true,
+          wetArea: true,
 
-      /*
-        Prefer the common bathroom near bedroom/private
-        circulation, not beside the front entrance.
-      */
-      preferredNear: [
-        "bedroom-2",
-        "bedroom-3"
-      ],
+          preferredNear: [
+            "bedroom-2",
+            "bedroom-3"
+          ],
 
-      ...ROOM_DEFAULTS.commonToilet
-    });
+          ...ROOM_DEFAULTS.commonToilet
+        },
+        {
+          priority: "hard",
+          shapePolicy: "rectangular",
+          compactability: "moderate",
+          notes: [
+            "Must remain independently reachable from shared circulation.",
+            "Prefer the private/bedroom side rather than opening directly at the main entrance."
+          ]
+        }
+      )
+    );
   }
 
 
@@ -485,30 +717,53 @@ export function buildRoomProgram(requirements) {
     includeUtility =
       preferences.utility;
   } else {
+    /*
+      Separate utility is useful but not essential on a compact ground-floor
+      plot. On compact sites its function can be integrated into the kitchen
+      unless the user explicitly asks for a utility room.
+    */
     includeUtility =
       country === "india" &&
-      bhk >= 3;
+      bhk >= 3 &&
+      !siteProfile.isCompact;
   }
 
   if (
     includeUtility
   ) {
-    rooms.push({
-      id: "utility",
-      name: "Utility",
-      type: "utility",
+    rooms.push(
+      withPlanningIntent(
+        {
+          id: "utility",
+          name: "Utility",
+          type: "utility",
 
-      attachedTo: "kitchen",
+          attachedTo: "kitchen",
 
-      preferredNear: [
-        "kitchen"
-      ],
+          preferredNear: [
+            "kitchen"
+          ],
 
-      wetArea: true,
-      requiresCirculationAccess: false,
+          wetArea: true,
+          requiresCirculationAccess: false,
 
-      ...ROOM_DEFAULTS.utility
-    });
+          ...ROOM_DEFAULTS.utility
+        },
+        {
+          priority:
+            preferences.utility === true
+              ? "important"
+              : "optional",
+          shapePolicy: "orthogonal",
+          compactability: "high",
+          mayShareCirculation: false,
+          notes: [
+            "Optional unless explicitly requested.",
+            "On compact plots utility functions may be integrated into the kitchen/service edge."
+          ]
+        }
+      )
+    );
   }
 
 
@@ -521,20 +776,33 @@ export function buildRoomProgram(requirements) {
   if (
     preferences.puja === true
   ) {
-    rooms.push({
-      id: "puja",
-      name: "Puja Room",
-      type: "puja",
+    rooms.push(
+      withPlanningIntent(
+        {
+          id: "puja",
+          name: "Puja Room",
+          type: "puja",
 
-      preferredNear: [
-        "living",
-        "dining"
-      ],
+          preferredNear: [
+            "living",
+            "dining"
+          ],
 
-      requiresCirculationAccess: true,
+          requiresCirculationAccess: true,
 
-      ...ROOM_DEFAULTS.puja
-    });
+          ...ROOM_DEFAULTS.puja
+        },
+        {
+          priority: "important",
+          shapePolicy: "orthogonal",
+          compactability: "high",
+          notes: [
+            "Explicitly requested amenity; preserve it before non-requested optional rooms.",
+            "May use a compact niche-like orthogonal footprint when practical."
+          ]
+        }
+      )
+    );
   }
 
 
@@ -547,32 +815,58 @@ export function buildRoomProgram(requirements) {
   if (
     preferences.store === true
   ) {
-    rooms.push({
-      id: "store",
-      name: "Store",
-      type: "store",
+    rooms.push(
+      withPlanningIntent(
+        {
+          id: "store",
+          name: "Store",
+          type: "store",
 
-      preferredNear: [
-        "kitchen"
-      ],
+          preferredNear: [
+            "kitchen"
+          ],
 
-      requiresCirculationAccess: true,
+          requiresCirculationAccess: true,
 
-      ...ROOM_DEFAULTS.store
-    });
+          ...ROOM_DEFAULTS.store
+        },
+        {
+          priority: "important",
+          shapePolicy: "orthogonal",
+          compactability: "high",
+          notes: [
+            "Explicitly requested amenity.",
+            "May use a shallow/notched footprint near the kitchen rather than a large standalone rectangle."
+          ]
+        }
+      )
+    );
   }
 
   if (preferences.balcony === true) {
-    rooms.push({
-      id: "balcony",
-      name: "Balcony",
-      type: "balcony",
-      attachedTo: "living",
-      preferredNear: ["living"],
-      requiresExteriorWall: true,
-      requiresCirculationAccess: false,
-      ...ROOM_DEFAULTS.balcony
-    });
+    rooms.push(
+      withPlanningIntent(
+        {
+          id: "balcony",
+          name: "Balcony",
+          type: "balcony",
+          attachedTo: "living",
+          preferredNear: ["living"],
+          requiresExteriorWall: true,
+          requiresCirculationAccess: false,
+          ...ROOM_DEFAULTS.balcony
+        },
+        {
+          priority: "important",
+          shapePolicy: "orthogonal",
+          compactability: "high",
+          mayShareCirculation: false,
+          notes: [
+            "Explicit exterior feature; must remain connected to an exterior edge."
+          ]
+        }
+      )
+    );
   }
 
 
@@ -602,11 +896,52 @@ export function buildRoomProgram(requirements) {
     );
   }
 
-  return applyRoomConstraints(
-    rooms,
-    preferences.roomConstraints,
-    plotUnit
-  );
+  const constrainedRooms =
+    applyRoomConstraints(
+      rooms,
+      preferences.roomConstraints,
+      plotUnit
+    );
+
+  /*
+    Arrays are kept for complete backward compatibility with the existing
+    planner, but non-index metadata is attached for newer planning stages.
+  */
+  constrainedRooms.programIntent = {
+    version: "room-program-v17",
+    siteProfile: {
+      compact: siteProfile.isCompact,
+      veryCompact: siteProfile.isVeryCompact,
+      plotAreaSqFt: siteProfile.area
+    },
+    priorities: {
+      preserveFirst: [
+        "bedroom-count",
+        "bathrooms",
+        "kitchen",
+        "living",
+        "circulation"
+      ],
+      negotiateNext: [
+        "family-lounge",
+        "separate-dining",
+        "utility",
+        "secondary-bedroom-preferred-size"
+      ]
+    },
+    compoundGeometry: {
+      enabled: true,
+      allowedShapes: [
+        "rectangle",
+        "L-shape",
+        "stepped-orthogonal",
+        "notched-orthogonal"
+      ],
+      arbitraryDiagonalPolygons: false
+    }
+  };
+
+  return constrainedRooms;
 }
 
 
@@ -677,7 +1012,27 @@ function applyRoomConstraints(rooms, constraints, plotUnit) {
       depth,
       area,
       areaDelta,
+      orientationLocked: Boolean(
+        constraint.orientation_locked ??
+        constraint.orientationLocked ??
+        false
+      ),
       unit: plotUnit
+    };
+
+    room.explicitlyConstrained = true;
+    room.planningIntent = {
+      ...(room.planningIntent || {}),
+      priority: "hard",
+      protectWhenExplicit: true,
+      notes: [
+        ...(
+          Array.isArray(room.planningIntent?.notes)
+            ? room.planningIntent.notes
+            : []
+        ),
+        "Explicit user size/area constraint: preserve this requirement ahead of automatic compacting."
+      ]
     };
   }
 
