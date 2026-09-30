@@ -356,6 +356,26 @@ export function generateLayout(requirements) {
     rememberInaccessible(processedCompact);
   }
 
+  const wide = generateWideShallow3BHK(effectiveRequirements);
+  if (wide?.success) {
+    const processedWide = postProcessLayout(wide, effectiveRequirements);
+    if (processedWide.success) return attachOrthogonalShapeMetadata(attachArchitecturalProgramOutcome(processedWide, program, effectiveRequirements));
+    rememberInaccessible(processedWide);
+  }
+
+  // The 3BHK templates are written for north/south roads; plan east/west
+  // roads on the transposed plot and map the geometry back.
+  if (["east", "west"].includes(normalizeRoadSideV16(effectiveRequirements.plot?.roadSide))) {
+    const transposedRequirements = transposeRequirementsV16(effectiveRequirements);
+    for (const generator of [generateCompact3BHK, generateWideShallow3BHK]) {
+      const candidate = generator(transposedRequirements);
+      if (!candidate?.success) continue;
+      const processed = postProcessLayout(transposeLayoutV16(candidate, effectiveRequirements), effectiveRequirements);
+      if (processed.success) return attachOrthogonalShapeMetadata(attachArchitecturalProgramOutcome(processed, program, effectiveRequirements));
+      rememberInaccessible(processed);
+    }
+  }
+
   const processedLegacy = postProcessLayout(
     legacyGenerateLayout(
       effectiveRequirements
@@ -705,10 +725,16 @@ function postProcessLayout(layout, requirements) {
       ? 1.2
       : 1.6;
 
+  // Non-overlay circulation is real floor space; rooms must not grow into it.
+  const growthObstacles = [
+    ...rooms,
+    ...(layout.circulation || []).filter(item => !item.overlay)
+  ];
+
   function growRight(room) {
     const cap = room.width * maxGrowthRatio(room);
     let limit = buildable.x + buildable.width;
-    for (const other of rooms) {
+    for (const other of growthObstacles) {
       if (other === room) continue;
       if (
         other.x >= room.x + room.width - 0.01 &&
@@ -727,7 +753,7 @@ function postProcessLayout(layout, requirements) {
   function growDown(room) {
     const cap = room.height * maxGrowthRatio(room);
     let limit = buildable.y + buildable.height;
-    for (const other of rooms) {
+    for (const other of growthObstacles) {
       if (other === room) continue;
       if (
         other.y >= room.y + room.height - 0.01 &&
@@ -7032,6 +7058,286 @@ function generateCompact3BHK(requirements) {
           "A compact central lobby and rear landing replace the previous full-height corridor."
       }
     ]
+  };
+}
+
+
+/*
+  Wide, shallow 3BHK (road on the long side, e.g. 50 x 30 ft north-facing).
+  generateCompact3BHK stacks four bands front-to-back and needs a deep plot;
+  here the plan is three bands instead:
+    FRONT  living | dining | kitchen | utility over common toilet
+    MIDDLE full-width passage
+    REAR   master | stacked attached toilets | bedroom 2 | bedroom 3
+*/
+function generateWideShallow3BHK(requirements) {
+  const bhk = Number(requirements.house?.bhk || 1);
+  const roadSide = normalizeRoadSideV16(requirements.plot?.roadSide);
+  const preferences = requirements.preferences || {};
+
+  if (bhk !== 3 || !["north", "south"].includes(roadSide) || preferences.familyLounge === true) {
+    return null;
+  }
+
+  const country = String(requirements.country || "india").toLowerCase();
+  const profile = getDesignProfile(country);
+  const feasibility = checkPlanFeasibility(requirements);
+  if (feasibility.status === "infeasible") return null;
+
+  const areaInfo = calculateBuildableArea(requirements);
+  const b = areaInfo.buildable;
+  if (!(b.width > b.height)) return null;
+
+  const program = buildRoomProgram({
+    ...requirements,
+    preferences: { ...preferences, familyLounge: false }
+  });
+  const byId = Object.fromEntries(program.map(room => [room.id, { ...room }]));
+
+  const requiredIds = [
+    "living", "dining", "kitchen",
+    "bedroom-1", "bedroom-2", "bedroom-3"
+  ];
+  if (requiredIds.some(id => !byId[id]) || byId["attached-toilet-3"]) return null;
+
+  const metric = String(profile.unit || "ft").toLowerCase() === "m";
+  const passageDepth = metric ? 1.1 : 3.5;
+  const available = b.height - passageDepth;
+  const rearDepth = roundV16(available * 0.52);
+  const frontDepth = roundV16(available - rearDepth);
+  const maxAspect = 2.9;
+
+  const minWidthFor = (room, depth) => {
+    const minW = Number(room.minWidth || 0);
+    const minH = Number(room.minHeight || 0);
+    const options = [];
+    if (depth >= minH) options.push(minW);
+    if (depth >= minW) options.push(minH);
+    return options.length ? Math.max(Math.min(...options), depth / maxAspect) : Infinity;
+  };
+
+  // A column item holds one room, or several wet rooms stacked front-to-back (listed road side first).
+  const column = (ids, depth) => {
+    const present = ids.filter(id => byId[id]);
+    if (!present.length) return [];
+    return [{
+      ids: present,
+      wet: present.some(id => ["utility", "commonToilet", "attachedToilet"].includes(byId[id].type)),
+      min: Math.max(...present.map(id => minWidthFor(byId[id], depth / present.length)))
+    }];
+  };
+
+  const distributeWidths = items => {
+    const minTotal = items.reduce((sum, item) => sum + item.min, 0);
+    if (!Number.isFinite(minTotal) || minTotal > b.width) return null;
+    const growable = items.filter(item => !item.wet);
+    const growBase = growable.reduce((sum, item) => sum + item.min, 0);
+    const extra = b.width - minTotal;
+    const edges = [b.x];
+    let cursor = 0;
+    items.forEach((item, index) => {
+      cursor += item.min + (item.wet ? 0 : extra * item.min / growBase);
+      edges.push(index === items.length - 1 ? b.x + b.width : roundV16(b.x + cursor));
+    });
+    return items.map((item, index) => ({
+      ...item,
+      x: edges[index],
+      width: roundV16(edges[index + 1] - edges[index])
+    }));
+  };
+
+  // Utility over the common toilet keeps the utility beside the kitchen and the toilet on the passage.
+  const frontVariants = [
+    ["utility", "common-toilet"],
+    ["common-toilet"]
+  ];
+  let front = null;
+  for (const wetIds of frontVariants) {
+    front = distributeWidths([
+      ...column(["living"], frontDepth),
+      ...column(["dining"], frontDepth),
+      ...column(["kitchen"], frontDepth),
+      ...column(wetIds, frontDepth)
+    ]);
+    if (front) break;
+  }
+
+  const rear = distributeWidths([
+    ...column(["bedroom-1"], rearDepth),
+    ...column(["attached-toilet-1", "attached-toilet-2"], rearDepth),
+    ...column(["bedroom-2"], rearDepth),
+    ...column(["bedroom-3"], rearDepth)
+  ]);
+
+  if (!front || !rear) return null;
+
+  const yFront = b.y;
+  const yPassage = roundV16(b.y + frontDepth);
+  const yRear = roundV16(yPassage + passageDepth);
+
+  const rooms = [];
+  const placeColumn = (item, top, bottom) => {
+    item.ids.forEach((id, index) => {
+      const y0 = roundV16(top + (bottom - top) * index / item.ids.length);
+      const y1 = index === item.ids.length - 1
+        ? bottom
+        : roundV16(top + (bottom - top) * (index + 1) / item.ids.length);
+      placeV16(rooms, byId[id], item.x, y0, item.width, y1 - y0);
+    });
+  };
+  front.forEach(item => placeColumn(item, yFront, yPassage));
+  rear.forEach(item => placeColumn(item, yRear, b.y + b.height));
+
+  const passage = {
+    id: "passage-main",
+    name: "Passage",
+    type: "corridor",
+    x: b.x,
+    y: yPassage,
+    width: b.width,
+    height: passageDepth
+  };
+
+  if (roadSide === "south") {
+    mirrorAllV16(rooms, [passage], b);
+  }
+
+  const livingRoom = rooms.find(room => room.id === "living");
+  const entranceDoorWidth = metric ? 1.0 : 3.5;
+  const mainEntrance = {
+    id: "main-entrance",
+    name: "Main Entrance",
+    type: "entrance",
+    roomId: "living",
+    side: roadSide,
+    width: entranceDoorWidth,
+    x: roundV16(livingRoom.x + livingRoom.width / 2),
+    y: roundV16(roadSide === "north" ? livingRoom.y : livingRoom.y + livingRoom.height)
+  };
+
+  const roomArea = rooms.reduce((sum, room) => sum + room.width * room.height, 0);
+  const adaptations = [{
+    type: "wide-plot-bands",
+    room: "Whole plan",
+    reason: "Wide, shallow plot: public rooms face the road, bedrooms sit behind a single passage."
+  }];
+  if (byId["utility"] && !rooms.some(room => room.id === "utility")) {
+    adaptations.push({
+      type: "omitted-optional-room",
+      room: "Utility",
+      reason: "Not enough frontage for a separate utility beside the kitchen."
+    });
+  }
+
+  return {
+    success: true,
+    country,
+    unit: profile.unit,
+    roadSide,
+    plot: areaInfo.plot,
+    setbacks: areaInfo.setbacks,
+    buildableArea: b,
+    feasibility,
+    circulation: [passage],
+    entrances: [mainEntrance],
+    rooms,
+    failedRooms: [],
+    placementStrategy: "wide-shallow-3bhk-v1",
+    statistics: {
+      requestedRooms: rooms.length,
+      placedRooms: rooms.length,
+      failedRooms: 0,
+      roomArea: roundV16(roomArea),
+      corridorArea: roundV16(passage.width * passage.height)
+    },
+    adaptations
+  };
+}
+
+
+// Swapping x and y maps north<->west and south<->east (NE<->SW; NW, SE unchanged).
+const TRANSPOSED_DIRECTION_V16 = {
+  north: "west",
+  west: "north",
+  south: "east",
+  east: "south",
+  northeast: "southwest",
+  southwest: "northeast",
+  northwest: "northwest",
+  southeast: "southeast"
+};
+
+function transposeRequirementsV16(requirements) {
+  const setbacks = requirements.setbacks || {};
+  const preferences = { ...(requirements.preferences || {}) };
+  for (const key of ["kitchenDirection", "masterBedroomDirection"]) {
+    const value = String(preferences[key] || "").toLowerCase();
+    if (TRANSPOSED_DIRECTION_V16[value]) preferences[key] = TRANSPOSED_DIRECTION_V16[value];
+  }
+
+  return {
+    ...requirements,
+    plot: {
+      ...requirements.plot,
+      width: requirements.plot.height,
+      height: requirements.plot.width,
+      roadSide: TRANSPOSED_DIRECTION_V16[normalizeRoadSideV16(requirements.plot?.roadSide)]
+    },
+    setbacks: {
+      front: Number(setbacks.left || 0),
+      rear: Number(setbacks.right || 0),
+      left: Number(setbacks.front || 0),
+      right: Number(setbacks.rear || 0)
+    },
+    preferences
+  };
+}
+
+function transposeLayoutV16(layout, originalRequirements) {
+  const swapRect = item => {
+    const next = {
+      ...item,
+      x: item.y,
+      y: item.x,
+      width: item.height,
+      height: item.width
+    };
+    if (Array.isArray(item.architecturalShape?.parts)) {
+      next.architecturalShape = {
+        ...item.architecturalShape,
+        parts: item.architecturalShape.parts.map(part => ({
+          ...part,
+          x: part.y,
+          y: part.x,
+          width: part.height,
+          height: part.width
+        }))
+      };
+    }
+    return next;
+  };
+  const swapPoint = item => ({
+    ...item,
+    x: item.y,
+    y: item.x,
+    ...(item.side ? { side: TRANSPOSED_DIRECTION_V16[item.side] || item.side } : {})
+  });
+
+  const areaInfo = calculateBuildableArea(originalRequirements);
+
+  return {
+    ...layout,
+    roadSide: normalizeRoadSideV16(originalRequirements.plot?.roadSide),
+    plot: areaInfo.plot,
+    setbacks: areaInfo.setbacks,
+    buildableArea: areaInfo.buildable,
+    rooms: (layout.rooms || []).map(swapRect),
+    circulation: (layout.circulation || []).map(swapRect),
+    entrances: (layout.entrances || []).map(swapPoint),
+    ...(Array.isArray(layout.interiorDoors)
+      ? { interiorDoors: layout.interiorDoors.map(swapPoint) }
+      : {}),
+    placementStrategy: `${layout.placementStrategy}-transposed`
   };
 }
 

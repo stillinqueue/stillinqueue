@@ -372,7 +372,33 @@
       white-space: nowrap;
     }
 
-    .studio-status { margin-top: .65rem; font-size: .9rem; color: var(--text-muted); line-height: 1.6; }
+    .studio-status {
+      margin: 0;
+      padding: .45rem .75rem;
+      border-radius: .75rem;
+      border: 1px solid rgba(148,163,184,.25);
+      background: rgba(15,23,42,.55);
+      font-size: .82rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+      max-height: 4.6em;
+      overflow-y: auto;
+    }
+    .studio-status.is-busy::before {
+      content: "";
+      display: inline-block;
+      width: .5rem;
+      height: .5rem;
+      margin-right: .5rem;
+      border-radius: 50%;
+      background: #38bdf8;
+      vertical-align: middle;
+      animation: status-pulse 1s ease-in-out infinite;
+    }
+    @keyframes status-pulse {
+      0%, 100% { opacity: .3; transform: scale(.8); }
+      50% { opacity: 1; transform: scale(1.15); }
+    }
 
     /* ===== Preview viewer controls ===== */
     .studio-preview { overflow: hidden; max-height: 70vh; display: flex; flex-direction: column; gap: .65rem; }
@@ -687,10 +713,14 @@
     <div class="studio-layout">
       <!-- LEFT: Chat -->
       <div class="studio-panel">
-        <div class="studio-label">AI Layout Agent · OpenAI Connected</div>
+        <div class="studio-label">Layout Render Agent · V1</div>
 
         <div class="chat-shell">
           <div class="chat-thread" id="chatThread" aria-live="polite"></div>
+
+          <p id="renderStatus" class="studio-status" role="status" aria-live="polite">
+            Stage 1 · Concept — tell me what you know. Render unlocks when plot size, BHK, facing, and floors are known.
+          </p>
 
           <div class="chat-input-row">
             <textarea id="chatInput" class="chat-input chat-textarea"
@@ -711,10 +741,6 @@
             <div class="progress-bar"><div id="progressFill"></div></div>
             <div class="progress-text" id="progressText">Idle</div>
           </div>
-
-          <p id="renderStatus" class="studio-status">
-            Stage 1 · Concept — tell me what you know. Render unlocks when plot size, BHK, facing, and floors are known.
-          </p>
         </div>
       </div>
 
@@ -806,7 +832,7 @@
     (function () {
       // Renderer API (unchanged)
       const RENDER_API = "https://sq-ai-renderer.onrender.com/api/plans/render";
-      const REAL_ESTATE_VERSION = "ai-practical-planner-v26";
+      const REAL_ESTATE_VERSION = "ai-practical-planner-v27";
 
       // Real OpenAI-powered requirement agent
       const CHAT_API = "https://sq-ai-renderer.onrender.com/api/realestate/chat";
@@ -950,9 +976,39 @@
         confirmed: false
       };
 
-      function setStatus(html) {
+      let statusRotationTimer = null;
+
+      function setStatus(html, { busy = false } = {}) {
+        clearInterval(statusRotationTimer);
+        statusRotationTimer = null;
         statusEl.innerHTML = html;
+        statusEl.classList.toggle("is-busy", busy);
       }
+
+      // Cycles through lines until the next setStatus() call replaces them.
+      function setRotatingStatus(lines) {
+        let index = Math.floor(Math.random() * lines.length);
+        setStatus(lines[index], { busy: true });
+        statusRotationTimer = setInterval(() => {
+          index = (index + 1) % lines.length;
+          statusEl.innerHTML = lines[index];
+        }, 2600);
+      }
+
+      const THINKING_STATUS_LINES = [
+        "Stillinqueue just put you first in the queue — reading your brief…",
+        "Our architect is squinting at your plot…",
+        "Sharpening pencils, unrolling tracing paper…",
+        "Translating “3bhk n facing” into architect…",
+        "Counting bedrooms twice, just to be sure…"
+      ];
+
+      const PLANNING_STATUS_LINES = [
+        "Measuring twice — checking it really fits your plot…",
+        "Shuffling rooms like furniture on moving day…",
+        "Making sure every door actually leads somewhere…",
+        "Negotiating with the kitchen for more space…"
+      ];
 
       function directionName(code) {
         const names = {
@@ -1480,7 +1536,13 @@ Click “Render Concept 1” to generate the technical blueprint.`;
 
         chatThread.appendChild(meta);
         chatThread.appendChild(bubble);
-        chatThread.scrollTop = chatThread.scrollHeight;
+
+        // Long replies should be read from their first line, not their last.
+        const offset = meta.getBoundingClientRect().top - chatThread.getBoundingClientRect().top;
+        const fitsBelow = offset + meta.offsetHeight + bubble.offsetHeight <= chatThread.clientHeight;
+        chatThread.scrollTop = role === "user" || fitsBelow
+          ? chatThread.scrollHeight
+          : chatThread.scrollTop + offset - 8;
       }
 
 
@@ -3050,6 +3112,8 @@ IMPORTANT UX RULE:
 - The application has already run its automatic compact alternatives.
 - If no alternative validated, state that clearly once and describe the exact
   failing validation/accessibility checks supplied in planner_context.
+- The geometry engine plans one floor plate. Never suggest adding a floor as a
+  way to make the plan fit; it does not change the tested geometry.
 - Ask a question only when there is a genuinely different USER preference that
   must be chosen before another geometry can be tested.
 
@@ -3204,7 +3268,7 @@ ${JSON.stringify(plannerContext, null, 2)}`;
 
         chatSend.disabled = true;
         chatInput.disabled = true;
-        setStatus("OpenAI is interpreting your requirements...");
+        setRotatingStatus(THINKING_STATUS_LINES);
 
         try {
           const hadExistingConcept =
@@ -3250,8 +3314,8 @@ ${JSON.stringify(plannerContext, null, 2)}`;
               plannerRequirementsFingerprint(currentRequirements);
 
             if (currentFingerprint === lastFailedPlannerFingerprint) {
+              // Repeating the previous either/or question after a bare "yes" is a loop.
               const noLoopReply =
-                lastPlannerFailureReply ||
                 `I already tested the normal and compact variants for this exact brief. Repeating the same retry will not produce new geometry.
 
 Please give me one concrete preference to change, such as “1 bathroom only”, “no utility”, “smaller bedrooms”, or “keep bedroom sizes and combine social space”.`;
@@ -3318,7 +3382,7 @@ Please give me one concrete preference to change, such as “1 bathroom only”,
             /*
               STEP 2 — deterministic planner decides whether the brief fits.
             */
-            setStatus("Requirements understood. Checking physical feasibility with the deterministic planner...");
+            setRotatingStatus(PLANNING_STATUS_LINES);
 
             const preflight = await preflightPlannerForCurrentState({
               userText: text,
@@ -3405,8 +3469,8 @@ Please give me one concrete preference to change, such as “1 bathroom only”,
 
             setStatus(
               missing.length
-                ? `OpenAI · still needed: <strong>${missing.join(", ")}</strong>.`
-                : "OpenAI · requirements are still being refined."
+                ? `Almost there — still need: <strong>${missing.join(", ")}</strong>.`
+                : "Your brief is taking shape — keep going."
             );
           }
 
@@ -3418,7 +3482,7 @@ Please give me one concrete preference to change, such as “1 bathroom only”,
         } catch (err) {
           console.error(err);
           addMessage("assistant", "I couldn’t reach the AI planning service. Please try again.");
-          setStatus(`<span style='color:#fca5a5;'>OpenAI chat error:</span> ${String(err.message || err)}`);
+          setStatus(`<span style='color:#fca5a5;'>The queue hiccupped:</span> ${String(err.message || err)}`);
         } finally {
           chatSend.disabled = false;
           chatInput.disabled = false;
@@ -4264,7 +4328,7 @@ Review the revised proposal below. If it looks right, click “Accept Proposal�
           messages.some(
             message =>
               message.role === "user" &&
-              /\b\d+\s*(?:bathroom|bathrooms|bath|baths|toilet|toilets|wc|washroom|washrooms)\b/i
+              /\b(?:\d+|one|two|three|four|single|reduce|fewer|less|remove|drop|only)\b[^.\n]{0,20}\b(?:bathroom|bathrooms|bath|baths|toilet|toilets|wc|washroom|washrooms)\b/i
                 .test(String(message.content || ""))
           );
 
@@ -4892,28 +4956,20 @@ You can still request design changes in chat. The agent will treat them as revis
       updateLayoutButtons();
 
       addMessage("assistant",
-`Layout Agent ${REAL_ESTATE_VERSION} · OpenAI
+`Hi! Tell me about the property you'd like to design.
 
-Hi! Tell me about the property you'd like to design.
+Start with whatever you know — even just “58 × 72 ft plot”. I’ll ask for the rest step by step.
 
-Start with whatever you know — even something as simple as:
-
-“58 × 72 ft plot”
-
-I’ll ask for the remaining details step by step.
-
-Stage 1 only needs:
+To get started I need:
 • plot size
 • BHK / bedrooms
 • plot facing
 • number of floors
 
-OpenAI will dynamically understand your replies, typos, shorthand and changes.
+Once I have these, I’ll propose a space program for you to review. After you accept it, you’ll get an Engineer Drawing and a Buyer Plan.`);
 
-Once the minimum requirements are known, it will propose a space program for review.
-After you accept it, the app generates separate Engineer Drawing and Buyer Plan views.`);
-
-      setStatus(`Stage 1 · Concept — start with your plot size. <span style="opacity:.65;">${REAL_ESTATE_VERSION}</span>`);
+      setStatus("Stage 1 · Concept — start with your plot size.");
+      statusEl.title = REAL_ESTATE_VERSION;
     })();
   </script>
 
