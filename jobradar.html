@@ -74,6 +74,8 @@
     .tag { font-size: .74rem; padding: .18rem .55rem; border-radius: var(--pill); border: 1px solid var(--line); color: var(--muted); }
     .tag.good { color: #86efac; border-color: rgba(34,197,94,.45); }
     .tag.gap { color: #fdba74; border-color: rgba(251,146,60,.45); }
+    .photo-row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    .photo-preview { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; object-position: center 20%; border: 2px solid var(--line); }
     .track { border: 1px solid var(--line); border-radius: 12px; padding: .7rem .8rem; margin: .6rem 0; background: rgba(15,23,42,.45); }
     .track-head { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-size: .85rem; color: var(--muted, #94a3b8); }
     .stage-pill { padding: .15rem .6rem; border-radius: 999px; font-weight: 700; font-size: .78rem; background: #1e3a8a; color: #dbeafe; }
@@ -171,6 +173,20 @@
         </form>
       </div>
 
+      <div class="card">
+        <h2>CV photo</h2>
+        <div class="photo-row">
+          <img id="photoPreview" class="photo-preview hidden" alt="Your CV photo" />
+          <div>
+            <p class="hint" id="photoState">No photo yet. German CVs usually include one; it appears round in the top-right corner.</p>
+            <input type="file" id="photoFile" accept="image/jpeg,image/png" />
+            <div class="actions">
+              <button class="btn ghost hidden" type="button" id="photoRemove">Remove photo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <form id="settingsForm" class="card">
         <h2>What to look for</h2>
         <div class="grid">
@@ -250,6 +266,7 @@
             <label>Options</label>
             <div class="checks">
               <label><input type="checkbox" id="sRemote" /> Accept remote (Germany)</label>
+              <label><input type="checkbox" id="sPhoto" /> Put my photo on the CV</label>
               <label><input type="checkbox" id="sEmail" /> Email me new matches</label>
               <label><input type="checkbox" id="sDaily" /> Run automatically every day</label>
             </div>
@@ -552,6 +569,8 @@
       $("sSeniority").value = s.seniority; $("sScore").value = s.min_score; $("sScoreVal").textContent = s.min_score;
       $("sCover").value = s.cover_letter_mode; $("sMax").value = s.max_tailored_per_run;
       $("sRemote").checked = !!s.remote_ok; $("sEmail").checked = !!s.email_alerts; $("sDaily").checked = !!s.daily_enabled;
+      $("sPhoto").checked = s.include_photo !== false;
+      showPhoto(p.has_photo);
       $("sSizes").innerHTML = p.size_classes.map((c) =>
         `<label><input type="checkbox" value="${esc(c)}" ${s.company_sizes.includes(c) ? "checked" : ""}/> ${esc(SIZE_LABEL[c])}</label>`).join("");
       const cand = p.candidate || {};
@@ -572,10 +591,41 @@
         small_company_mode: $("sSmallMode").value,
         seniority: $("sSeniority").value, min_score: Number($("sScore").value), cover_letter_mode: $("sCover").value,
         max_tailored_per_run: Number($("sMax").value || 0), remote_ok: $("sRemote").checked,
+        include_photo: $("sPhoto").checked,
         email_alerts: $("sEmail").checked, daily_enabled: $("sDaily").checked,
         company_sizes: [...$("sSizes").querySelectorAll("input:checked")].map((i) => i.value),
       };
       try { await api("/api/jobradar/settings", { method: "PUT", body: JSON.stringify({ settings }) }); toast("Settings saved."); }
+      catch (err) { toast(err.message, true); }
+    });
+
+    // ---------- CV photo
+    async function showPhoto(has) {
+      const img = $("photoPreview");
+      $("photoRemove").classList.toggle("hidden", !has);
+      img.classList.toggle("hidden", !has);
+      $("photoState").textContent = has ? "This photo is used on your CVs." : "No photo yet. German CVs usually include one; it appears round in the top-right corner.";
+      if (!has) { img.removeAttribute("src"); return; }
+      try {
+        const res = await api("/api/jobradar/photo", { raw: true });
+        if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+        img.dataset.url = URL.createObjectURL(await res.blob()); img.src = img.dataset.url;
+      } catch (_) { img.classList.add("hidden"); }
+    }
+    $("photoFile").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) { toast("Photo must be under 2 MB.", true); return; }
+      try {
+        const content_b64 = await new Promise((resolve, reject) => {
+          const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(file);
+        });
+        await api("/api/jobradar/photo", { method: "POST", body: JSON.stringify({ content_b64 }) });
+        toast("Photo saved. New CVs will use it."); e.target.value = ""; showPhoto(true);
+      } catch (err) { toast(err.message, true); }
+    });
+    $("photoRemove").addEventListener("click", async () => {
+      try { await api("/api/jobradar/photo", { method: "DELETE" }); toast("Photo removed."); showPhoto(false); }
       catch (err) { toast(err.message, true); }
     });
 

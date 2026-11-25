@@ -97,6 +97,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "email_alerts": True,
     "daily_enabled": True,
     "google_jobs_offered": True,      # new profiles get Google Jobs in DEFAULT_SOURCES
+    "include_photo": True,            # put the uploaded photo on the CV
 }
 
 SIZE_CLASSES = ["startup", "small", "mid", "large", "enterprise"]
@@ -148,10 +149,12 @@ VALID_STATUSES = {"new", "saved", "applied", "skipped"}
 
 PROFILE_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "required": ["name", "email", "phone", "location", "linkedin", "years_experience", "seniority", "core_skills"],
+    "required": ["name", "email", "phone", "location", "address", "city", "linkedin", "github", "website",
+                 "years_experience", "seniority", "core_skills"],
     "properties": {
         "name": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"},
-        "location": {"type": "string"}, "linkedin": {"type": "string"},
+        "location": {"type": "string"}, "address": {"type": "string"}, "city": {"type": "string"},
+        "linkedin": {"type": "string"}, "github": {"type": "string"}, "website": {"type": "string"},
         "years_experience": {"type": "number"},
         "seniority": {"type": "string", "enum": ["junior", "mid", "senior", "lead"]},
         "core_skills": {"type": "array", "items": {"type": "string"}},
@@ -180,35 +183,46 @@ SCORE_SCHEMA = {
 }
 
 _STR_LIST = {"type": "array", "items": {"type": "string"}}
+_ROLE = {
+    "type": "object", "additionalProperties": False,
+    "required": ["title", "company", "company_note", "location", "dates", "bullets"],
+    "properties": {"title": {"type": "string"}, "company": {"type": "string"}, "company_note": {"type": "string"},
+                   "location": {"type": "string"}, "dates": {"type": "string"}, "bullets": _STR_LIST},
+}
+# Mirrors the candidate's own CV design: header (name, headline, contact, photo), summary, 3 highlight
+# boxes, 4 skill columns, experience, projects, education, languages.
 RESUME_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "required": ["name", "headline", "contact_line", "summary", "skills", "experience", "education",
+    "required": ["headline", "summary", "highlights", "skills", "experience", "projects", "education",
                  "certifications", "languages", "tailoring_notes"],
     "properties": {
-        "name": {"type": "string"}, "headline": {"type": "string"}, "contact_line": {"type": "string"},
+        "headline": {"type": "string"},
         "summary": {"type": "string"},
+        "highlights": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False, "required": ["title", "text"],
+            "properties": {"title": {"type": "string"}, "text": {"type": "string"}}}},
         "skills": {"type": "array", "items": {
             "type": "object", "additionalProperties": False, "required": ["group", "items"],
             "properties": {"group": {"type": "string"}, "items": _STR_LIST}}},
-        "experience": {"type": "array", "items": {
-            "type": "object", "additionalProperties": False,
-            "required": ["title", "company", "location", "dates", "bullets"],
-            "properties": {"title": {"type": "string"}, "company": {"type": "string"},
-                           "location": {"type": "string"}, "dates": {"type": "string"}, "bullets": _STR_LIST}}},
+        "experience": {"type": "array", "items": _ROLE},
+        "projects": {"type": "array", "items": _ROLE},
         "education": {"type": "array", "items": {
-            "type": "object", "additionalProperties": False, "required": ["degree", "school", "dates", "details"],
-            "properties": {"degree": {"type": "string"}, "school": {"type": "string"},
+            "type": "object", "additionalProperties": False,
+            "required": ["degree", "school", "location", "dates", "details"],
+            "properties": {"degree": {"type": "string"}, "school": {"type": "string"}, "location": {"type": "string"},
                            "dates": {"type": "string"}, "details": {"type": "string"}}}},
-        "certifications": _STR_LIST, "languages": _STR_LIST,
+        "certifications": _STR_LIST,
+        "languages": {"type": "string"},
         "tailoring_notes": {"type": "string"},
     },
 }
 
 COVER_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "required": ["language", "subject", "greeting", "paragraphs", "closing"],
+    "required": ["language", "recipient_lines", "subject", "greeting", "paragraphs", "closing"],
     "properties": {
-        "language": {"type": "string", "enum": ["de", "en"]}, "subject": {"type": "string"},
+        "language": {"type": "string", "enum": ["de", "en"]},
+        "recipient_lines": _STR_LIST, "subject": {"type": "string"},
         "greeting": {"type": "string"}, "paragraphs": _STR_LIST, "closing": {"type": "string"},
     },
 }
@@ -221,11 +235,16 @@ HUMAN_STYLE = (
     "'spearheaded', 'passionate', 'thrilled', 'excited to', 'dynamic', 'synergy', 'cutting-edge', 'robust', "
     "'seamless', 'tapestry', 'testament', 'in today's fast-paced', 'proven track record', 'I am writing to', "
     "'results-driven', 'game-changer', 'unlock', 'elevate', 'navigate the landscape'; in German avoid "
-    "'mit großer Begeisterung', 'hiermit bewerbe ich mich', 'Leidenschaft', 'nahtlos', 'innovativ' as filler. "
+    "'mit großer Begeisterung', 'hiermit bewerbe ich mich', 'Leidenschaft', 'nahtlos', 'innovativ', "
+    "'genau an dieser Schnittstelle', 'bilden eine gute Grundlage', 'bringe ich mit', 'beziehungsweise', "
+    "'Mehrwert', 'ganzheitlich', 'zukunftsorientiert' as filler. Do not use spaced dashes (' – ') inside "
+    "sentences either. In German text write 'KI' (not 'AI') except inside product names, tool names or job "
+    "titles, and use German place names (München, Nürnberg, Köln, Deutschland, Indien). "
     "Don't echo the job ad's sentences verbatim; use its key terms naturally where they truthfully apply."
 )
 
-_DASH_RE = re.compile(r"\s*—\s*")
+_DASH_RE = re.compile(r"\s*—\s*|\s+–\s+(?=[^\d\s])")
+_NO_SCRUB_KEYS = {"tailoring_notes", "dates", "subject", "headline"}
 
 
 def _doc_language(analysis: dict[str, Any]) -> str:
@@ -254,7 +273,7 @@ def _humanize(value: Any) -> Any:
     if isinstance(value, list):
         return [_humanize(v) for v in value]
     if isinstance(value, dict):
-        return {k: (v if k == "tailoring_notes" else _humanize(v)) for k, v in value.items()}
+        return {k: (v if k in _NO_SCRUB_KEYS else _humanize(v)) for k, v in value.items()}
     return value
 
 
@@ -292,6 +311,10 @@ class SourceToggle(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: str
+
+
+class PhotoUpload(BaseModel):
+    content_b64: str
 
 
 class TrackUpdate(BaseModel):
@@ -500,6 +523,12 @@ def register(
                     conn.execute(text(f"ALTER TABLE jr_matches ADD COLUMN {column}"))
             except Exception:
                 pass
+        for column in ("photo BYTEA", "photo_mime TEXT"):  # profile photo for the CV header
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE jr_profiles ADD COLUMN {column}"))
+            except Exception:
+                pass
         try:  # 'cron' or 'manual': only scheduled runs count for the once-a-day guard
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE jr_runs ADD COLUMN run_trigger TEXT"))
@@ -606,7 +635,9 @@ def register(
         return llm_json(
             "candidate_profile", PROFILE_SCHEMA,
             "Extract the candidate's contact details and experience profile from the resume. "
-            "Use empty strings for anything not present. years_experience = total professional years.",
+            "Use empty strings for anything not present. address = full postal address if given (street, postcode, "
+            "city), otherwise the city line; city = just the city name; linkedin/github/website = full URLs. "
+            "years_experience = total professional years.",
             {"resume": resume_text[:20000]},
         )
 
@@ -646,14 +677,19 @@ def register(
         return _humanize(llm_json(
             "tailored_resume", RESUME_SCHEMA,
             "Rewrite the candidate's resume so it is tailored to the job below, for an ATS and a human recruiter "
-            "in Germany. " + TRUTH_RULE + HUMAN_STYLE + " Resume bullets start with a past-tense verb (present tense "
-            "for the current job), no first person. Keep it to roughly one to two A4 pages: a 3-4 line profile summary aimed "
-            "at this role, skills grouped and ordered by relevance to the job, the most relevant 3-5 bullets per "
-            "role with concrete results already present in the resume, most recent roles first. Write in the "
+            "in Germany. " + TRUTH_RULE + HUMAN_STYLE + " The CV is laid out in the candidate's own design, so fill "
+            "these parts: headline = 2-3 role labels joined by ' · ' that fit this job and are true for the candidate; "
+            "summary = 3-4 lines aimed at this role; highlights = exactly 3 short boxes (title of 2-4 words + one "
+            "sentence with a concrete result); skills = exactly 4 groups of 4-5 short items, ordered by relevance; "
+            "experience = jobs, most recent first, 2-5 bullets each (more for relevant roles); projects = side "
+            "projects such as the candidate's own platform (empty list if none); education with thesis in details. "
+            "company_note = a few words describing the employer if the resume gives it, else empty. dates like "
+            "'07/2024 – present' ('07/2024 – heute' in German); location like 'Erlangen, Germany' ('Erlangen, "
+            "Deutschland'). Bullets start with a verb, no first person. Mark 1-2 key phrases per bullet and in the "
+            "summary/highlights with **double asterisks** for bold, as a designer would; not more. languages = one "
+            "line like 'English (fluent) · German (B1) · ...' exactly matching the resume's levels. Write in "
             "language '" + _doc_language(analysis) + "' (de = German, en = English; for German use standard German "
-            "CV wording, e.g. 'Berufserfahrung', month/year dates like '07/2024 – heute')." + _german_note(analysis) +
-            " contact_line = email · phone · location · "
-            "LinkedIn joined with ' · ' (skip empty). tailoring_notes = one short sentence telling the candidate "
+            "CV wording)." + _german_note(analysis) + " tailoring_notes = one short sentence telling the candidate "
             "what you emphasised.",
             {"master_resume": profile["resume_text"][:20000], "candidate": candidate,
              "job": {k: job.get(k) for k in ("company", "title", "location", "description")},
@@ -669,13 +705,36 @@ def register(
             " No clichés or generic filler. Reference 2-3 concrete requirements of the posting and match them to real "
             "experience." + _german_note(analysis) + " Write in language '" + _doc_language(analysis) + "' "
             "(de = German, en = English); for German use "
-            "formal 'Sie' and a subject line like 'Bewerbung als …'. Do not include addresses or the date.",
+            "formal 'Sie' and a subject line like 'Bewerbung als …'. recipient_lines = the employer's full name as "
+            "in the posting (legal form if given), then a department or 'z. Hd. Frau/Herr <name>' / 'Attn: <name>' "
+            "only if the posting names a contact person, then the city in the letter's language (e.g. 'München'); "
+            "never invent a street. greeting = 'Sehr geehrte Frau <Name>,' / 'Dear <Name>,' if a contact person is "
+            "named, otherwise 'Sehr geehrte Damen und Herren,' / 'Dear Hiring Team,'. You may mark one key phrase per "
+            "paragraph with **double asterisks** for bold. closing = only the sign-off words ('Mit freundlichen "
+            "Grüßen' / 'Kind regards'), never the name. Do not include the sender's address or the date.",
             {"master_resume": profile["resume_text"][:20000], "candidate": profile["candidate"],
              "job": {k: job.get(k) for k in ("company", "title", "location", "description")},
              "fit_analysis": analysis},
         ))
         letter["language"] = _doc_language(analysis)  # keeps the date format / file name consistent
+        # The PDF prints the name under the sign-off; make sure it isn't in the closing too.
+        name = (profile["candidate"].get("name") or "").strip()
+        closing = letter.get("closing") or ""
+        if name:
+            closing = re.sub(re.escape(name), "", closing, flags=re.I)
+        letter["closing"] = closing.strip(" ,\n") or ("Mit freundlichen Grüßen" if letter["language"] == "de" else "Kind regards")
+        letter["paragraphs"] = [p for p in letter.get("paragraphs") or [] if p.strip() and p.strip() != name]
         return letter
+
+    def render_documents(profile: dict[str, Any], job: dict[str, Any], analysis: dict[str, Any],
+                         resume: dict[str, Any], letter: Optional[dict[str, Any]] = None) -> tuple[bytes, Optional[bytes]]:
+        """PDFs in the candidate's own design (with photo if uploaded and enabled)."""
+        candidate = profile["candidate"]
+        photo = profile.get("photo") if profile["settings"].get("include_photo", True) else None
+        resume_pdf = render_resume_pdf(resume, _doc_language(analysis), candidate,
+                                       bytes(photo) if photo else None, profile.get("photo_mime"))
+        cover_pdf = render_cover_letter_pdf(letter, candidate, job, resume.get("headline", "")) if letter else None
+        return resume_pdf, cover_pdf
 
     # ------------------------------------------------------------- pipeline
     def save_job(job: dict[str, Any]) -> str:
@@ -953,13 +1012,12 @@ def register(
             if index < int(settings.get("max_tailored_per_run") or 10):
                 try:
                     resume = tailor_resume(profile, job, analysis)
-                    resume_pdf = render_resume_pdf(resume, _doc_language(analysis))
                     mode = settings.get("cover_letter_mode", "auto")
                     wants_cover = mode == "always" or (mode == "auto" and (
                         analysis.get("cover_letter_requested") or _doc_language(analysis) == "de"))
                     if wants_cover:
                         cover = write_cover_letter(profile, job, analysis)
-                        cover_pdf = render_cover_letter_pdf(cover, resume, job)
+                    resume_pdf, cover_pdf = render_documents(profile, job, analysis, resume, cover)
                     stats["tailored"] += 1
                 except Exception as exc:
                     stats["errors"].append(f"tailor {job.get('company')}: {str(exc)[:120]}")
@@ -1048,6 +1106,7 @@ def register(
             "has_resume": bool(profile.get("resume_text")),
             "resume_filename": profile.get("resume_filename"),
             "resume_preview": (profile.get("resume_text") or "")[:600],
+            "has_photo": bool(profile.get("photo")),
             "candidate": profile["candidate"],
             "sources": load_sources(email),
             "size_classes": SIZE_CLASSES,
@@ -1074,6 +1133,42 @@ def register(
             conn.execute(text("UPDATE jr_profiles SET settings_json = :s, updated_at = :u WHERE user_email = :e"),
                          {"s": json.dumps(merged), "u": _now_iso(), "e": email})
         return {"settings": merged}
+
+    @app.post("/api/jobradar/photo")
+    def jr_upload_photo(payload: PhotoUpload, authorization: Optional[str] = Header(default=None)) -> dict[str, Any]:
+        """Profile photo for the CV header (JPEG/PNG, max 2 MB)."""
+        email = current_email(authorization)
+        load_profile(email)
+        try:
+            raw = base64.b64decode(payload.content_b64.split(",", 1)[-1])
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Invalid image encoding.") from exc
+        if len(raw) > 2 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Photo must be under 2 MB.")
+        if raw[:3] == b"\xff\xd8\xff":
+            mime = "image/jpeg"
+        elif raw[:8] == b"\x89PNG\r\n\x1a\n":
+            mime = "image/png"
+        else:
+            raise HTTPException(status_code=400, detail="Please upload a JPEG or PNG photo.")
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE jr_profiles SET photo = :p, photo_mime = :m, updated_at = :u WHERE user_email = :e"),
+                         {"p": raw, "m": mime, "u": _now_iso(), "e": email})
+        return {"ok": True}
+
+    @app.get("/api/jobradar/photo")
+    def jr_get_photo(authorization: Optional[str] = Header(default=None)) -> Response:
+        profile = load_profile(current_email(authorization))
+        if not profile.get("photo"):
+            raise HTTPException(status_code=404, detail="No photo uploaded.")
+        return Response(bytes(profile["photo"]), media_type=profile.get("photo_mime") or "image/jpeg")
+
+    @app.delete("/api/jobradar/photo")
+    def jr_delete_photo(authorization: Optional[str] = Header(default=None)) -> dict[str, Any]:
+        email = current_email(authorization)
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE jr_profiles SET photo = NULL, photo_mime = NULL WHERE user_email = :e"), {"e": email})
+        return {"ok": True}
 
     @app.post("/api/jobradar/resume")
     def jr_upload_resume(payload: ResumeUpload, authorization: Optional[str] = Header(default=None)) -> dict[str, Any]:
@@ -1208,7 +1303,9 @@ def register(
     def _doc_filename(match: dict[str, Any], kind: str) -> str:
         """What a person would name the file: 'Venkata_Kanumuri_CV.pdf' / 'Venkata_Kanumuri_Anschreiben.pdf'.
         No company, tool or 'tailored' in the name (recruiters see the file name)."""
-        name = (json.loads(match.get("resume_json") or "{}")).get("name", "") or "Resume"
+        profile = load_profile(match["user_email"], create=False) or {"candidate": {}}
+        name = (profile["candidate"].get("name") or (json.loads(match.get("resume_json") or "{}")).get("name", "")
+                or "Resume")
         words = [w for w in re.split(r"\s+", name.strip()) if w]
         short = "_".join([words[0].title(), words[-1].title()] if len(words) > 1 else words or ["Resume"])
         short = "".join(ch for ch in short if ch.isalnum() or ch in "_-") or "Resume"
@@ -1246,10 +1343,11 @@ def register(
         analysis = json.loads(match.get("analysis_json") or "{}") or score_job(profile, job)
         try:
             resume = tailor_resume(profile, job, analysis)
-            fields: dict[str, Any] = {"rj": json.dumps(resume), "rp": render_resume_pdf(resume, _doc_language(analysis))}
-            if cover:
-                letter = write_cover_letter(profile, job, analysis)
-                fields.update({"cj": json.dumps(letter), "cp": render_cover_letter_pdf(letter, resume, job)})
+            letter = write_cover_letter(profile, job, analysis) if cover else None
+            resume_pdf, cover_pdf = render_documents(profile, job, analysis, resume, letter)
+            fields: dict[str, Any] = {"rj": json.dumps(resume), "rp": resume_pdf}
+            if letter:
+                fields.update({"cj": json.dumps(letter), "cp": cover_pdf})
         except HTTPException:
             raise
         except Exception as exc:
