@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+# Pinned to Debian 12: Playwright's "install --with-deps" supports bookworm (the plain -slim tag moved to Debian 13).
+FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
