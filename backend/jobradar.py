@@ -421,6 +421,63 @@ def _extract_resume_text(upload: ResumeUpload) -> str:
         raise HTTPException(status_code=400, detail=f"Could not read resume file: {exc}") from exc
 
 
+def _pick_portrait(images: list[bytes]) -> Optional[bytes]:
+    """From the images embedded in a resume, return the most portrait-like one as JPEG (or None).
+    A CV photo is roughly square or upright, at least ~90 px, and usually the largest picture."""
+    try:
+        from PIL import Image
+    except Exception:
+        return None
+    best, best_area = None, 0
+    for raw in images:
+        try:
+            img = Image.open(io.BytesIO(raw))
+            img.load()
+        except Exception:
+            continue
+        width, height = img.size
+        ratio = width / max(1, height)
+        if min(width, height) < 90 or not 0.6 <= ratio <= 1.25:
+            continue  # icons, logos, banners
+        if width * height > best_area:
+            best, best_area = img, width * height
+    if best is None:
+        return None
+    if best.mode not in ("RGB", "L"):
+        background = Image.new("RGB", best.size, (255, 255, 255))
+        rgba = best.convert("RGBA")
+        background.paste(rgba, mask=rgba.split()[-1])
+        best = background
+    best.thumbnail((800, 800))
+    out = io.BytesIO()
+    best.convert("RGB").save(out, format="JPEG", quality=90)
+    return out.getvalue()
+
+
+def _extract_photo(upload: ResumeUpload) -> Optional[bytes]:
+    """Pull the candidate's photo out of an uploaded PDF or DOCX resume, if it has one."""
+    if not upload.content_b64:
+        return None
+    name = upload.filename.lower()
+    try:
+        raw = base64.b64decode(upload.content_b64.split(",", 1)[-1])
+        images: list[bytes] = []
+        if name.endswith(".pdf"):
+            from pypdf import PdfReader
+            for page in PdfReader(io.BytesIO(raw)).pages[:2]:
+                for image in page.images:
+                    images.append(image.data)
+        elif name.endswith(".docx"):
+            import docx
+            document = docx.Document(io.BytesIO(raw))
+            for rel in document.part.rels.values():
+                if "image" in rel.reltype:
+                    images.append(rel.target_part.blob)
+        return _pick_portrait(images)
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -1183,12 +1240,16 @@ def register(
             raise
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"AI could not analyse the resume: {exc}") from exc
+        photo = _extract_photo(payload)  # a PDF/DOCX resume with a portrait also sets the CV photo
         with engine.begin() as conn:
             conn.execute(text("""UPDATE jr_profiles SET resume_text = :t, resume_filename = :f, candidate_json = :c,
                                  updated_at = :u WHERE user_email = :e"""),
                          {"t": resume_text, "f": payload.filename or "pasted.txt", "c": json.dumps(candidate),
                           "u": _now_iso(), "e": email})
-        return {"candidate": candidate, "chars": len(resume_text)}
+            if photo:
+                conn.execute(text("UPDATE jr_profiles SET photo = :p, photo_mime = 'image/jpeg' WHERE user_email = :e"),
+                             {"p": photo, "e": email})
+        return {"candidate": candidate, "chars": len(resume_text), "photo_found": bool(photo)}
 
     @app.post("/api/jobradar/sources")
     def jr_add_source(payload: SourceCreate, authorization: Optional[str] = Header(default=None)) -> dict[str, Any]:

@@ -161,7 +161,7 @@
         <form id="resumeForm">
           <div class="grid">
             <div>
-              <label for="resumeFile">Upload PDF or DOCX</label>
+              <label for="resumeFile">Upload PDF or DOCX (a photo inside is used for your CVs)</label>
               <input type="file" id="resumeFile" accept=".pdf,.docx,.txt" />
             </div>
             <div>
@@ -642,7 +642,11 @@
       }
       if (!body.content_b64 && !body.text) { toast("Choose a file or paste your resume.", true); return; }
       $("resumeBtn").disabled = true; $("resumeBtn").textContent = "Analysing…";
-      try { await api("/api/jobradar/resume", { method: "POST", body: JSON.stringify(body) }); toast("Resume saved."); await loadProfile(); }
+      try {
+        const res = await api("/api/jobradar/resume", { method: "POST", body: JSON.stringify(body) });
+        toast(res.photo_found ? "Resume saved. Your photo was taken from it for the CVs." : "Resume saved.");
+        await loadProfile();
+      }
       catch (err) { toast(err.message, true); }
       finally { $("resumeBtn").disabled = false; $("resumeBtn").textContent = "Save resume"; }
     });
