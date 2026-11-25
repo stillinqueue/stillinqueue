@@ -360,6 +360,20 @@ def enforce_admin_user(authorization: Optional[str], x_admin_key: Optional[str])
     return user
 
 
+import jobradar  # noqa: E402  (registered after auth helpers are defined)
+
+jobradar.register(
+    app,
+    engine=engine,
+    get_user_from_authorization=get_user_from_authorization,
+    send_email=send_email,
+    get_llm_client=get_openai_client,
+    llm_model=os.getenv("JOBRADAR_MODEL", OPENAI_MODEL),
+    admin_api_key=ADMIN_API_KEY,
+    site_url=os.getenv("SITE_URL", "https://stillinqueue.com"),
+)
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", "service": "stillinqueue-backend", "timestamp": datetime.utcnow().isoformat() + "Z"}

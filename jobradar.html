@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Still In Queue · Job Radar</title>
+  <link rel="icon" href="assets/Fav-Photoroom.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-1: #020617;
+      --bg-2: #0b132a;
+      --card: rgba(15, 23, 42, 0.85);
+      --panel: rgba(10, 16, 34, 0.7);
+      --line: rgba(148, 163, 184, 0.35);
+      --text: #f8fbff;
+      --muted: #9fb0d9;
+      --ok: #22c55e;
+      --warn: #fb923c;
+      --bad: #f87171;
+      --blue: #38bdf8;
+      --yellow: #facc15;
+      --radius: 1.1rem;
+      --pill: 999px;
+      --font-sans: "Inter", system-ui, sans-serif;
+      --font-serif: "Playfair Display", "Times New Roman", serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; color: var(--text); font-family: var(--font-sans);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(59, 130, 246, 0.22), transparent 42%),
+        radial-gradient(circle at 90% 90%, rgba(34, 197, 94, 0.2), transparent 45%),
+        linear-gradient(140deg, var(--bg-2), var(--bg-1));
+      background-attachment: fixed;
+    }
+    a { color: var(--blue); }
+    .wrap { width: min(1100px, 100%); margin: 0 auto; padding: 1.2rem 1rem 3rem; }
+    header.top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .brand { display: flex; align-items: center; gap: .7rem; text-decoration: none; color: var(--text); }
+    .brand img { width: 38px; height: 38px; border-radius: 10px; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 4vw, 2.2rem); margin: 0; }
+    .sub { color: var(--muted); margin: .25rem 0 0; font-size: .92rem; }
+    .chip { border: 1px solid var(--line); border-radius: var(--pill); padding: .35rem .8rem; font-size: .8rem; color: var(--muted); text-decoration: none; }
+    .card { border-radius: 1.2rem; border: 1px solid var(--line); background: var(--card); backdrop-filter: blur(12px);
+            box-shadow: 0 24px 64px rgba(2, 6, 23, 0.55); padding: 1.1rem; margin-bottom: 1rem; }
+    .runbar { display: flex; align-items: center; justify-content: space-between; gap: .8rem; flex-wrap: wrap; }
+    .runbar p { margin: 0; color: var(--muted); font-size: .88rem; }
+    .btn { border: 1px solid var(--line); border-radius: var(--pill); color: #09111f; cursor: pointer; text-decoration: none;
+           background: linear-gradient(90deg, var(--blue), #4ade80, var(--yellow)); padding: .5rem .95rem;
+           font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; display: inline-flex; align-items: center; gap: .35rem; }
+    .btn.secondary { background: rgba(10, 16, 34, 0.8); color: var(--text); letter-spacing: .03em; }
+    .btn.ghost { background: transparent; color: var(--muted); letter-spacing: .03em; }
+    .btn:disabled { opacity: .5; cursor: progress; }
+    .tabs { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .tab { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: var(--pill);
+           padding: .45rem .9rem; cursor: pointer; font-size: .85rem; font-weight: 600; }
+    .tab[aria-selected="true"] { color: #09111f; background: linear-gradient(90deg, var(--blue), #4ade80); border-color: transparent; }
+    .tab .n { opacity: .75; margin-left: .25rem; }
+    .empty { color: var(--muted); text-align: center; padding: 2rem 1rem; }
+    .match { border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 1rem; margin-bottom: .8rem; }
+    .match-head { display: grid; grid-template-columns: auto 1fr; gap: .9rem; align-items: start; }
+    .score { width: 54px; height: 54px; border-radius: 14px; display: grid; place-items: center; font-weight: 700; font-size: 1.1rem;
+             border: 1px solid var(--line); }
+    .score.hi { color: var(--ok); border-color: rgba(34,197,94,.6); }
+    .score.mid { color: var(--yellow); border-color: rgba(250,204,21,.5); }
+    .score.lo { color: var(--warn); border-color: rgba(251,146,60,.5); }
+    .match h3 { margin: 0 0 .2rem; font-size: 1.05rem; }
+    .meta { color: var(--muted); font-size: .84rem; display: flex; flex-wrap: wrap; gap: .3rem .8rem; }
+    .fit { margin: .7rem 0 .4rem; font-size: .9rem; line-height: 1.45; }
+    .tags { display: flex; flex-wrap: wrap; gap: .3rem; margin: .3rem 0; }
+    .tag { font-size: .74rem; padding: .18rem .55rem; border-radius: var(--pill); border: 1px solid var(--line); color: var(--muted); }
+    .tag.good { color: #86efac; border-color: rgba(34,197,94,.45); }
+    .tag.gap { color: #fdba74; border-color: rgba(251,146,60,.45); }
+    .match.highlight { border-color: rgba(250,204,21,.55); box-shadow: inset 3px 0 0 #facc15; }
+    .star-badge { display: inline-block; margin-right: .5rem; padding: .1rem .5rem; border-radius: 999px; font-size: .72rem;
+      font-weight: 700; vertical-align: middle; color: #1e1b04; background: #facc15; }
+    .actions { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .8rem; }
+    details { margin-top: .6rem; }
+    summary { cursor: pointer; color: var(--muted); font-size: .84rem; }
+    .desc { white-space: pre-wrap; font-size: .84rem; color: #cbd5f5; max-height: 360px; overflow: auto; border-top: 1px solid var(--line); margin-top: .5rem; padding-top: .5rem; }
+    .notes { font-size: .82rem; color: var(--muted); margin: .4rem 0 0; }
+    form .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .8rem; }
+    label { display: block; font-size: .74rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: .3rem; }
+    input[type=text], input[type=number], input[type=url], select, textarea {
+      width: 100%; padding: .55rem .7rem; border-radius: .7rem; border: 1px solid var(--line); background: rgba(2,6,23,.6);
+      color: var(--text); font: inherit; font-size: .9rem; }
+    textarea { min-height: 110px; resize: vertical; }
+    .hint { font-size: .78rem; color: var(--muted); margin: .25rem 0 0; }
+    .checks { display: flex; flex-wrap: wrap; gap: .4rem .9rem; font-size: .88rem; }
+    .checks label { text-transform: none; letter-spacing: 0; font-size: .88rem; color: var(--text); display: inline-flex; gap: .35rem; align-items: center; margin: 0; }
+    h2 { font-size: 1.05rem; margin: 0 0 .8rem; }
+    .src { display: grid; grid-template-columns: auto 1fr auto; gap: .7rem; align-items: center; padding: .6rem 0; border-bottom: 1px solid rgba(148,163,184,.15); }
+    .src:last-child { border-bottom: 0; }
+    .src small { color: var(--muted); display: block; font-size: .76rem; word-break: break-word; }
+    .src small.err { color: var(--warn); }
+    #toast { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%); background: #0f172a; border: 1px solid var(--line);
+             padding: .6rem 1rem; border-radius: var(--pill); font-size: .86rem; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; max-width: calc(100% - 2rem); }
+    #toast.show { opacity: 1; }
+    .callout { border: 1px dashed var(--line); border-radius: var(--radius); padding: .8rem 1rem; color: var(--muted); font-size: .88rem; margin-bottom: 1rem; }
+    .hidden { display: none !important; }
+    @media (max-width: 640px) {
+      .match-head { grid-template-columns: 1fr; }
+      .actions .btn { flex: 1 1 calc(50% - .45rem); justify-content: center; }
+      .src { grid-template-columns: auto 1fr; }
+      .src .btn { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="agents.html" id="backLink">
+        <img src="assets/Fav-Photoroom.png" alt="" />
+        <div>
+          <h1>Job Radar</h1>
+          <p class="sub">New jobs every day · tailored resume &amp; cover letter ready · you apply</p>
+        </div>
+      </a>
+      <a class="chip" id="userChip" href="profile.html">Profile</a>
+    </header>
+
+    <section class="card runbar">
+      <p id="runInfo">Loading…</p>
+      <button class="btn" id="runBtn" type="button">Find jobs now</button>
+    </section>
+
+    <div id="resumeCallout" class="callout hidden">
+      Start by uploading your master resume in <a href="#" data-goto="settings">Settings</a>. Job Radar only uses facts from it, so keep it complete.
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="matches" aria-selected="true">To apply<span class="n" id="nActive"></span></button>
+      <button class="tab" role="tab" data-tab="applied" aria-selected="false">Applied<span class="n" id="nApplied"></span></button>
+      <button class="tab" role="tab" data-tab="skipped" aria-selected="false">Skipped<span class="n" id="nSkipped"></span></button>
+      <button class="tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+      <button class="tab" role="tab" data-tab="sources" aria-selected="false">Companies &amp; sources</button>
+    </nav>
+
+    <section id="panel-list"><div id="matchList"></div></section>
+
+    <section id="panel-settings" class="hidden">
+      <div class="card">
+        <h2>Master resume</h2>
+        <p class="hint" id="resumeState">No resume uploaded yet.</p>
+        <form id="resumeForm">
+          <div class="grid">
+            <div>
+              <label for="resumeFile">Upload PDF or DOCX</label>
+              <input type="file" id="resumeFile" accept=".pdf,.docx,.txt" />
+            </div>
+            <div>
+              <label for="resumeText">…or paste text</label>
+              <textarea id="resumeText" placeholder="Paste your full resume here"></textarea>
+            </div>
+          </div>
+          <div class="actions"><button class="btn" type="submit" id="resumeBtn">Save resume</button></div>
+        </form>
+      </div>
+
+      <form id="settingsForm" class="card">
+        <h2>What to look for</h2>
+        <div class="grid">
+          <div>
+            <label for="sKeywords">Job title keywords</label>
+            <input type="text" id="sKeywords" />
+            <p class="hint">Comma-separated. A job's title must contain one of these.</p>
+          </div>
+          <div>
+            <label for="sExclude">Exclude if title contains</label>
+            <input type="text" id="sExclude" />
+          </div>
+          <div>
+            <label for="sLocations">Locations</label>
+            <input type="text" id="sLocations" />
+            <p class="hint">"germany" = all of Germany. "bayern" covers München, Nürnberg, Augsburg, Erlangen …</p>
+          </div>
+          <div>
+            <label for="sHighlight">Highlight &amp; rank first</label>
+            <input type="text" id="sHighlight" />
+            <p class="hint">Jobs here get a ★ badge, are scored and tailored first (e.g. "bayern").</p>
+          </div>
+          <div>
+            <label for="sSearch">Search terms on company sites</label>
+            <input type="text" id="sSearch" />
+            <p class="hint">Up to 4 searches per career site.</p>
+          </div>
+          <div>
+            <label for="sFocus">Career focus (guides the AI score)</label>
+            <input type="text" id="sFocus" maxlength="500" />
+          </div>
+          <div>
+            <label for="sMinEmp">Prefer companies with at least … employees</label>
+            <input type="number" id="sMinEmp" min="0" step="25" />
+            <select id="sSmallMode" style="margin-top:6px">
+              <option value="deprioritize">Smaller companies: rank lower</option>
+              <option value="hide">Smaller companies: hide</option>
+              <option value="ignore">Smaller companies: treat the same</option>
+            </select>
+            <p class="hint">Headcount is the AI's estimate when the company doesn't say.</p>
+          </div>
+          <div>
+            <label for="sSalary">Minimum salary (EUR / year)</label>
+            <input type="number" id="sSalary" min="0" step="1000" />
+            <p class="hint">Most German ads don't state salary; AI estimates are used then.</p>
+          </div>
+          <div>
+            <label for="sSeniority">Seniority</label>
+            <select id="sSeniority">
+              <option value="auto">Auto (from my resume)</option>
+              <option value="junior">Junior</option><option value="mid">Mid</option>
+              <option value="senior">Senior</option><option value="lead">Lead</option>
+            </select>
+          </div>
+          <div>
+            <label for="sScore">Minimum fit score: <span id="sScoreVal"></span></label>
+            <input type="range" id="sScore" min="30" max="95" step="5" style="width:100%" />
+          </div>
+          <div>
+            <label for="sCover">Cover letters</label>
+            <select id="sCover">
+              <option value="auto">When the job asks for one / German employers</option>
+              <option value="always">Always</option>
+              <option value="never">Never</option>
+            </select>
+          </div>
+          <div>
+            <label for="sMax">Tailored documents per day (max)</label>
+            <input type="number" id="sMax" min="0" max="25" />
+          </div>
+          <div>
+            <label>Company size</label>
+            <div class="checks" id="sSizes"></div>
+            <p class="hint">None ticked = any size.</p>
+          </div>
+          <div>
+            <label>Options</label>
+            <div class="checks">
+              <label><input type="checkbox" id="sRemote" /> Accept remote (Germany)</label>
+              <label><input type="checkbox" id="sEmail" /> Email me new matches</label>
+              <label><input type="checkbox" id="sDaily" /> Run automatically every day</label>
+            </div>
+          </div>
+        </div>
+        <div class="actions"><button class="btn" type="submit">Save settings</button></div>
+      </form>
+    </section>
+
+    <section id="panel-sources" class="hidden">
+      <div class="card">
+        <h2>Companies &amp; job sources</h2>
+        <p class="hint" style="margin-bottom:.6rem">Job Radar reads each company's public career site or job board feed once a day. "Link" entries can't be read automatically. You check those yourself.</p>
+        <div id="sourceList"></div>
+      </div>
+      <form class="card" id="sourceForm">
+        <h2>Add a company</h2>
+        <div class="grid">
+          <div><label for="nName">Company name</label><input type="text" id="nName" required /></div>
+          <div>
+            <label for="nType">Career site type</label>
+            <select id="nType">
+              <option value="greenhouse">Greenhouse (boards.greenhouse.io/&lt;token&gt;)</option>
+              <option value="lever">Lever (jobs.lever.co/&lt;token&gt;)</option>
+              <option value="ashby">Ashby (jobs.ashbyhq.com/&lt;token&gt;)</option>
+              <option value="personio">Personio (&lt;token&gt;.jobs.personio.de)</option>
+              <option value="smartrecruiters">SmartRecruiters (careers.smartrecruiters.com/&lt;token&gt;)</option>
+              <option value="workday">Workday (&lt;tenant&gt;.wdN.myworkdayjobs.com/&lt;site&gt;)</option>
+              <option value="phenom">Phenom career site (base URL)</option>
+              <option value="avature">Avature career site (base URL)</option>
+              <option value="link">Just a link (check manually)</option>
+            </select>
+          </div>
+          <div data-for="greenhouse lever ashby personio smartrecruiters"><label for="nToken">Token / company id</label><input type="text" id="nToken" placeholder="e.g. celonis" /></div>
+          <div data-for="workday"><label for="nWorkday">Workday careers URL</label><input type="url" id="nWorkday" placeholder="https://company.wd3.myworkdayjobs.com/External" /></div>
+          <div data-for="phenom avature link"><label for="nBase">Career site URL</label><input type="url" id="nBase" placeholder="https://careers.example.com" /></div>
+          <div>
+            <label for="nSize">Company size</label>
+            <select id="nSize">
+              <option value="">Let AI estimate</option>
+              <option value="startup">Startup (&lt;50)</option><option value="small">Small (50–249)</option>
+              <option value="mid">Mid (250–999)</option><option value="large">Large (1,000–9,999)</option>
+              <option value="enterprise">Enterprise (10,000+)</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions"><button class="btn" type="submit">Add company</button></div>
+      </form>
+    </section>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+  (function () {
+    const params = new URLSearchParams(location.search);
+    const backendUrl = params.get("backend") || "https://sq-ai-renderer.onrender.com";
+    const token = localStorage.getItem("sq_auth_token");
+    if (!token) { location.href = `login.html?backend=${encodeURIComponent(backendUrl)}`; return; }
+
+    const $ = (id) => document.getElementById(id);
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const safeUrl = (u) => /^https?:\/\//i.test(u || "") ? u : "#";
+    const SIZE_LABEL = { startup: "Startup", small: "Small", mid: "Mid-size", large: "Large", enterprise: "Enterprise", unknown: "Size unknown" };
+    let state = { tab: "matches", profile: null, polling: null };
+
+    function toast(msg, isError) {
+      const t = $("toast"); t.textContent = msg; t.style.borderColor = isError ? "var(--warn)" : "var(--line)";
+      t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 3800);
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(`${backendUrl}${path}`, {
+        ...opts,
+        headers: { Authorization: `Bearer ${token}`, ...(opts.body ? { "Content-Type": "application/json" } : {}), ...(opts.headers || {}) },
+      });
+      if (res.status === 401) { localStorage.removeItem("sq_auth_token"); location.href = `login.html?backend=${encodeURIComponent(backendUrl)}`; throw new Error("Session expired"); }
+      if (!res.ok) {
+        let detail = res.statusText;
+        try { detail = (await res.json()).detail || detail; } catch (_) {}
+        throw new Error(detail);
+      }
+      return opts.raw ? res : res.json();
+    }
+
+    // ---------- tabs
+    document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => selectTab(tab.dataset.tab)));
+    document.querySelectorAll("[data-goto]").forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); selectTab(a.dataset.goto); }));
+    function selectTab(name) {
+      state.tab = name;
+      document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
+      $("panel-list").classList.toggle("hidden", !["matches", "applied", "skipped"].includes(name));
+      $("panel-settings").classList.toggle("hidden", name !== "settings");
+      $("panel-sources").classList.toggle("hidden", name !== "sources");
+      if (["matches", "applied", "skipped"].includes(name)) loadMatches();
+    }
+
+    // ---------- matches
+    function salaryText(m) {
+      if (m.salary_min || m.salary_max) {
+        const f = (v) => v ? `${Math.round(v / 1000)}k` : "?";
+        return `${m.salary_currency || "EUR"} ${f(m.salary_min)}–${f(m.salary_max)} (stated)`;
+      }
+      const a = m.analysis || {};
+      if (a.salary_estimate_eur_min) return `~€${Math.round(a.salary_estimate_eur_min / 1000)}–${Math.round(a.salary_estimate_eur_max / 1000)}k (AI estimate)`;
+      return "Salary not stated";
+    }
+
+    function renderMatch(m) {
+      const a = m.analysis || {};
+      const cls = m.score >= 80 ? "hi" : m.score >= 65 ? "mid" : "lo";
+      const posted = m.posted_at ? new Date(m.posted_at).toLocaleDateString() : "date unknown";
+      const applyUrl = safeUrl(m.apply_url || m.url);
+      const statusButtons = m.status === "applied"
+        ? `<button class="btn ghost" data-act="status" data-status="new">Undo applied</button>`
+        : `<button class="btn secondary" data-act="status" data-status="applied">✓ Mark applied</button>
+           ${m.status === "saved" ? "" : `<button class="btn ghost" data-act="status" data-status="saved">Save</button>`}
+           ${m.status === "skipped" ? `<button class="btn ghost" data-act="status" data-status="new">Restore</button>` : `<button class="btn ghost" data-act="status" data-status="skipped">Skip</button>`}`;
+      return `
+        <article class="match${a.highlight ? " highlight" : ""}" data-id="${esc(m.id)}">
+          <div class="match-head">
+            <div class="score ${cls}" title="AI fit score">${esc(m.score ?? "–")}</div>
+            <div>
+              <h3>${a.highlight ? `<span class="star-badge">★ Bayern</span>` : ""}${esc(m.title)}</h3>
+              <div class="meta">
+                <span><b>${esc(m.company)}</b></span><span>📍 ${esc(m.location || "—")}</span>
+                <span>🗓 ${esc(posted)}</span><span>🏢 ${esc(SIZE_LABEL[m.company_size] || "Size unknown")}${a.employees ? ` · ~${esc(Number(a.employees).toLocaleString())} employees` : ""}${a.small_company ? " · below your size preference" : ""}</span>
+                <span>💶 ${esc(salaryText(m))}</span>${m.status === "saved" ? "<span>⭐ saved</span>" : ""}
+              </div>
+            </div>
+          </div>
+          <p class="fit">${esc(a.fit_summary || "")}</p>
+          <div class="tags">${(a.matched_skills || []).slice(0, 8).map((s) => `<span class="tag good">${esc(s)}</span>`).join("")}
+            ${(a.missing_skills || []).slice(0, 5).map((s) => `<span class="tag gap">gap: ${esc(s)}</span>`).join("")}</div>
+          <div class="actions">
+            ${m.has_resume ? `<button class="btn" data-act="dl" data-kind="resume">⬇ Tailored resume</button>`
+                           : `<button class="btn secondary" data-act="gen">Generate resume</button>`}
+            ${m.has_cover ? `<button class="btn" data-act="dl" data-kind="cover">⬇ Cover letter</button>`
+                          : `<button class="btn secondary" data-act="gen" data-cover="1">Generate cover letter</button>`}
+            <a class="btn secondary" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">Open apply page ↗</a>
+            ${statusButtons}
+          </div>
+          <details data-lazy="1"><summary>Job description &amp; what was tailored</summary><div class="desc">Loading…</div></details>
+        </article>`;
+    }
+
+    async function loadMatches() {
+      const filter = state.tab === "matches" ? "active" : state.tab;
+      const list = $("matchList");
+      list.innerHTML = `<div class="card empty">Loading…</div>`;
+      try {
+        const data = await api(`/api/jobradar/matches?status=${filter}`);
+        const c = data.counts || {};
+        $("nActive").textContent = (c.new || 0) + (c.saved || 0) ? `(${(c.new || 0) + (c.saved || 0)})` : "";
+        $("nApplied").textContent = c.applied ? `(${c.applied})` : "";
+        $("nSkipped").textContent = c.skipped ? `(${c.skipped})` : "";
+        if (!data.matches.length) {
+          list.innerHTML = `<div class="card empty">${state.tab === "matches"
+            ? "No open matches yet. Job Radar checks every day; you can also press <b>Find jobs now</b>."
+            : "Nothing here yet."}</div>`;
+          return;
+        }
+        // Bayern (highlighted) first, then by priority (fit score adjusted for company size).
+        const rank = (m) => { const a = m.analysis || {}; return (a.highlight ? 1000 : 0) + (a.priority ?? m.score ?? 0); };
+        const sorted = state.tab === "matches" ? [...data.matches].sort((x, y) => rank(y) - rank(x)) : data.matches;
+        list.innerHTML = sorted.map(renderMatch).join("");
+      } catch (err) {
+        list.innerHTML = `<div class="card empty">Could not load matches: ${esc(err.message)}</div>`;
+      }
+    }
+
+    $("matchList").addEventListener("toggle", async (e) => {
+      const det = e.target;
+      if (det.tagName !== "DETAILS" || !det.open || det.dataset.lazy !== "1") return;
+      det.dataset.lazy = "0";
+      const id = det.closest(".match").dataset.id;
+      try {
+        const d = await api(`/api/jobradar/matches/${id}`);
+        const notes = d.resume && d.resume.tailoring_notes ? `<p class="notes">✏️ ${esc(d.resume.tailoring_notes)}</p>` : "";
+        det.querySelector(".desc").innerHTML = notes + esc(d.job.description || "No description available.");
+      } catch (err) { det.querySelector(".desc").textContent = err.message; }
+    }, true);
+
+    $("matchList").addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-act]");
+      if (!btn) return;
+      const card = btn.closest(".match");
+      const id = card.dataset.id;
+      btn.disabled = true;
+      try {
+        if (btn.dataset.act === "dl") {
+          const res = await api(`/api/jobradar/matches/${id}/${btn.dataset.kind}.pdf`, { raw: true });
+          const blob = await res.blob();
+          const name = (res.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/);
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob); a.download = name ? name[1] : `${btn.dataset.kind}.pdf`;
+          document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        } else if (btn.dataset.act === "gen") {
+          btn.textContent = "Writing… (~30s)";
+          await api(`/api/jobradar/matches/${id}/generate?cover=${btn.dataset.cover ? "true" : "false"}`, { method: "POST" });
+          toast("Documents ready.");
+          await loadMatches();
+        } else if (btn.dataset.act === "status") {
+          await api(`/api/jobradar/matches/${id}/status`, { method: "POST", body: JSON.stringify({ status: btn.dataset.status }) });
+          toast(btn.dataset.status === "applied" ? "Marked as applied. Good luck! 🍀" : "Updated.");
+          await loadMatches();
+        }
+      } catch (err) { toast(err.message, true); }
+      finally { btn.disabled = false; }
+    });
+
+    // ---------- runs
+    function describeRun(run) {
+      if (!run) return "Job Radar hasn't run yet.";
+      const when = new Date(run.finished_at || run.started_at).toLocaleString();
+      if (run.status === "running") return "🔎 Searching career sites and tailoring documents… this takes a few minutes.";
+      if (run.status === "error") return `Last run failed (${when}): ${run.error}`;
+      const s = run.stats || {};
+      return `Last run ${when}: checked ${s.collected ?? 0} postings → ${s.title_match ?? 0} matched your keywords → ` +
+             `${s.location_match ?? 0} in your locations (${s.highlighted ?? 0} in Bayern) → ${s.matched ?? 0} good fits, ${s.tailored ?? 0} with tailored documents.`;
+    }
+
+    async function refreshRun() {
+      try {
+        const { run } = await api("/api/jobradar/runs/latest");
+        $("runInfo").textContent = describeRun(run);
+        const running = run && run.status === "running";
+        $("runBtn").disabled = running;
+        $("runBtn").textContent = running ? "Running…" : "Find jobs now";
+        if (running && !state.polling) state.polling = setInterval(refreshRun, 8000);
+        if (!running && state.polling) { clearInterval(state.polling); state.polling = null; loadMatches(); }
+      } catch (err) { $("runInfo").textContent = err.message; }
+    }
+
+    $("runBtn").addEventListener("click", async () => {
+      try {
+        await api("/api/jobradar/run", { method: "POST" });
+        toast("Job Radar started.");
+        refreshRun();
+      } catch (err) { toast(err.message, true); }
+    });
+
+    // ---------- settings
+    const list = (v) => (v || []).join(", ");
+    const parseList = (v) => v.split(",").map((s) => s.trim()).filter(Boolean);
+
+    function fillSettings(p) {
+      const s = p.settings;
+      $("sKeywords").value = list(s.keywords); $("sExclude").value = list(s.exclude_keywords);
+      $("sLocations").value = list(s.locations); $("sSalary").value = s.min_salary_eur || "";
+      $("sHighlight").value = list(s.highlight_locations); $("sSearch").value = list(s.search_terms);
+      $("sFocus").value = s.career_focus || ""; $("sMinEmp").value = s.min_employees ?? 75;
+      $("sSmallMode").value = s.small_company_mode || "deprioritize";
+      $("sSeniority").value = s.seniority; $("sScore").value = s.min_score; $("sScoreVal").textContent = s.min_score;
+      $("sCover").value = s.cover_letter_mode; $("sMax").value = s.max_tailored_per_run;
+      $("sRemote").checked = !!s.remote_ok; $("sEmail").checked = !!s.email_alerts; $("sDaily").checked = !!s.daily_enabled;
+      $("sSizes").innerHTML = p.size_classes.map((c) =>
+        `<label><input type="checkbox" value="${esc(c)}" ${s.company_sizes.includes(c) ? "checked" : ""}/> ${esc(SIZE_LABEL[c])}</label>`).join("");
+      const cand = p.candidate || {};
+      $("resumeState").textContent = p.has_resume
+        ? `Using ${p.resume_filename || "your resume"}: ${cand.name || ""} · ${cand.years_experience ?? "?"} yrs · ${cand.seniority || ""} · ${(cand.core_skills || []).slice(0, 8).join(", ")}`
+        : "No resume uploaded yet.";
+      $("resumeCallout").classList.toggle("hidden", p.has_resume);
+    }
+    $("sScore").addEventListener("input", (e) => { $("sScoreVal").textContent = e.target.value; });
+
+    $("settingsForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const settings = {
+        keywords: parseList($("sKeywords").value), exclude_keywords: parseList($("sExclude").value),
+        locations: parseList($("sLocations").value), min_salary_eur: Number($("sSalary").value || 0),
+        highlight_locations: parseList($("sHighlight").value), search_terms: parseList($("sSearch").value),
+        career_focus: $("sFocus").value.trim(), min_employees: Number($("sMinEmp").value || 0),
+        small_company_mode: $("sSmallMode").value,
+        seniority: $("sSeniority").value, min_score: Number($("sScore").value), cover_letter_mode: $("sCover").value,
+        max_tailored_per_run: Number($("sMax").value || 0), remote_ok: $("sRemote").checked,
+        email_alerts: $("sEmail").checked, daily_enabled: $("sDaily").checked,
+        company_sizes: [...$("sSizes").querySelectorAll("input:checked")].map((i) => i.value),
+      };
+      try { await api("/api/jobradar/settings", { method: "PUT", body: JSON.stringify({ settings }) }); toast("Settings saved."); }
+      catch (err) { toast(err.message, true); }
+    });
+
+    $("resumeForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const file = $("resumeFile").files[0];
+      const body = { filename: "", content_b64: "", text: $("resumeText").value.trim() };
+      if (file) {
+        if (file.size > 5 * 1024 * 1024) { toast("File must be under 5 MB.", true); return; }
+        body.filename = file.name;
+        body.content_b64 = await new Promise((resolve, reject) => {
+          const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(file);
+        });
+      }
+      if (!body.content_b64 && !body.text) { toast("Choose a file or paste your resume.", true); return; }
+      $("resumeBtn").disabled = true; $("resumeBtn").textContent = "Analysing…";
+      try { await api("/api/jobradar/resume", { method: "POST", body: JSON.stringify(body) }); toast("Resume saved."); await loadProfile(); }
+      catch (err) { toast(err.message, true); }
+      finally { $("resumeBtn").disabled = false; $("resumeBtn").textContent = "Save resume"; }
+    });
+
+    // ---------- sources
+    function sourceDetail(s) {
+      const c = s.config || {};
+      return c.token || c.base || c.url || (c.tenant ? `${c.tenant}.${c.wd}.myworkdayjobs.com/${c.site}` : s.source_type);
+    }
+    function renderSources(sources) {
+      $("sourceList").innerHTML = sources.map((s) => {
+        const status = s.last_status || "not run yet";
+        const link = s.source_type === "link" ? ` · <a href="${esc(safeUrl(s.config.url))}" target="_blank" rel="noopener noreferrer">open careers page ↗</a>` : "";
+        return `<div class="src" data-id="${esc(s.id)}">
+          <input type="checkbox" ${s.enabled ? "checked" : ""} data-src-act="toggle" aria-label="Enabled" />
+          <div><b>${esc(s.name)}</b> <span class="tag">${esc(s.source_type)}</span> ${s.size_class ? `<span class="tag">${esc(SIZE_LABEL[s.size_class])}</span>` : ""}
+            <small>${esc(sourceDetail(s))}${link}</small>
+            <small class="${status.includes("error") ? "err" : ""}">${esc(status)}</small></div>
+          <button class="btn ghost" data-src-act="delete">Remove</button></div>`;
+      }).join("") || `<p class="empty">No sources.</p>`;
+    }
+    $("sourceList").addEventListener("click", async (e) => {
+      const el = e.target.closest("[data-src-act]");
+      if (!el) return;
+      const id = el.closest(".src").dataset.id;
+      try {
+        if (el.dataset.srcAct === "toggle") {
+          await api(`/api/jobradar/sources/${id}`, { method: "PATCH", body: JSON.stringify({ enabled: el.checked }) });
+        } else if (el.dataset.srcAct === "delete") {
+          await api(`/api/jobradar/sources/${id}`, { method: "DELETE" }); await loadProfile();
+        }
+      } catch (err) { toast(err.message, true); }
+    });
+
+    function syncSourceFields() {
+      const type = $("nType").value;
+      document.querySelectorAll("#sourceForm [data-for]").forEach((el) => el.classList.toggle("hidden", !el.dataset.for.split(" ").includes(type)));
+    }
+    $("nType").addEventListener("change", syncSourceFields);
+    syncSourceFields();
+
+    $("sourceForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const type = $("nType").value;
+      const name = $("nName").value.trim();
+      let config = {};
+      if (["greenhouse", "lever", "ashby", "personio", "smartrecruiters"].includes(type)) {
+        config = { token: $("nToken").value.trim() };
+      } else if (type === "workday") {
+        const m = $("nWorkday").value.trim().match(/^https:\/\/([^.]+)\.(wd\d+)\.myworkdayjobs\.com\/(?:[a-z]{2}-[A-Z]{2}\/)?([^/?#]+)/);
+        if (!m) { toast("Paste a URL like https://company.wd3.myworkdayjobs.com/External", true); return; }
+        config = { tenant: m[1], wd: m[2], site: m[3], location_hint: "Germany" };
+      } else if (type === "link") {
+        config = { url: $("nBase").value.trim() };
+      } else {
+        config = { base: $("nBase").value.trim().replace(/\/$/, "") };
+        if (type === "phenom") Object.assign(config, { lang: "en_global", country: "global", filters: { country: ["Germany"] } });
+      }
+      if (Object.values(config).some((v) => v === "")) { toast("Fill in the source details.", true); return; }
+      try {
+        await api("/api/jobradar/sources", { method: "POST", body: JSON.stringify({ name, source_type: type, config, size_class: $("nSize").value || null }) });
+        toast(`${name} added.`); e.target.reset(); syncSourceFields(); await loadProfile();
+      } catch (err) { toast(err.message, true); }
+    });
+
+    // ---------- boot
+    async function loadProfile() {
+      const p = await api("/api/jobradar/profile");
+      state.profile = p; fillSettings(p); renderSources(p.sources);
+    }
+    (async () => {
+      $("backLink").href = `agents.html?backend=${encodeURIComponent(backendUrl)}`;
+      $("userChip").href = `profile.html?backend=${encodeURIComponent(backendUrl)}`;
+      try {
+        const me = await api("/api/auth/me"); $("userChip").textContent = me.name || "Profile";
+        await loadProfile(); await refreshRun(); await loadMatches();
+        if (!state.profile.has_resume) selectTab("settings");
+      } catch (err) { $("runInfo").textContent = `Could not reach Job Radar: ${err.message}`; }
+    })();
+  })();
+  </script>
+</body>
+</html>
