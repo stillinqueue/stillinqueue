@@ -74,6 +74,17 @@
     .tag { font-size: .74rem; padding: .18rem .55rem; border-radius: var(--pill); border: 1px solid var(--line); color: var(--muted); }
     .tag.good { color: #86efac; border-color: rgba(34,197,94,.45); }
     .tag.gap { color: #fdba74; border-color: rgba(251,146,60,.45); }
+    .track { border: 1px solid var(--line); border-radius: 12px; padding: .7rem .8rem; margin: .6rem 0; background: rgba(15,23,42,.45); }
+    .track-head { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-size: .85rem; color: var(--muted, #94a3b8); }
+    .stage-pill { padding: .15rem .6rem; border-radius: 999px; font-weight: 700; font-size: .78rem; background: #1e3a8a; color: #dbeafe; }
+    .stage-interview, .stage-assessment { background: #854d0e; color: #fef9c3; }
+    .stage-offer { background: #166534; color: #dcfce7; }
+    .stage-rejected, .stage-withdrawn, .stage-no_response { background: #3f3f46; color: #e4e4e7; }
+    .track-form { display: grid; grid-template-columns: minmax(150px, 200px) 1fr auto; gap: .5rem; margin-top: .6rem; }
+    @media (max-width: 640px) { .track-form { grid-template-columns: 1fr; } }
+    .timeline { list-style: none; margin: .7rem 0 0; padding: 0; font-size: .85rem; }
+    .timeline li { display: flex; gap: .5rem; padding: .2rem 0; border-top: 1px dashed var(--line); }
+    .timeline time { color: var(--muted, #94a3b8); min-width: 5.5rem; }
     .match.highlight { border-color: rgba(250,204,21,.55); box-shadow: inset 3px 0 0 #facc15; }
     .star-badge { display: inline-block; margin-right: .5rem; padding: .1rem .5rem; border-radius: 999px; font-size: .72rem;
       font-weight: 700; vertical-align: middle; color: #1e1b04; background: #facc15; }
@@ -346,6 +357,34 @@
       return "Salary not stated";
     }
 
+    const STAGE_ORDER = ["applied", "confirmation", "assessment", "interview", "offer", "rejected", "withdrawn", "no_response"];
+    const EVENT_ICON = { applied: "📨", stage: "🔁", note: "📝", posting_closed: "🚫", reminder: "⏰", undo: "↩" };
+    function renderTracking(m) {
+      const labels = (state.profile && state.profile.stages) || {};
+      const stage = m.stage || "applied";
+      const days = m.applied_at ? Math.floor((Date.now() - new Date(m.applied_at)) / 86400000) : null;
+      const events = [...(m.events || [])].reverse();
+      const posting = m.posting_state === "closed" ? `<span class="tag gap">job ad taken down</span>`
+                    : m.posting_state === "open" ? `<span class="tag good">job ad still online</span>` : "";
+      return `
+        <div class="track">
+          <div class="track-head">
+            <span class="stage-pill stage-${esc(stage)}">${esc(labels[stage] || stage)}</span>
+            ${m.applied_at ? `<span>Applied ${esc(new Date(m.applied_at).toLocaleDateString())} · ${days} day${days === 1 ? "" : "s"} ago</span>` : ""}
+            ${posting}
+          </div>
+          <div class="track-form">
+            <select data-track="stage" aria-label="Application stage">
+              ${STAGE_ORDER.map((s) => `<option value="${s}" ${s === stage ? "selected" : ""}>${esc(labels[s] || s)}</option>`).join("")}
+            </select>
+            <input type="text" data-track="note" maxlength="500" placeholder="Add an update, e.g. 'Phone interview 3 Dec with Anna (HR)'" />
+            <button class="btn secondary" data-act="track">Save update</button>
+          </div>
+          ${events.length ? `<ol class="timeline">${events.map((e) => `<li><span>${EVENT_ICON[e.kind] || "•"}</span>
+              <time>${esc(new Date(e.at).toLocaleDateString())}</time> ${esc(e.detail || e.kind)}</li>`).join("")}</ol>` : ""}
+        </div>`;
+    }
+
     function renderMatch(m) {
       const a = m.analysis || {};
       const cls = m.score >= 80 ? "hi" : m.score >= 65 ? "mid" : "lo";
@@ -366,18 +405,24 @@
                 <span><b>${esc(m.company)}</b></span><span>📍 ${esc(m.location || "—")}</span>
                 <span>🗓 ${esc(posted)}</span><span>🏢 ${esc(SIZE_LABEL[m.company_size] || "Size unknown")}${a.employees ? ` · ~${esc(Number(a.employees).toLocaleString())} employees` : ""}${a.small_company ? " · below your size preference" : ""}</span>
                 <span>💶 ${esc(salaryText(m))}</span>${m.status === "saved" ? "<span>⭐ saved</span>" : ""}
+                ${a.german_requirement === "required" ? "<span>🇩🇪 German required · documents in German</span>"
+                  : a.german_requirement === "nice_to_have" ? "<span>🇩🇪 German a plus · documents in German</span>" : ""}
               </div>
             </div>
           </div>
           <p class="fit">${esc(a.fit_summary || "")}</p>
           <div class="tags">${(a.matched_skills || []).slice(0, 8).map((s) => `<span class="tag good">${esc(s)}</span>`).join("")}
             ${(a.missing_skills || []).slice(0, 5).map((s) => `<span class="tag gap">gap: ${esc(s)}</span>`).join("")}</div>
+          ${m.status === "applied" ? renderTracking(m) : ""}
           <div class="actions">
-            ${m.has_resume ? `<button class="btn" data-act="dl" data-kind="resume">⬇ Tailored resume</button>`
-                           : `<button class="btn secondary" data-act="gen">Generate resume</button>`}
-            ${m.has_cover ? `<button class="btn" data-act="dl" data-kind="cover">⬇ Cover letter</button>`
-                          : `<button class="btn secondary" data-act="gen" data-cover="1">Generate cover letter</button>`}
-            <a class="btn secondary" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">Open apply page ↗</a>
+            ${m.status === "applied"
+              ? `${m.has_resume ? `<button class="btn" data-act="dl" data-kind="resume">⬇ Resume you sent</button>` : ""}
+                 ${m.has_cover ? `<button class="btn" data-act="dl" data-kind="cover">⬇ Cover letter you sent</button>` : ""}`
+              : `${m.has_resume ? `<button class="btn" data-act="dl" data-kind="resume">⬇ Tailored resume</button>`
+                               : `<button class="btn secondary" data-act="gen">Generate resume</button>`}
+                 ${m.has_cover ? `<button class="btn" data-act="dl" data-kind="cover">⬇ Cover letter</button>`
+                               : `<button class="btn secondary" data-act="gen" data-cover="1">Generate cover letter</button>`}`}
+            <a class="btn secondary" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">${m.status === "applied" ? "Open job ad ↗" : "Open apply page ↗"}</a>
             ${statusButtons}
           </div>
           <details data-lazy="1"><summary>Job description &amp; what was tailored</summary><div class="desc">Loading…</div></details>
@@ -402,7 +447,10 @@
         }
         // Bayern (highlighted) first, then by priority (fit score adjusted for company size).
         const rank = (m) => { const a = m.analysis || {}; return (a.highlight ? 1000 : 0) + (a.priority ?? m.score ?? 0); };
-        const sorted = state.tab === "matches" ? [...data.matches].sort((x, y) => rank(y) - rank(x)) : data.matches;
+        state.lastMatches = data.matches;
+        const byApplied = (x, y) => String(y.applied_at || "").localeCompare(String(x.applied_at || ""));
+        const sorted = state.tab === "matches" ? [...data.matches].sort((x, y) => rank(y) - rank(x))
+                     : state.tab === "applied" ? [...data.matches].sort(byApplied) : data.matches;
         list.innerHTML = sorted.map(renderMatch).join("");
       } catch (err) {
         list.innerHTML = `<div class="card empty">Could not load matches: ${esc(err.message)}</div>`;
@@ -440,6 +488,16 @@
           await api(`/api/jobradar/matches/${id}/generate?cover=${btn.dataset.cover ? "true" : "false"}`, { method: "POST" });
           toast("Documents ready.");
           await loadMatches();
+        } else if (btn.dataset.act === "track") {
+          const stage = card.querySelector('[data-track="stage"]').value;
+          const note = card.querySelector('[data-track="note"]').value.trim();
+          const current = (state.lastMatches || []).find((x) => x.id === id) || {};
+          const body = { note };
+          if (stage !== (current.stage || "applied")) body.stage = stage;
+          if (!body.stage && !note) { toast("Pick a new stage or write an update first.", true); return; }
+          await api(`/api/jobradar/matches/${id}/track`, { method: "POST", body: JSON.stringify(body) });
+          toast("Update saved.");
+          await loadMatches();
         } else if (btn.dataset.act === "status") {
           await api(`/api/jobradar/matches/${id}/status`, { method: "POST", body: JSON.stringify({ status: btn.dataset.status }) });
           toast(btn.dataset.status === "applied" ? "Marked as applied. Good luck! 🍀" : "Updated.");
@@ -468,7 +526,7 @@
         $("runBtn").disabled = running;
         $("runBtn").textContent = running ? "Running…" : "Find jobs now";
         if (running && !state.polling) state.polling = setInterval(refreshRun, 8000);
-        if (!running && state.polling) { clearInterval(state.polling); state.polling = null; loadMatches(); }
+        if (!running && state.polling) { clearInterval(state.polling); state.polling = null; loadMatches(); loadProfile(); }
       } catch (err) { $("runInfo").textContent = err.message; }
     }
 
@@ -542,6 +600,7 @@
     // ---------- sources
     function sourceDetail(s) {
       const c = s.config || {};
+      if (s.source_type === "google_jobs") return `Searches Google Jobs in ${(c.locations || []).join(" and ")} · up to ${c.max_queries || 6} searches/day, max ${c.monthly_budget || 240}/month`;
       return c.token || c.base || c.url || (c.tenant ? `${c.tenant}.${c.wd}.myworkdayjobs.com/${c.site}` : s.source_type);
     }
     function renderSources(sources) {

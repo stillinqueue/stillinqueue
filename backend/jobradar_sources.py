@@ -465,7 +465,83 @@ ADAPTERS: dict[str, Callable[[dict[str, Any], list[str]], list[dict[str, Any]]]]
     "workday": fetch_workday,
     "phenom": fetch_phenom,
     "avature": fetch_avature,
+    "google_jobs": None,  # set below
 }
+
+
+# ---------------------------------------------------------------------------
+# Google Jobs (via SerpApi). Google itself has no public jobs/search API for new
+# customers, so this uses SerpApi's licensed Google Jobs endpoint. Needs the
+# SERPAPI_API_KEY environment variable; free plan = 250 searches/month.
+# ---------------------------------------------------------------------------
+
+_AGO_RE = re.compile(r"(\d+)\+?\s*(minute|hour|day|week|month)", re.I)
+JOB_BOARD_DOMAINS = ("linkedin.", "indeed.", "stepstone.", "glassdoor.", "xing.", "monster.", "jooble.",
+                     "kimeta.", "jobware.", "stellenanzeigen.", "talent.com", "jobrapido.", "softgarden.io/job-board")
+
+
+def _ago_to_iso(label: str) -> Optional[str]:
+    match = _AGO_RE.search(label or "")
+    if not match:
+        return None
+    amount, unit = int(match.group(1)), match.group(2).lower()
+    delta = {"minute": timedelta(minutes=amount), "hour": timedelta(hours=amount), "day": timedelta(days=amount),
+             "week": timedelta(weeks=amount), "month": timedelta(days=30 * amount)}[unit]
+    return _iso(datetime.now(timezone.utc) - delta)
+
+
+def fetch_google_jobs(config: dict[str, Any], keywords: list[str]) -> list[dict[str, Any]]:
+    """config: {locations: ["Bavaria, Germany", "Germany"], max_queries: 6}. Records config['_calls']."""
+    import os
+
+    api_key = os.getenv("SERPAPI_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("add SERPAPI_API_KEY on Render to enable Google Jobs (free account at serpapi.com)")
+    locations = config.get("locations") or ["Germany"]
+    max_queries = int(config.get("max_queries", 6))
+    terms = [k for k in keywords if k.strip()][: max(1, max_queries // max(1, len(locations)))]
+    jobs: dict[str, dict[str, Any]] = {}
+    calls, errors = 0, []
+    with _client() as client:
+        for term in terms:
+            for location in locations:
+                if calls >= max_queries:
+                    break
+                calls += 1
+                try:
+                    response = _request(client, "GET", "https://serpapi.com/search.json", retries=1, params={
+                        "engine": "google_jobs", "q": term, "location": location, "gl": "de", "hl": "en",
+                        "api_key": api_key,
+                    })
+                except Exception as exc:  # keep other queries going
+                    errors.append(str(exc)[:80])
+                    continue
+                for item in response.json().get("jobs_results", []) or []:
+                    job_id = item.get("job_id") or f"{item.get('company_name')}|{item.get('title')}"
+                    if job_id in jobs:
+                        continue
+                    options = [o for o in item.get("apply_options") or [] if o.get("link")]
+                    direct = [o for o in options if not any(d in o["link"].lower() for d in JOB_BOARD_DOMAINS)]
+                    chosen = (direct or options or [{}])[0]
+                    link = chosen.get("link") or item.get("share_link") or ""
+                    extensions = item.get("detected_extensions") or {}
+                    jobs[job_id] = _job(
+                        source="google_jobs",
+                        external_id=str(job_id)[:300],
+                        company=item.get("company_name", ""),
+                        title=item.get("title", ""),
+                        location=item.get("location", ""),
+                        url=link,
+                        description=(item.get("description") or "")[:MAX_DESC_CHARS],
+                        posted_at=_ago_to_iso(extensions.get("posted_at", "")),
+                    )
+    config["_calls"] = calls
+    if errors and not jobs:
+        raise RuntimeError("; ".join(errors[:2]))
+    return list(jobs.values())
+
+
+ADAPTERS["google_jobs"] = fetch_google_jobs
 
 
 # ---------------------------------------------------------------------------
@@ -479,6 +555,8 @@ _LD_JSON_RE = re.compile(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>'
 def enrich_description(job: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     if job.get("description") and len(job["description"]) > 400:
         return job
+    if job.get("source") == "google_jobs":
+        return job  # Google Jobs already gives the full text; its links point at third-party sites.
     try:
         with _client() as client:
             if job["source"] == "workday":

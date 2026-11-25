@@ -38,14 +38,26 @@ def _p(value: Any, style: ParagraphStyle) -> Paragraph:
 
 
 def _doc(buffer: io.BytesIO, title: str, author: str) -> SimpleDocTemplate:
+    # Neutral PDF metadata: the candidate is the author/creator; no generator branding.
     return SimpleDocTemplate(
-        buffer, pagesize=A4, title=title, author=author,
+        buffer, pagesize=A4, title=title, author=author, creator=author, producer=author or " ",
+        subject="", keywords="",
         leftMargin=16 * mm, rightMargin=16 * mm, topMargin=14 * mm, bottomMargin=14 * mm,
     )
 
 
-def render_resume_pdf(resume: dict[str, Any]) -> bytes:
+HEADINGS = {
+    "en": {"profile": "Profile", "skills": "Key Skills", "experience": "Professional Experience",
+           "education": "Education", "certifications": "Certifications", "languages": "Languages"},
+    "de": {"profile": "Profil", "skills": "Kenntnisse", "experience": "Berufserfahrung",
+           "education": "Ausbildung", "certifications": "Zertifikate", "languages": "Sprachen"},
+}
+
+
+def render_resume_pdf(resume: dict[str, Any], language: str = "en") -> bytes:
     s = _styles()
+    german = (language or "").lower().startswith("de")
+    h = HEADINGS["de" if german else "en"]
     story: list[Any] = [
         _p(resume.get("name"), s["name"]),
         _p(resume.get("headline"), s["headline"]),
@@ -58,17 +70,17 @@ def render_resume_pdf(resume: dict[str, Any]) -> bytes:
         story.append(_p(title.upper(), s["section"]))
 
     if resume.get("summary"):
-        section("Profile")
+        section(h["profile"])
         story.append(_p(resume["summary"], s["body"]))
 
     if resume.get("skills"):
-        section("Key Skills")
+        section(h["skills"])
         for group in resume["skills"]:
             items = ", ".join(group.get("items") or [])
             story.append(Paragraph(f"<b>{escape(group.get('group', ''))}:</b> {escape(items)}", s["body"]))
 
     if resume.get("experience"):
-        section("Professional Experience")
+        section(h["experience"])
         for role in resume["experience"]:
             bullets = ListFlowable(
                 [ListItem(_p(b, s["bullet"]), leftIndent=9) for b in role.get("bullets") or []],
@@ -79,20 +91,20 @@ def render_resume_pdf(resume: dict[str, Any]) -> bytes:
             story.append(KeepTogether([Paragraph(header, s["role"]), _p(meta, s["meta"]), bullets, Spacer(1, 4)]))
 
     if resume.get("education"):
-        section("Education")
+        section(h["education"])
         for edu in resume["education"]:
             story.append(Paragraph(f"<b>{escape(edu.get('degree', ''))}</b> · {escape(edu.get('school', ''))}", s["body"]))
             meta = " | ".join(x for x in [edu.get("dates"), edu.get("details")] if x)
             if meta:
                 story.append(_p(meta, s["meta"]))
 
-    for key, title in (("certifications", "Certifications"), ("languages", "Languages")):
+    for key in ("certifications", "languages"):
         if resume.get(key):
-            section(title)
+            section(h[key])
             story.append(_p(" · ".join(resume[key]), s["body"]))
 
     buffer = io.BytesIO()
-    _doc(buffer, f"Resume - {resume.get('name', '')}", resume.get("name", "")).build(story)
+    _doc(buffer, f"{'Lebenslauf' if german else 'Resume'} {resume.get('name', '')}", resume.get("name", "")).build(story)
     return buffer.getvalue()
 
 
@@ -116,5 +128,5 @@ def render_cover_letter_pdf(letter: dict[str, Any], sender: dict[str, Any], job:
     story += [_p(par, s["letter"]) for par in letter.get("paragraphs") or []]
     story += [_p(letter.get("closing"), s["letter"]), _p(sender.get("name"), s["letter"])]
     buffer = io.BytesIO()
-    _doc(buffer, f"Cover letter - {job.get('company', '')}", sender.get("name", "")).build(story)
+    _doc(buffer, f"{'Anschreiben' if is_german else 'Cover Letter'} {sender.get('name', '')}", sender.get("name", "")).build(story)
     return buffer.getvalue()

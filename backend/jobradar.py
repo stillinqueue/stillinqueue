@@ -96,12 +96,33 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "days_back": 1,
     "email_alerts": True,
     "daily_enabled": True,
+    "google_jobs_offered": True,      # new profiles get Google Jobs in DEFAULT_SOURCES
 }
 
 SIZE_CLASSES = ["startup", "small", "mid", "large", "enterprise"]
 
+# Google Jobs via SerpApi: 3 search terms x (Bayern, all Germany) = 6 searches a day, ~180/month,
+# inside SerpApi's free 250/month. A monthly budget guard stops it before the quota runs out.
+GOOGLE_JOBS_SOURCE: dict[str, Any] = {
+    "name": "Google Jobs (via SerpApi)", "source_type": "google_jobs",
+    "config": {"locations": ["Bavaria, Germany", "Germany"], "max_queries": 6, "monthly_budget": 240},
+    "size_class": None,
+}
+
+# Application tracking stages (after "applied").
+STAGES = ["applied", "confirmation", "assessment", "interview", "offer", "rejected", "withdrawn", "no_response"]
+STAGE_LABELS = {"applied": "Applied", "confirmation": "Confirmation received", "assessment": "Test / task",
+                "interview": "Interview", "offer": "Offer", "rejected": "Rejected", "withdrawn": "Withdrawn",
+                "no_response": "No response"}
+FOLLOW_UP_DAYS = 14
+
+_CLOSED_MARKERS = ("no longer available", "no longer accepting", "position has been filled", "job is closed",
+                   "this job has expired", "posting has closed", "nicht mehr verfügbar", "nicht mehr aktiv",
+                   "stelle ist bereits besetzt", "stellenanzeige ist abgelaufen", "job not found")
+
 DEFAULT_SOURCES: list[dict[str, Any]] = [
     {"name": "Arbeitnow (German job board)", "source_type": "arbeitnow", "config": {"pages": 5}, "size_class": None},
+    GOOGLE_JOBS_SOURCE,
     {"name": "Siemens", "source_type": "avature", "config": {"base": "https://jobs.siemens.com/en_US/externaljobs"}, "size_class": "enterprise"},
     {"name": "Siemens Healthineers", "source_type": "phenom",
      "config": {"base": "https://careers.siemens-healthineers.com", "lang": "en_global", "country": "global",
@@ -141,7 +162,7 @@ SCORE_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "required": ["score", "seniority_fit", "fit_summary", "matched_skills", "missing_skills",
                  "company_size_estimate", "employees_estimate", "salary_estimate_eur_min", "salary_estimate_eur_max",
-                 "cover_letter_requested", "job_language"],
+                 "cover_letter_requested", "job_language", "german_requirement"],
     "properties": {
         "score": {"type": "integer"},
         "employees_estimate": {"type": "integer"},
@@ -154,6 +175,7 @@ SCORE_SCHEMA = {
         "salary_estimate_eur_max": {"type": "integer"},
         "cover_letter_requested": {"type": "boolean"},
         "job_language": {"type": "string", "enum": ["de", "en"]},
+        "german_requirement": {"type": "string", "enum": ["none", "nice_to_have", "required"]},
     },
 }
 
@@ -191,6 +213,51 @@ COVER_SCHEMA = {
     },
 }
 
+HUMAN_STYLE = (
+    " Write exactly like the candidate wrote it themselves: plain, specific, confident, varied sentence length. "
+    "Never mention AI writing, tools, templates, 'tailoring', this request, or the master resume, and never copy "
+    "notes or instructions found inside the resume. Do not use the em dash character; use commas, colons or "
+    "periods instead. Avoid words recruiters associate with machine-written text, e.g. 'delve', 'leverage', "
+    "'spearheaded', 'passionate', 'thrilled', 'excited to', 'dynamic', 'synergy', 'cutting-edge', 'robust', "
+    "'seamless', 'tapestry', 'testament', 'in today's fast-paced', 'proven track record', 'I am writing to', "
+    "'results-driven', 'game-changer', 'unlock', 'elevate', 'navigate the landscape'; in German avoid "
+    "'mit großer Begeisterung', 'hiermit bewerbe ich mich', 'Leidenschaft', 'nahtlos', 'innovativ' as filler. "
+    "Don't echo the job ad's sentences verbatim; use its key terms naturally where they truthfully apply."
+)
+
+_DASH_RE = re.compile(r"\s*—\s*")
+
+
+def _doc_language(analysis: dict[str, Any]) -> str:
+    """Write the CV and cover letter in German when the posting is German or asks for German."""
+    if analysis.get("job_language") == "de" or analysis.get("german_requirement") in ("required", "nice_to_have"):
+        return "de"
+    return "en"
+
+
+def _german_note(analysis: dict[str, Any]) -> str:
+    requirement = analysis.get("german_requirement", "none")
+    if requirement == "none" and analysis.get("job_language") != "de":
+        return ""
+    return (" The posting expects German (" + requirement.replace("_", " ") + "). State the candidate's German level "
+            "exactly as written in the master resume (e.g. B1) in one honest, confident sentence in the letter, "
+            "without apologising and never claiming a higher level; if the resume mentions active learning or daily "
+            "use of German at work, you may say so, otherwise don't invent it. Also make sure the resume's language "
+            "section shows that German level.")
+
+
+def _humanize(value: Any) -> Any:
+    """Final clean-up on generated text: no em dashes, no stray AI/tool mentions."""
+    if isinstance(value, str):
+        cleaned = _DASH_RE.sub(", ", value).replace(" ,", ",")
+        return cleaned.replace(",,", ",")
+    if isinstance(value, list):
+        return [_humanize(v) for v in value]
+    if isinstance(value, dict):
+        return {k: (v if k == "tailoring_notes" else _humanize(v)) for k, v in value.items()}
+    return value
+
+
 TRUTH_RULE = (
     "Use ONLY facts present in the candidate's master resume. Never invent employers, titles, dates, "
     "degrees, certifications, metrics, or skills. You may reorder, rephrase, shorten, and emphasise "
@@ -225,6 +292,11 @@ class SourceToggle(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: str
+
+
+class TrackUpdate(BaseModel):
+    stage: Optional[str] = None
+    note: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -411,8 +483,53 @@ def register(
                     stats_json TEXT,
                     error TEXT
                 )"""))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS jr_usage (
+                    user_email TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    month TEXT NOT NULL,
+                    calls INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (user_email, provider, month)
+                )"""))
+        # Columns added after the first release (application tracking). Each in its own transaction:
+        # "already exists" errors are expected on later starts.
+        for column in ("stage TEXT", "applied_at TEXT", "notes TEXT", "events_json TEXT",
+                       "posting_state TEXT", "posting_checked_at TEXT"):
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE jr_matches ADD COLUMN {column}"))
+            except Exception:
+                pass
 
     init_tables()
+
+    # ------------------------------------------------------------ tracking
+    def add_event(match_id: str, kind: str, detail: str = "", extra_sets: Optional[dict[str, Any]] = None) -> None:
+        """Append an entry to a match's application timeline (and optionally update other columns)."""
+        with engine.begin() as conn:
+            row = conn.execute(text("SELECT events_json FROM jr_matches WHERE id = :id"), {"id": match_id}).fetchone()
+            events = json.loads((row[0] if row else None) or "[]")
+            events.append({"at": _now_iso(), "kind": kind, "detail": detail[:500]})
+            sets = {"events_json": json.dumps(events[-100:]), "updated_at": _now_iso(), **(extra_sets or {})}
+            assignments = ", ".join(f"{k} = :{k}" for k in sets)
+            conn.execute(text(f"UPDATE jr_matches SET {assignments} WHERE id = :id"), {**sets, "id": match_id})
+
+    def usage_this_month(email: str, provider: str) -> int:
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT calls FROM jr_usage WHERE user_email = :e AND provider = :p AND month = :m"),
+                               {"e": email, "p": provider, "m": _now().strftime("%Y-%m")}).fetchone()
+        return int(row[0]) if row else 0
+
+    def add_usage(email: str, provider: str, calls: int) -> None:
+        if not calls:
+            return
+        month = _now().strftime("%Y-%m")
+        with engine.begin() as conn:
+            updated = conn.execute(text("UPDATE jr_usage SET calls = calls + :c WHERE user_email = :e AND provider = :p AND month = :m"),
+                                   {"c": calls, "e": email, "p": provider, "m": month})
+            if updated.rowcount == 0:
+                conn.execute(text("INSERT INTO jr_usage (user_email, provider, month, calls) VALUES (:e, :p, :m, :c)"),
+                             {"c": calls, "e": email, "p": provider, "m": month})
 
     def load_profile(email: str, create: bool = True) -> Optional[dict[str, Any]]:
         with engine.connect() as conn:
@@ -432,7 +549,22 @@ def register(
                         "c": json.dumps(src["config"]), "s": src["size_class"], "u": _now_iso()})
             return load_profile(email, create=False)
         profile = dict(row)
-        profile["settings"] = {**DEFAULT_SETTINGS, **json.loads(profile.get("settings_json") or "{}")}
+        stored = json.loads(profile.get("settings_json") or "{}")
+        if not stored.get("google_jobs_offered"):
+            # Profiles created before Google Jobs existed get it added once (they can remove it).
+            with engine.begin() as conn:
+                exists = conn.execute(text("SELECT 1 FROM jr_sources WHERE user_email = :e AND source_type = 'google_jobs'"),
+                                      {"e": email}).fetchone()
+                if not exists:
+                    conn.execute(text(
+                        "INSERT INTO jr_sources (id, user_email, name, source_type, config_json, size_class, enabled, created_at) "
+                        "VALUES (:id, :e, :n, 'google_jobs', :c, NULL, TRUE, :u)"
+                    ), {"id": uuid.uuid4().hex, "e": email, "n": GOOGLE_JOBS_SOURCE["name"],
+                        "c": json.dumps(GOOGLE_JOBS_SOURCE["config"]), "u": _now_iso()})
+                stored["google_jobs_offered"] = True
+                conn.execute(text("UPDATE jr_profiles SET settings_json = :s WHERE user_email = :e"),
+                             {"s": json.dumps(stored), "e": email})
+        profile["settings"] = {**DEFAULT_SETTINGS, **stored}
         profile["candidate"] = json.loads(profile.get("candidate_json") or "{}")
         return profile
 
@@ -487,7 +619,10 @@ def register(
             "and employees_estimate (total employee count, 0 if you really cannot tell) from your knowledge of "
             "the company and the posting. If the posting states a salary use it, otherwise estimate a "
             "realistic annual gross EUR range for this role and location. cover_letter_requested = true if the "
-            "posting asks for a cover letter / Anschreiben / motivation letter. job_language = language of the posting.",
+            "posting asks for a cover letter / Anschreiben / motivation letter. job_language = language of the posting. "
+            "german_requirement = 'required' if the posting asks for German (any level, e.g. 'fließend Deutsch', "
+            "'German B2/C1', 'sehr gute Deutschkenntnisse'), 'nice_to_have' if German is a plus, else 'none'. "
+            "A German-language posting without an explicit statement counts as 'required'.",
             {
                 "candidate_resume": profile["resume_text"][:15000],
                 "candidate_profile": profile["candidate"],
@@ -503,31 +638,39 @@ def register(
 
     def tailor_resume(profile: dict[str, Any], job: dict[str, Any], analysis: dict[str, Any]) -> dict[str, Any]:
         candidate = profile["candidate"]
-        return llm_json(
+        return _humanize(llm_json(
             "tailored_resume", RESUME_SCHEMA,
             "Rewrite the candidate's resume so it is tailored to the job below, for an ATS and a human recruiter "
-            "in Germany. " + TRUTH_RULE + " Keep it to roughly one to two A4 pages: a 3-4 line profile summary aimed "
+            "in Germany. " + TRUTH_RULE + HUMAN_STYLE + " Resume bullets start with a past-tense verb (present tense "
+            "for the current job), no first person. Keep it to roughly one to two A4 pages: a 3-4 line profile summary aimed "
             "at this role, skills grouped and ordered by relevance to the job, the most relevant 3-5 bullets per "
             "role with concrete results already present in the resume, most recent roles first. Write in the "
-            "job's language (" + analysis.get("job_language", "en") + "). contact_line = email · phone · location · "
+            "language '" + _doc_language(analysis) + "' (de = German, en = English; for German use standard German "
+            "CV wording, e.g. 'Berufserfahrung', month/year dates like '07/2024 – heute')." + _german_note(analysis) +
+            " contact_line = email · phone · location · "
             "LinkedIn joined with ' · ' (skip empty). tailoring_notes = one short sentence telling the candidate "
             "what you emphasised.",
             {"master_resume": profile["resume_text"][:20000], "candidate": candidate,
              "job": {k: job.get(k) for k in ("company", "title", "location", "description")},
              "fit_analysis": analysis},
-        )
+        ))
 
     def write_cover_letter(profile: dict[str, Any], job: dict[str, Any], analysis: dict[str, Any]) -> dict[str, Any]:
-        return llm_json(
+        letter = _humanize(llm_json(
             "cover_letter", COVER_SCHEMA,
             "Write a concise, specific cover letter (max ~300 words, 3-4 paragraphs) for this job. " + TRUTH_RULE +
+            HUMAN_STYLE + " Open with something concrete about the role or company, not a stock phrase. "
+            "One short personal sentence on why this company is fine; no flattery. " +
             " No clichés or generic filler. Reference 2-3 concrete requirements of the posting and match them to real "
-            "experience. Write in the job's language (" + analysis.get("job_language", "en") + "); for German use "
+            "experience." + _german_note(analysis) + " Write in language '" + _doc_language(analysis) + "' "
+            "(de = German, en = English); for German use "
             "formal 'Sie' and a subject line like 'Bewerbung als …'. Do not include addresses or the date.",
             {"master_resume": profile["resume_text"][:20000], "candidate": profile["candidate"],
              "job": {k: job.get(k) for k in ("company", "title", "location", "description")},
              "fit_analysis": analysis},
-        )
+        ))
+        letter["language"] = _doc_language(analysis)  # keeps the date format / file name consistent
+        return letter
 
     # ------------------------------------------------------------- pipeline
     def save_job(job: dict[str, Any]) -> str:
@@ -571,7 +714,7 @@ def register(
                 WHERE m.user_email = :e"""), {"e": email}).fetchall()
         return {r[0] for r in rows}, {_fingerprint(r[1], r[2]) for r in rows}
 
-    def collect(sources: list[dict[str, Any]], keywords: list[str]) -> tuple[list[tuple[dict, dict]], dict[str, str]]:
+    def collect(email: str, sources: list[dict[str, Any]], keywords: list[str]) -> tuple[list[tuple[dict, dict]], dict[str, str]]:
         statuses: dict[str, str] = {}
         collected: list[tuple[dict, dict]] = []
 
@@ -579,17 +722,30 @@ def register(
             adapter = ADAPTERS.get(src["source_type"])
             if adapter is None:
                 return src, [], "watch-only (open link manually)"
+            budget_note = ""
+            if src["source_type"] == "google_jobs":
+                used = usage_this_month(email, "serpapi")
+                budget = int(src["config"].get("monthly_budget", 240))
+                needed = int(src["config"].get("max_queries", 6))
+                if used + needed > budget:
+                    return src, [], f"paused · {used}/{budget} searches used this month (free quota protection)"
             try:
                 jobs = adapter(src["config"], keywords[:4])
-                return src, jobs, f"ok · {len(jobs)} postings"
+                if src["source_type"] == "google_jobs":
+                    calls = int(src["config"].pop("_calls", 0))
+                    add_usage(email, "serpapi", calls)
+                    budget_note = f" · {usage_this_month(email, 'serpapi')} searches used this month"
+                return src, jobs, f"ok · {len(jobs)} postings{budget_note}"
             except Exception as exc:
+                if src["source_type"] == "google_jobs":
+                    add_usage(email, "serpapi", int(src["config"].pop("_calls", 0)))
                 return src, [], f"error · {str(exc)[:160]}"
 
         with ThreadPoolExecutor(max_workers=6) as pool:
             for src, jobs, status in pool.map(run_source, sources):
                 statuses[src["id"]] = status
                 for job in jobs:
-                    if src["source_type"] != "arbeitnow" and not src["config"].get("company"):
+                    if src["source_type"] not in ("arbeitnow", "google_jobs") and not src["config"].get("company"):
                         # Company career sites: show the name the user gave the source (unless the site named a subsidiary).
                         if not job.get("company") or job["company"].startswith("http") or job["company"].islower():
                             job["company"] = src["name"]
@@ -601,6 +757,60 @@ def register(
                 conn.execute(text("UPDATE jr_sources SET last_status = :s WHERE id = :id"),
                              {"s": f"{_now().strftime('%Y-%m-%d %H:%M')} UTC · {status}", "id": source_id})
         return collected, statuses
+
+    def posting_closed(url: str) -> Optional[bool]:
+        """True if the posting is clearly gone, False if it's still up, None if we can't tell."""
+        if not url.startswith(("http://", "https://")):
+            return None
+        import httpx
+        try:
+            with httpx.Client(timeout=20.0, follow_redirects=True,
+                              headers={"User-Agent": "StillInQueue-JobRadar/1.0 (+https://stillinqueue.com)"}) as client:
+                response = client.get(url)
+        except Exception:
+            return None
+        if response.status_code in (404, 410):
+            return True
+        if response.status_code >= 400:
+            return None
+        page = response.text[:300_000].lower()
+        return any(marker in page for marker in _CLOSED_MARKERS)
+
+    def check_applications(email: str) -> list[str]:
+        """Daily: flag applied-for postings that were taken down, and remind about follow-ups. Returns update lines."""
+        cutoff = (_now() - timedelta(hours=20)).isoformat()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT m.id, m.stage, m.applied_at, m.events_json, m.posting_state, m.posting_checked_at,
+                       j.company, j.title, j.url, j.apply_url
+                FROM jr_matches m JOIN jr_jobs j ON j.id = m.job_id
+                WHERE m.user_email = :e AND m.status = 'applied'
+            """), {"e": email}).mappings().fetchall()
+        updates: list[str] = []
+        for row in rows[:60]:
+            label = f"{row['title']} at {row['company']}"
+            stage = row["stage"] or "applied"
+            if stage in ("rejected", "withdrawn", "offer"):
+                continue
+            if row["posting_state"] != "closed" and (row["posting_checked_at"] or "") < cutoff:
+                closed = posting_closed(row["url"] or row["apply_url"] or "")
+                state = "closed" if closed else ("open" if closed is False else row["posting_state"])
+                if closed:
+                    add_event(row["id"], "posting_closed", "The job ad was taken down (role may be filled or closed)",
+                              {"posting_state": "closed", "posting_checked_at": _now_iso()})
+                    updates.append(f"{label}: the job ad was taken down.")
+                else:
+                    with engine.begin() as conn:
+                        conn.execute(text("UPDATE jr_matches SET posting_state = :s, posting_checked_at = :c WHERE id = :id"),
+                                     {"s": state, "c": _now_iso(), "id": row["id"]})
+            events = json.loads(row["events_json"] or "[]")
+            applied_at = row["applied_at"] or ""
+            if stage in ("applied", "confirmation") and applied_at and \
+                    applied_at < (_now() - timedelta(days=FOLLOW_UP_DAYS)).isoformat() and \
+                    not any(e.get("kind") == "reminder" for e in events):
+                add_event(row["id"], "reminder", f"No reply after {FOLLOW_UP_DAYS} days: a short follow-up email is reasonable")
+                updates.append(f"{label}: {FOLLOW_UP_DAYS} days without a reply, consider a polite follow-up.")
+        return updates
 
     def run_for_user(email: str, run_id: str, first_run_days: int = 7) -> dict[str, Any]:
         profile = load_profile(email)
@@ -614,7 +824,7 @@ def register(
         excludes = [k for k in settings.get("exclude_keywords") or [] if k.strip()]
         search_terms = [k for k in settings.get("search_terms") or [] if k.strip()] or keywords
         sources = load_sources(email, enabled_only=True)
-        collected, _ = collect(sources, search_terms)
+        collected, _ = collect(email, sources, search_terms)
         stats["collected"] = len(collected)
 
         seen, seen_fps = seen_job_ids(email)
@@ -738,10 +948,10 @@ def register(
             if index < int(settings.get("max_tailored_per_run") or 10):
                 try:
                     resume = tailor_resume(profile, job, analysis)
-                    resume_pdf = render_resume_pdf(resume)
+                    resume_pdf = render_resume_pdf(resume, _doc_language(analysis))
                     mode = settings.get("cover_letter_mode", "auto")
                     wants_cover = mode == "always" or (mode == "auto" and (
-                        analysis.get("cover_letter_requested") or analysis.get("job_language") == "de"))
+                        analysis.get("cover_letter_requested") or _doc_language(analysis) == "de"))
                     if wants_cover:
                         cover = write_cover_letter(profile, job, analysis)
                         cover_pdf = render_cover_letter_pdf(cover, resume, job)
@@ -753,7 +963,22 @@ def register(
                          cover=cover, cover_pdf=cover_pdf)
             new_matches.append({"job": job, "analysis": analysis, "has_resume": resume_pdf is not None})
 
-        # 5) email digest
+        # 5) application tracking: is each applied-for posting still online? any follow-up due?
+        try:
+            updates = check_applications(email)
+        except Exception as exc:
+            updates = []
+            stats["errors"].append(f"tracking: {str(exc)[:120]}")
+        stats["application_updates"] = len(updates)
+
+        # 6) email digest
+        if updates and not new_matches and settings.get("email_alerts"):
+            try:
+                send_email(email, f"Job Radar: {len(updates)} application update(s)",
+                           "Updates on jobs you applied for:\n\n" + "\n".join(f"• {u}" for u in updates) +
+                           f"\n\nSee them in the Applied tab: {site_url}/jobradar.html")
+            except Exception as exc:
+                stats["errors"].append(f"email: {str(exc)[:120]}")
         if new_matches and settings.get("email_alerts"):
             lines = [f"Job Radar found {len(new_matches)} new match(es) for you today:"]
             region = ", ".join(settings.get("highlight_locations") or []).title() or "Highlighted"
@@ -770,6 +995,9 @@ def register(
                     size = f"~{a['employees']:,} employees" if a.get("employees") else "size unknown"
                     lines.append(f"• [{a['score']}] {j['title']} — {j['company']} ({j['location']}) · {size} · {docs}\n  {j['url']}")
                     shown += 1
+            if updates:
+                lines.append("\nUpdates on jobs you applied for")
+                lines += [f"• {u}" for u in updates]
             lines.append(f"\nReview and apply: {site_url}/jobradar.html")
             try:
                 send_email(email, f"Job Radar: {len(new_matches)} new job match(es)", "\n".join(lines))
@@ -817,6 +1045,7 @@ def register(
             "candidate": profile["candidate"],
             "sources": load_sources(email),
             "size_classes": SIZE_CLASSES,
+            "stages": STAGE_LABELS,
             "source_types": sorted(list(ADAPTERS.keys()) + ["link"]),
         }
 
@@ -929,6 +1158,7 @@ def register(
         with engine.connect() as conn:
             rows = conn.execute(text(f"""
                 SELECT m.id, m.status, m.score, m.analysis_json, m.company_size, m.created_at, m.updated_at,
+                       m.stage, m.applied_at, m.notes, m.events_json, m.posting_state, m.posting_checked_at,
                        (m.resume_pdf IS NOT NULL) AS has_resume, (m.cover_pdf IS NOT NULL) AS has_cover,
                        j.company, j.title, j.location, j.url, j.apply_url, j.posted_at, j.salary_min, j.salary_max,
                        j.salary_currency, j.source
@@ -942,6 +1172,7 @@ def register(
         for row in rows:
             item = dict(row)
             item["analysis"] = json.loads(item.pop("analysis_json") or "{}")
+            item["events"] = json.loads(item.pop("events_json") or "[]")
             item["has_resume"] = bool(item["has_resume"])
             item["has_cover"] = bool(item["has_cover"])
             items.append(item)
@@ -968,33 +1199,40 @@ def register(
             "job": {k: match.get(k) for k in ("company", "title", "location", "url", "apply_url", "description", "posted_at")},
         }
 
-    def _safe_filename(*parts: str) -> str:
-        cleaned = "_".join("".join(ch for ch in (p or "") if ch.isalnum() or ch in "-")[:40] for p in parts)
-        return cleaned.strip("_") or "document"
+    def _doc_filename(match: dict[str, Any], kind: str) -> str:
+        """What a person would name the file: 'Venkata_Kanumuri_CV.pdf' / 'Venkata_Kanumuri_Anschreiben.pdf'.
+        No company, tool or 'tailored' in the name (recruiters see the file name)."""
+        name = (json.loads(match.get("resume_json") or "{}")).get("name", "") or "Resume"
+        words = [w for w in re.split(r"\s+", name.strip()) if w]
+        short = "_".join([words[0].title(), words[-1].title()] if len(words) > 1 else words or ["Resume"])
+        short = "".join(ch for ch in short if ch.isalnum() or ch in "_-") or "Resume"
+        german = _doc_language(json.loads(match.get("analysis_json") or "{}")) == "de"
+        label = {"resume": "Lebenslauf" if german else "CV", "cover": "Anschreiben" if german else "Cover_Letter"}[kind]
+        return f"{short}_{label}.pdf"
 
     @app.get("/api/jobradar/matches/{match_id}/resume.pdf")
     def jr_resume_pdf(match_id: str, authorization: Optional[str] = Header(default=None)) -> Response:
         match = get_match(current_email(authorization), match_id)
         if not match.get("resume_pdf"):
             raise HTTPException(status_code=404, detail="No tailored resume for this job yet.")
-        name = _safe_filename("Resume", (json.loads(match.get("resume_json") or "{}")).get("name", ""), match["company"])
         return Response(bytes(match["resume_pdf"]), media_type="application/pdf",
-                        headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
+                        headers={"Content-Disposition": f'attachment; filename="{_doc_filename(match, "resume")}"'})
 
     @app.get("/api/jobradar/matches/{match_id}/cover.pdf")
     def jr_cover_pdf(match_id: str, authorization: Optional[str] = Header(default=None)) -> Response:
         match = get_match(current_email(authorization), match_id)
         if not match.get("cover_pdf"):
             raise HTTPException(status_code=404, detail="No cover letter for this job yet.")
-        name = _safe_filename("CoverLetter", match["company"], match["title"])
         return Response(bytes(match["cover_pdf"]), media_type="application/pdf",
-                        headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
+                        headers={"Content-Disposition": f'attachment; filename="{_doc_filename(match, "cover")}"'})
 
     @app.post("/api/jobradar/matches/{match_id}/generate")
     def jr_generate(match_id: str, cover: bool = False, authorization: Optional[str] = Header(default=None)) -> dict[str, Any]:
         """Create (or re-create) the tailored resume, and optionally a cover letter, for one match."""
         email = current_email(authorization)
         match = get_match(email, match_id)
+        if match["status"] == "applied":
+            raise HTTPException(status_code=409, detail="You already applied with these documents; they are kept as sent.")
         profile = load_profile(email)
         with engine.connect() as conn:
             job_row = conn.execute(text("SELECT * FROM jr_jobs WHERE id = :id"), {"id": match["job_id"]}).mappings().fetchone()
@@ -1002,7 +1240,7 @@ def register(
         analysis = json.loads(match.get("analysis_json") or "{}") or score_job(profile, job)
         try:
             resume = tailor_resume(profile, job, analysis)
-            fields: dict[str, Any] = {"rj": json.dumps(resume), "rp": render_resume_pdf(resume)}
+            fields: dict[str, Any] = {"rj": json.dumps(resume), "rp": render_resume_pdf(resume, _doc_language(analysis))}
             if cover:
                 letter = write_cover_letter(profile, job, analysis)
                 fields.update({"cj": json.dumps(letter), "cp": render_cover_letter_pdf(letter, resume, job)})
@@ -1021,10 +1259,43 @@ def register(
         email = current_email(authorization)
         if payload.status not in VALID_STATUSES:
             raise HTTPException(status_code=400, detail="Invalid status.")
-        get_match(email, match_id)
-        with engine.begin() as conn:
-            conn.execute(text("UPDATE jr_matches SET status = :s, updated_at = :u WHERE id = :id AND user_email = :e"),
-                         {"s": payload.status, "u": _now_iso(), "id": match_id, "e": email})
+        match = get_match(email, match_id)
+        if payload.status == match["status"]:
+            return {"ok": True}
+        if payload.status == "applied":
+            docs = ["resume"] + (["cover letter"] if match.get("cover_pdf") else [])
+            add_event(match_id, "applied", "Applied with " + " + ".join(docs) + " (kept exactly as sent)",
+                      {"status": "applied", "stage": "applied", "applied_at": _now_iso()})
+        else:
+            if match["status"] == "applied":
+                add_event(match_id, "undo", "Moved back out of Applied", {"status": payload.status})
+            else:
+                with engine.begin() as conn:
+                    conn.execute(text("UPDATE jr_matches SET status = :s, updated_at = :u WHERE id = :id AND user_email = :e"),
+                                 {"s": payload.status, "u": _now_iso(), "id": match_id, "e": email})
+        return {"ok": True}
+
+    @app.post("/api/jobradar/matches/{match_id}/track")
+    def jr_track(match_id: str, payload: TrackUpdate, authorization: Optional[str] = Header(default=None)) -> dict[str, Any]:
+        """Record an application update: a new stage and/or a note (e.g. 'Interview on 3 Dec with Anna')."""
+        email = current_email(authorization)
+        match = get_match(email, match_id)
+        if match["status"] != "applied":
+            raise HTTPException(status_code=400, detail="Mark the job as applied first.")
+        if payload.stage and payload.stage not in STAGES:
+            raise HTTPException(status_code=400, detail="Unknown stage.")
+        note = (payload.note or "").strip()[:500]
+        if not payload.stage and not note:
+            raise HTTPException(status_code=400, detail="Nothing to record.")
+        sets: dict[str, Any] = {}
+        if payload.stage and payload.stage != match.get("stage"):
+            sets["stage"] = payload.stage
+        if note:
+            sets["notes"] = note
+        kind = "stage" if "stage" in sets else "note"
+        detail = (STAGE_LABELS.get(payload.stage, payload.stage) if "stage" in sets else "") + \
+            ((" · " if "stage" in sets else "") + note if note else "")
+        add_event(match_id, kind, detail, sets)
         return {"ok": True}
 
     @app.post("/api/jobradar/cron")
