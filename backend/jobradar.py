@@ -500,6 +500,11 @@ def register(
                     conn.execute(text(f"ALTER TABLE jr_matches ADD COLUMN {column}"))
             except Exception:
                 pass
+        try:  # 'cron' or 'manual': only scheduled runs count for the once-a-day guard
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE jr_runs ADD COLUMN run_trigger TEXT"))
+        except Exception:
+            pass
 
     init_tables()
 
@@ -1005,15 +1010,16 @@ def register(
                 stats["errors"].append(f"email: {str(exc)[:120]}")
         return stats
 
-    def start_run(email: str) -> str:
+    def start_run(email: str, trigger: str = "manual") -> str:
         with running_lock:
             if email in running_users:
                 raise HTTPException(status_code=409, detail="A Job Radar run is already in progress.")
             running_users.add(email)
         run_id = uuid.uuid4().hex
         with engine.begin() as conn:
-            conn.execute(text("INSERT INTO jr_runs (id, user_email, started_at, status) VALUES (:id, :e, :s, 'running')"),
-                         {"id": run_id, "e": email, "s": _now_iso()})
+            conn.execute(text("INSERT INTO jr_runs (id, user_email, started_at, status, run_trigger) "
+                              "VALUES (:id, :e, :s, 'running', :t)"),
+                         {"id": run_id, "e": email, "s": _now_iso(), "t": trigger})
         return run_id
 
     def execute_run(email: str, run_id: str) -> None:
@@ -1309,14 +1315,15 @@ def register(
         with engine.connect() as conn:
             rows = conn.execute(text("SELECT user_email, settings_json FROM jr_profiles WHERE resume_text IS NOT NULL")).fetchall()
             recent = {r[0] for r in conn.execute(
-                text("SELECT DISTINCT user_email FROM jr_runs WHERE started_at >= :c"), {"c": recent_cutoff}).fetchall()}
+                text("SELECT DISTINCT user_email FROM jr_runs WHERE started_at >= :c AND run_trigger = 'cron'"),
+                {"c": recent_cutoff}).fetchall()}
         started = []
         for email, settings_json in rows:
             settings = {**DEFAULT_SETTINGS, **json.loads(settings_json or "{}")}
             if not settings.get("daily_enabled") or email in recent:
                 continue
             try:
-                run_id = start_run(email)
+                run_id = start_run(email, trigger="cron")
             except HTTPException:
                 continue
             background_tasks.add_task(execute_run, email, run_id)
