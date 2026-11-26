@@ -438,7 +438,9 @@
               : `${m.has_resume ? `<button class="btn" data-act="dl" data-kind="resume">⬇ Tailored resume</button>`
                                : `<button class="btn secondary" data-act="gen">Generate resume</button>`}
                  ${m.has_cover ? `<button class="btn" data-act="dl" data-kind="cover">⬇ Cover letter</button>`
-                               : `<button class="btn secondary" data-act="gen" data-cover="1">Generate cover letter</button>`}`}
+                               : `<button class="btn secondary" data-act="gen" data-cover="1">Generate cover letter</button>`}
+                 ${m.has_resume ? `<button class="btn ghost" data-act="gen" ${m.has_cover ? 'data-cover="1"' : ""}
+                     title="Write the resume${m.has_cover ? " and cover letter" : ""} again with your current master resume, photo and design">↻ Re-create</button>` : ""}`}
             <a class="btn secondary" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">${m.status === "applied" ? "Open job ad ↗" : "Open apply page ↗"}</a>
             ${statusButtons}
           </div>
@@ -501,9 +503,10 @@
           a.href = URL.createObjectURL(blob); a.download = name ? name[1] : `${btn.dataset.kind}.pdf`;
           document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
         } else if (btn.dataset.act === "gen") {
-          btn.textContent = "Writing… (~30s)";
-          await api(`/api/jobradar/matches/${id}/generate?cover=${btn.dataset.cover ? "true" : "false"}`, { method: "POST" });
-          toast("Documents ready.");
+          btn.textContent = "Writing… (~1 min)";
+          const res = await api(`/api/jobradar/matches/${id}/generate?cover=${btn.dataset.cover ? "true" : "false"}`, { method: "POST" });
+          if (res.design === false) toast(`Documents ready, but in the plain layout: the design printer failed (${res.design_error || "unknown error"}).`, true);
+          else toast("Documents ready in your design.");
           await loadMatches();
         } else if (btn.dataset.act === "track") {
           const stage = card.querySelector('[data-track="stage"]').value;

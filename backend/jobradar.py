@@ -1380,7 +1380,8 @@ def register(
         if not match.get("resume_pdf"):
             raise HTTPException(status_code=404, detail="No tailored resume for this job yet.")
         return Response(bytes(match["resume_pdf"]), media_type="application/pdf",
-                        headers={"Content-Disposition": f'attachment; filename="{_doc_filename(match, "resume")}"'})
+                        headers={"Content-Disposition": f'attachment; filename="{_doc_filename(match, "resume")}"',
+                                 "Access-Control-Expose-Headers": "Content-Disposition"})
 
     @app.get("/api/jobradar/matches/{match_id}/cover.pdf")
     def jr_cover_pdf(match_id: str, authorization: Optional[str] = Header(default=None)) -> Response:
@@ -1388,7 +1389,8 @@ def register(
         if not match.get("cover_pdf"):
             raise HTTPException(status_code=404, detail="No cover letter for this job yet.")
         return Response(bytes(match["cover_pdf"]), media_type="application/pdf",
-                        headers={"Content-Disposition": f'attachment; filename="{_doc_filename(match, "cover")}"'})
+                        headers={"Content-Disposition": f'attachment; filename="{_doc_filename(match, "cover")}"',
+                                 "Access-Control-Expose-Headers": "Content-Disposition"})
 
     @app.post("/api/jobradar/matches/{match_id}/generate")
     def jr_generate(match_id: str, cover: bool = False, authorization: Optional[str] = Header(default=None)) -> dict[str, Any]:
@@ -1417,7 +1419,10 @@ def register(
         with engine.begin() as conn:
             conn.execute(text(f"UPDATE jr_matches SET {sets}, updated_at = :u WHERE id = :id"),
                          {**fields, "u": _now_iso(), "id": match_id})
-        return {"ok": True, "has_resume": True, "has_cover": bool(cover or match.get("cover_pdf"))}
+        import jobradar_docs
+        design_error = jobradar_docs.LAST_RENDER_ERROR.get("error")
+        return {"ok": True, "has_resume": True, "has_cover": bool(cover or match.get("cover_pdf")),
+                "design": design_error is None, "design_error": design_error}
 
     @app.post("/api/jobradar/matches/{match_id}/status")
     def jr_set_status(match_id: str, payload: StatusUpdate, authorization: Optional[str] = Header(default=None)) -> dict[str, Any]:

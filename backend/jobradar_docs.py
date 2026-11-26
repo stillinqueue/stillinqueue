@@ -256,6 +256,9 @@ def html_to_pdf(html_doc: str) -> bytes:
             browser.close()
 
 
+LAST_RENDER_ERROR: dict[str, str] = {}  # most recent design-printer failure (shown to the user)
+
+
 def render_resume_pdf(resume: dict[str, Any], language: str = "en", candidate: Optional[dict[str, Any]] = None,
                       photo: Optional[bytes] = None, photo_mime: Optional[str] = None) -> bytes:
     candidate = candidate or {}
@@ -263,7 +266,9 @@ def render_resume_pdf(resume: dict[str, Any], language: str = "en", candidate: O
     title = f'{"Lebenslauf" if german else "Resume"} {candidate.get("name", "")}'.strip()
     try:
         pdf = html_to_pdf(build_resume_html(resume, candidate, language, photo, photo_mime))
-    except Exception:
+        LAST_RENDER_ERROR.pop("error", None)
+    except Exception as exc:
+        LAST_RENDER_ERROR["error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
         pdf = _fallback_resume_pdf(resume, candidate, language)
     return _set_metadata(pdf, title, candidate.get("name", ""))
 
